@@ -2489,6 +2489,11 @@ Namespace videoenhancer
             valueControl.Dock = DockStyle.Fill
             valueControl.Margin = Padding.Empty
             box.Controls.Add(valueControl)
+            ' 文字应采样文件框的半透明底色，不能直接采样宿主背景而挖空框内区域。
+            Dim label = TryCast(valueControl, HtmlColorLabel)
+            If label IsNot Nothing Then
+                label.BackgroundSource = box
+            End If
             Return box
         End Function
 

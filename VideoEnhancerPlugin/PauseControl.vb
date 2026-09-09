@@ -154,10 +154,7 @@ Namespace videoenhancer
 
         Private Shared Function FindTask(id As String) As 编码任务_v6
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    Return queue.FirstOrDefault(Function(t) String.Equals(t.ID, id, StringComparison.Ordinal))
-                End SyncLock
+                Return 编码队列_v6.根据ID获取任务(id)
             Catch
                 Return Nothing
             End Try

@@ -302,17 +302,15 @@ Namespace videoenhancer
         Private Function CollectActiveTasks() As List(Of PreviewTaskInfo)
             Dim result As New List(Of PreviewTaskInfo)()
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    For Each t In queue
-                        If t.正在执行 Then
-                            result.Add(New PreviewTaskInfo() With {
-                                .Id = t.ID,
-                                .Name = If(String.IsNullOrWhiteSpace(t.任务名称), t.ID, t.任务名称)
-                            })
-                        End If
-                    Next
-                End SyncLock
+                ' 使用宿主加锁生成的快照，避免绑定已变更返回类型的队列属性。
+                For Each t In 编码队列_v6.获取队列快照()
+                    If t.正在执行 Then
+                        result.Add(New PreviewTaskInfo() With {
+                            .Id = t.ID,
+                            .Name = If(String.IsNullOrWhiteSpace(t.任务名称), t.ID, t.任务名称)
+                        })
+                    End If
+                Next
             Catch
             End Try
             Return result
@@ -366,10 +364,7 @@ Namespace videoenhancer
 
         Private Shared Function FindTaskById(id As String) As 编码任务_v6
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    Return queue.FirstOrDefault(Function(t) String.Equals(t.ID, id, StringComparison.Ordinal))
-                End SyncLock
+                Return 编码队列_v6.根据ID获取任务(id)
             Catch
                 Return Nothing
             End Try

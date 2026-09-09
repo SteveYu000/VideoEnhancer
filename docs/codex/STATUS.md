@@ -1,17 +1,34 @@
 # Project Status
 
-Last updated: 2026-09-05 18:47
+Last updated: 2026-09-09 12:12
 Updated by: Codex
 
 ## Current Snapshot
 
-- Current objective: 按发布流程完成 1.2.1 双源本体发布，保留两个独立修复提交并完成发布后回读。
-- Current state: 1.2.1 已完成本地构建、提交、推送和双源发布。两个修复分别为 `c5e9be8` 和 `fad5bff`，版本/发布准备为 `bcb4e42`；GitHub `v1.2.1`、ModelScope Releases 稳定通道和 Models 备用 EXE 均已上传并回读一致。滚动背景修复已获用户实机确认；模型框修复已完成官方 LakeUI 证据、构建和反射核对，真实宿主点击回归仍待用户重启后确认。
+- Latest UI fix: CreateOfficialValueBox 内的 HtmlColorLabel 显式绑定外层文件框 BackgroundSource，避免被滚动页直接绑定宿主而跳过半透明底色；5 处同类路径/文件显示共用修复。已构建、验证背景依赖关系并备份安装，待用户确认实际视觉效果。
+
+- Current objective: 按正式流程发布 VideoEnhancer 1.2.2，并保留 3FUI 核心兼容和路径框背景修复。
+- Current state: `release/1.2.2` 已完成版本源、README、Release Notes 和版本记录更新；候选 EXE 已构建，后端 2026.08.26.1 审计为 0 add / 0 replace / 0 delete。插件队列兼容修复、路径框背景修复和 HostCompatibility 回归测试已纳入候选提交。远端 GitHub/ModelScope 尚未上传。
 - Last active agent: Codex
 - Likely next agent: user / Codex / ZCode
-- Next recommended step: 用户完全退出并重新启动当前已运行的 `FFmpegFreeUI`，点击放大模型/补帧模型并再次滚动确认第三版 DLL；发布资产无需重复生成。DPI 矩阵、500 帧预览压力和四宫格完整鼠标流程仍是后续回归。
+- Next recommended step: 提交并推送 `release/1.2.2`，创建 GitHub `v1.2.2`，同步 ModelScope Releases 和 Models 备用 EXE，完成三源资产回读；发布后再由用户重启 3FUI 做实际视觉和队列按钮回归。8K NVENC 的 `uhq` 风险已记录，DPI、500 帧预览压力和四宫格回归仍待后续。
 
 ## Active TODO
+
+- [ ] Task: 发布 1.2.2 双源本体资产。
+  - Owner: Codex
+  - Status: 候选资产和所有本地门禁已完成，待提交/推送后上传 GitHub 和 ModelScope。
+  - Verification: Backend 2026.08.26.1 审计 `0 add / 0 replace / 0 delete`；Release Gate `5/5`；安装器 6 场景；更新器 7 场景；Backend 事务 `6/6`；Python `18/18`；双宿主 HostCompatibility 通过；CLI `--version` 为 1.2.2。候选 EXE 16,882,374 bytes，SHA-256 `1d0e9699ebc640df401fce3f100a1fad12b2555cd63b3a6864ab8d3060b75936`。
+  - Blockers: 远端上传和回读尚未执行；实际宿主视觉/按钮回归不作为发布前自动门禁。
+  - Relevant files: `VideoEnhancerPlugin/PluginVersion.vb`, `cli/VideoEnhancer.csproj`, `README.md`, `release/release-notes.txt`, `version/版本迭代记录.md`
+
+- [ ] Task: 3FUI 6.2.16 核心兼容修复及实机回归。
+  - Owner: Codex / user
+  - Status: 代码修复、双宿主独立进程回归和本地 DLL 安装已完成；实际窗口/子进程回归待验证，不发布新版本。
+  - Verification: 旧安装 DLL 在 6.2.16 上复现 get_队列 MissingMethodException；修复 DLL 在 6.2.3 和 6.2.16 均输出 HOST_COMPATIBILITY_PASS，388 个直接宿主/LakeUI 成员引用可解析，git diff --check 通过。
+  - Relevant files: VideoEnhancerPlugin/{PreviewEngine,BackendProgress,PauseControl,StopControl}.vb，VideoEnhancerPlugin/tests/HostCompatibility/*。
+  - Remaining issue: 日志输入实际 3840x2160，2x 输出 7680x4320；NVENC CreateInputBuffer out of memory 造成 Broken pipe，不能归为宿主接口问题；CLI/编码参数/后端本轮未改动。
+
 
 - [x] Task: 按 LakeUI 官方背景映射链修复滚动断层。
   - Owner: Codex
@@ -1644,3 +1661,34 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Cross-source readback: GitHub stable.json、ModelScope stable.json 与本地清单均为 version `1.2.1`、package size `16865524`、SHA-256 `c67c8dffd05f8b52ab3ad3c657e51048c922677bca3afea89a2ad71f7a3ee005`；GitHub EXE、ModelScope Releases EXE、Models 备用 EXE 下载回读三者大小和哈希一致；ModelScope README 的 GitHub 首选/稳定清单兜底说明通过。
 - Post-release: 3FUI 当前仍可能加载发布前部署的第三版 DLL，用户需完全退出并重启后实测模型菜单动画和滚动背景；发布资产本身无需重新生成。
 - Git: 收尾文档尚未提交；当前应新增一个纯文档 closeout commit，推送后保持 `main...fork/main` 一致并确认工作树干净。
+
+
+### 2026-09-09 10:10 - Codex
+
+- Startup: 本次为 Codex 新会话延续项目；读取 HandShake SKILL、AGENTS.md、docs/codex/INDEX.md、STATUS.md 及用户附件日志。执行 git pull --ff-only、git status，原 release/1.2.0 分支干净但未包含远端 1.2.1；从 fork/main 的 1a475e9 建立 fix/3fui-core-compat，保留 1.2.1 已发布修复。
+- Evidence: fetch 官方 Lake1059/FFmpegFreeUI，在临时独立 worktree 读取 0daa5be（6.2.16）源码。实际 EXE 文件版本为 6.2.16；将其单文件 bundle 解包到本地临时 3fui-core-compat-host，取得 FFmpegFreeUI 6.2.16 / LakeUI 5.9 程序集。官方队列属性返回类型由 List(Of 编码任务_v6) 变成 IReadOnlyList(Of 编码任务_v6)，而 获取队列快照 / 根据ID获取任务 签名仍兼容。
+- Fix: PreviewEngine 使用宿主加锁生成的队列快照；PreviewEngine、BackendProgress、PauseControl、StopControl 的任务查找统一使用 根据ID获取任务，消除 5 处旧属性读取及错误的外部 SyncLock。核对事件 JSON、任务状态/进度属性及队列窗体钩子相关源码；本轮没有更改宿主私有调度器或编码参数。
+- Tests: 新增 VideoEnhancerPlugin/tests/HostCompatibility 独立进程测试与说明。以旧宿主 6.2.3 / LakeUI 5.3 编译同一个最终 DLL，分别在旧宿主和真实新版宿主程序集环境执行，均 HOST_COMPATIBILITY_PASS：388 个直接宿主/LakeUI 成员签名、四组件查找与缺失 ID、活动预览枚举、宿主 JSON 序列化/订阅、25% 进度回写、暂停/恢复共享内存、停止信号/标记和终态清理。原安装 DLL 的负对照准确抛出截图中的 get_队列 MissingMethodException。源码也已使用新版宿主构建通过；最终采用旧引用构建以保持双版本兼容。
+- Deployment: 确认 FFmpegFreeUI 未运行后，备份实际插件到 C:/Users/maxzr/AppData/Local/Temp/3fui-core-compat-backup-20260909-101037/videoenhancer.3fui.dll，并覆盖 C:/Program portable/3FUI/3FUI/Plugin/videoenhancer.3fui.dll。安装文件和仓库构建产物 SHA-256 均为 8CFCA0BF517EE47448485FEDDF04A9D09033D1B908D915DA3ACEC676E3417299。上述路径仅为本机记录。
+- Separate failure: 用户日志显示真实输入 3840x2160，AnimeJaNai 2x 输出 7680x4320；NVENC CreateInputBuffer failed: out of memory 后 FFmpeg 退出，进而 Broken pipe。不是全部错误都来自核心重构；本轮未更改 CLI 的泛化 MemoryError 提示，也未声称解决 GPU 编码内存问题。
+- Limits: 测试不启动实际宿主窗口或真实编码子进程，不等于真实预览帧、按钮交互、暂停后停止封装、队列调度和 GPU 长视频压力已通过。CLI 无源码变更，未重复执行无关 CLI/GPU 测试。版本仍为 1.2.1，未发布。
+- Git: git diff --check 通过；fix/3fui-core-compat 跟踪 fork/main，工作树包含 4 个 VB 修复文件、新回归项目以及 STATUS/中文进度记录，未提交、未推送，建议提交后再切换设备/工具。
+
+
+### 2026-09-09 10:26 - Codex
+
+- 用户重试仍失败，继续 HandShake 同工具会话；git pull --ff-only 已同步，保留全部未提交修复。nvidia-smi 确认 RTX 3060 Laptop 6144 MiB，驱动 616.56，测试前仅占 10 MiB。
+- 隔离复现：不运行超分，仅 FFmpeg lavfi 两帧，7680x4320 + hevc_nvenc + p7 + uhq + p010le + vbr/cq28 仍报 CreateInputBuffer out of memory（退出码 1）；同尺寸仅 uhq→hq 通过（退出码 0）；3840x2160 使用原 uhq 参数也通过。因此不能笼统归因为模型占满显存，已证明本机编码参数组合可独立触发。
+- 完整验证：先以合成 4K 两帧运行当前安装 CLI、同款 AnimeJaNai 2x/CUDA/auto 精度、p7/hq/10bit，退出码 0；再从用户实际源片提取前两帧无损 FFV1（保留 10bit）执行同一流程，CLI 退出码 0，ffprobe count_frames 确认 7680x4320、yuv420p10le、2 帧。测试文件/日志在本机临时目录 C:/Users/maxzr/AppData/Local/Temp/3fui-nvenc-real-0p2_nz0n；合成测试在 3fui-nvenc-check-imoavpci。
+- 处理建议已具体化：质量页将调优 uhq 改为 hq，保留 p7/p010le/CQ28，再重新添加任务以生成新命令；未直接改用户全局预设或原任务。此前通用 MemoryError 提示不够准确；仅分段不能消除这次初始化失败。两帧通过不等于整片或全部音轨/字幕封装验证。
+- 本轮仅更新状态和中文进度，未改代码/安装文件、未发布。工作树仍包含上一轮兼容修复与测试，未提交；建议用户验证后提交。
+
+
+### 2026-09-09 11:26 - Codex
+
+- 用户截图显示处理程序路径文字下方透明。继续 HandShake，读取当前状态并执行 git pull --ff-only / git status，保留已有未提交队列修复。
+- Root cause: CreateOfficialValueBox 使用半透明 ModernPanel 包裹 HtmlColorLabel；滚动背景绑定把没有显式来源的文字标签直接指向 ModernPanel1，绕过外框 BackColor1。核对 LakeUI HtmlColorLabel GPU 渲染源码，显式 BackgroundSource 直接参与背景采样。
+- Fix: PluginPanel.vb 的 CreateOfficialValueBox 在添加子控件后将 HtmlColorLabel.BackgroundSource 指向 box。现有滚动绑定只填充空来源，因此保留正确的宿主→外框→文字依赖。5 处调用覆盖处理程序、图片输入、转换输入/输出及导入源路径。
+- Verification: 旧宿主引用构建成功；使用当前实机 LakeUI 5.9，在临时独立 .NET 进程调用真实工厂及滚动绑定方法，VALUEBOX_BACKGROUND_PASS，确认文字来源仍为父框、父框来源为宿主。最终 DLL 在 3FUI 6.2.16 的 HOST_COMPATIBILITY_PASS，388 个成员签名及原队列回归通过；git diff --check 通过。未声称真实窗口截图视觉回归完成。
+- Install: 确认宿主未运行后备份至 C:/Users/maxzr/AppData/Local/Temp/3fui-valuebox-backup-20260909-112546/videoenhancer.3fui.dll，覆盖 C:/Program portable/3FUI/3FUI/Plugin/videoenhancer.3fui.dll；源文件与安装文件 SHA-256 均为 4F62817A3DA264B94CD3F8B6D436F126EA1DED79426C47202558E630D576F86B。临时验证项目位于本机 TEMP/3fui-valuebox-check，不属于项目测试要求。
+- Git/next: fix/3fui-core-compat 仍有前次及本次修改，工作树不干净、未提交、未发布；建议重新打开插件确认路径框底色连续并滚动检查，然后提交。
