@@ -1,17 +1,25 @@
 # Project Status
 
-Last updated: 2026-09-05 18:47
+Last updated: 2026-09-12 10:47
 Updated by: Codex
 
 ## Current Snapshot
 
-- Current objective: 按发布流程完成 1.2.1 双源本体发布，保留两个独立修复提交并完成发布后回读。
-- Current state: 1.2.1 已完成本地构建、提交、推送和双源发布。两个修复分别为 `c5e9be8` 和 `fad5bff`，版本/发布准备为 `bcb4e42`；GitHub `v1.2.1`、ModelScope Releases 稳定通道和 Models 备用 EXE 均已上传并回读一致。滚动背景修复已获用户实机确认；模型框修复已完成官方 LakeUI 证据、构建和反射核对，真实宿主点击回归仍待用户重启后确认。
+- Current objective: 保留已完成并部署的 VideoEnhancer 1.3.0 本地开发结果，等待用户重新启动 3FUI 验证新增的分段超分页，再决定后续 Git 与发布动作。
+- Current state: RTX VSR / RTX Video HDR、Windows 图片右键超分（含逐项删除）、FlashVSR / BasicVSR++ 图片桥、图片“移除所有”和分段超分均已实现；最终 EXE/DLL/分段后端已部署到便携 3FUI，关键实跑、构建和 22 项测试通过。此前页面由用户手动确认无问题，本轮新增分段页尚待用户重启后目视确认。版本仍为本地开发状态，未提交、未推送、未发布。
 - Last active agent: Codex
 - Likely next agent: user / Codex / ZCode
-- Next recommended step: 用户完全退出并重新启动当前已运行的 `FFmpegFreeUI`，点击放大模型/补帧模型并再次滚动确认第三版 DLL；发布资产无需重复生成。DPI 矩阵、500 帧预览压力和四宫格完整鼠标流程仍是后续回归。
+- Next recommended step: 用户重新启动 3FUI，检查“分段超分”页的视频识别、分段增删与模型锁定；确认后再单独决定 Git 分支整理、提交或发布。RTX SDK 文件进入公开发行资产前复核 NVIDIA 许可。本轮继续保持不执行 Git 操作。
 
 ## Active TODO
+
+- [x] Task: 完成 1.3.0 本地功能更新与部署。
+  - Owner: Codex / user
+  - Status: RTX sidecar、分辨率映射、HDR 兼容门禁、右键超分配置及逐项删除、图片清空、两个时序图片桥和分段超分已实现；最终 1.3.0 EXE/DLL/分段后端已部署到指定便携 3FUI，版本保持 1.3.0。
+  - Verification: CLI Release 构建 0 错误（2 个既有 Windows 平台分析警告）；LakeUI 5.9 / FFmpegFreeUI 6.2.16 插件构建通过；Python 22/22；安装版 `--version` 和 RTX 环境检查通过；RTX VSR 320×180→640×360；RTX HDR 输出 HEVC Main10 BT.2020/PQ；BasicVSR++ 64×48→256×192；FlashVSR 64×64→256×256；两帧视频分别用两个 NCNN 模型处理并由同一 FFmpeg 输出为 256×256/2 帧，非法重复边界及混合倍率均被拒绝；用户已确认此前真实 3FUI UI 无问题，本轮新增分段页待重启后目视确认。
+  - Blockers: 本地开发与部署无阻塞。RTX SDK 组件公开再分发前需复核 NVIDIA 许可；右键菜单必须由用户在“右键超分”页选择模型后主动点击“应用设置”，本轮未代为写入注册表。
+  - Git: 用户明确要求本轮不执行 Git 操作，因此分支、未提交文件和工作树清洁度未知。
+  - Relevant files: `cli/Program.cs`, `cli/RtxVideoBackendClient.cs`, `cli/embedded-tools/rve-image-backend.py`, `cli/embedded-tools/rve-segmented-backend.py`, `VideoEnhancerPlugin/PluginPanel.vb`, `VideoEnhancerPlugin/SegmentedUpscalePage.vb`, `VideoEnhancerPlugin/PluginConfig.vb`, `VideoEnhancerPlugin/QueueHook.vb`, `VideoEnhancerPlugin/ShellUpscaleMenu.vb`
 
 - [x] Task: 按 LakeUI 官方背景映射链修复滚动断层。
   - Owner: Codex
@@ -1644,3 +1652,30 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Cross-source readback: GitHub stable.json、ModelScope stable.json 与本地清单均为 version `1.2.1`、package size `16865524`、SHA-256 `c67c8dffd05f8b52ab3ad3c657e51048c922677bca3afea89a2ad71f7a3ee005`；GitHub EXE、ModelScope Releases EXE、Models 备用 EXE 下载回读三者大小和哈希一致；ModelScope README 的 GitHub 首选/稳定清单兜底说明通过。
 - Post-release: 3FUI 当前仍可能加载发布前部署的第三版 DLL，用户需完全退出并重启后实测模型菜单动画和滚动背景；发布资产本身无需重新生成。
 - Git: 收尾文档尚未提交；当前应新增一个纯文档 closeout commit，推送后保持 `main...fork/main` 一致并确认工作树干净。
+
+### 2026-09-12 09:55 - Codex
+
+- Scope: 按用户要求仅在本地仓库和指定 3FUI 目录开发，不执行任何 Git 命令，不创建提交、标签或发布资产。
+- RTX implementation: 新增 `RtxVideoBackendClient`，按 `RTXHDR-RTXVSR` 本地 HTTP 协议启动 sidecar、检查 D3D11/RTX SDK/VSR/TrueHDR/NVENC 能力、提交/轮询/取消任务。RTX VSR 支持 1x/1.5x/2x/3x/4x 与 1080p/1440p/2160p/4320p 映射，倍率限制 1-4，最终边长取偶数；与补帧组合时固定先补帧。RTX HDR 位于最后阶段，常规超分/补帧通过 RGB FFV1 无损中间视频衔接，已是 PQ/HLG 的输入拒绝重复映射。
+- Plugin/UI: 超分工作台增加 HDR 映射区；RTX 后端使用专用输出规格/质量控件并与模型/分块控件互斥显示；内容高度从 850 调整为 970，后续行整体下移避免重叠。图片输入栏增加“移除所有”。顶部增加“右键超分”页，可配置当前用户 `SystemFileAssociations\image` 的“超分辨率 → 模型”级联菜单，提供应用与移除按钮，输出固定 PNG。
+- Image backend: `rve-image-backend.py` 新增 FlashVSR/BasicVSR++ 图片路径：构造 21/4 帧重复 FFV1 视频、执行对应时序后端、提取第一帧；小于 64 像素的输入先补边再按原尺寸裁切。错误信息包含源图片、失败阶段、退出码和后端尾部日志。
+- Runtime: 从 `Zennmn/RTXHDR-RTXVSR` v1.0.1 便携包把 sidecar、FFmpeg 运行库、`nvngx_vsr.dll`、`nvngx_truehdr.dll` 和许可/NOTICE 文件放入 `C:\PortableSoft\FFmpegFreeUI ReadyToRun x64\plugin\videoenhancer\bin\rtx-video`。公开分发这些 NVIDIA 文件前必须重新核对许可。
+- Verification: LakeUI 5.9 和 FFmpegFreeUI 6.2.16 官方源码本地构建成功；插件类型检查/构建成功；CLI 构建成功，仅保留既有 Windows CA1416 分析警告。RTX 4070 Laptop 实跑 RTX VSR 320×180→640×360；RTX HDR 为 HEVC `yuv420p10le`、BT.2020/PQ；BasicVSR++ 图片 64×48→256×192；FlashVSR 图片 64×64→256×256；Python 脚本语法通过。
+- Version: `PluginVersion.Current`、CLI 工程、README、Release Notes 和版本迭代记录已切换为 1.3.0 开发中；未发布。
+- Remaining: 重新以最终 1.3.0 源码构建 DLL/单文件 EXE，部署到指定目录并在真实 3FUI 检查页面布局；运行现有自动测试。Git 状态因用户禁令未知。
+
+### 2026-09-12 10:03 - Codex
+
+- Closeout: 移除“右键超分”页在控件句柄创建前调用 `BeginInvoke` 的风险点，改为仅在切入该标签页时加载模型；用 LakeUI 5.9 / FFmpegFreeUI 6.2.16 重新构建插件。
+- Deployment: 最终产物已覆盖到 `C:\PortableSoft\FFmpegFreeUI ReadyToRun x64`。EXE 为 16,906,285 bytes、SHA-256 `F687EBFAB5C1BE65BCE3159D80B86782B6D675632F519DC66A5324AD721FD713`；DLL 为 4,632,576 bytes、SHA-256 `27D130D0F89BBDCFA1C16526C5B2F1804B388DE5449FD680BB1C920AA1BBE425`，源/目标哈希分别一致。覆盖前备份位于 `C:\Users\ARXChem\AppData\Local\Temp\videoenhancer-1.3.0-backup-20260912-095800`。
+- Final verification: CLI Release 构建 0 错误（仅 2 个既有 CA1416 Windows 平台分析警告）、Python 单元测试 18/18、安装版 `--version` 为 1.3.0、RTX VSR / RTX Video HDR 环境探测全部通过；用户手动确认新增真实 3FUI UI 无问题。
+- Side effects/Git: “应用设置”未代替用户点击，因此本轮没有主动写入资源管理器右键菜单；用户可在“右键超分”页选择模型后自行应用。本轮始终没有执行 Git 命令，分支和工作树状态未知，也没有提交、推送或发布。
+
+### 2026-09-12 10:47 - Codex
+
+- Follow-up UI: HDR“处理方式”下拉保持可点击，即使当前只有 RTXHDR；“右键超分”模型表增加逐项删除，同时保留“移除所有”和显式“应用设置/移除右键菜单”。
+- Segmented upscale: 顶栏新增“分段超分”页，从 3FUI 当前添加文件列表识别视频并用 ffprobe 读取精确帧数；每个视频独立保存总开关与分段。首帧/尾帧锁定，内部边界联动，新增/删除后仍连续覆盖全部帧，模型选择限定为 NCNN/CUDA/TensorRT/ONNX 单帧算法。第一段会锁定后端类别和倍率，后续段只显示兼容模型；FlashVSR、BasicVSR++、RTX VSR 等流式/时序路径不进入列表。
+- Runtime pipeline: 新增嵌入式 `rve-segmented-backend.py`，单次 FFmpeg 解码逐帧分发到各段模型，再交给同一 FFmpeg 编码并映射原音频/字幕。因为同一视频流必须保持固定尺寸，除后端类别外也锁定第一段倍率。分段任务当前明确拒绝与运动补帧、RTX HDR 以及 PQ/HLG 输入组合。
+- Feasibility/verification: 两帧验证视频分别使用 AnimeJaNai 2x 和 RealESRGAN AnimeVideoV3 2x，源码构建、trimmed publish 与安装版 EXE 均成功输出 256×256、2 帧视频；重复/缺口边界与混合倍率均按预期拒绝。CLI/插件重新构建通过，Python 全量测试 22/22。
+- Deployment: 用户退出 3FUI 后覆盖最终文件。EXE 源/目标均为 16,919,192 bytes、SHA-256 `2E75BF83CEFF8B24A9228EBD61876923E7C30AF4FE4D8B417006C53726B0C9A8`；DLL 源/目标均为 4,654,592 bytes、SHA-256 `9F1BF2328BACAB8A7A86C7F3318BD3543DBB0655BE71C348F86785B9AF889FCD`；分段后端源/目标 SHA-256 均为 `2B972FDC115518EE8C3BCCD0552E23DDD062F3E6AA00A2D39E07948BB9BF9C41`。安装版仍报告 1.3.0，部署后未代为启动宿主。
+- Backup/Git: 覆盖前备份位于 `%LocalAppData%\Temp\videoenhancer-1.3.0-segment-backup-20260912-103000`。本轮没有执行任何 Git 命令，未提交、推送或发布。

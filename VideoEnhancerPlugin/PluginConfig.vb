@@ -34,6 +34,16 @@ Namespace videoenhancer
         Public Property InterpHalfPrecision As Boolean = True
         ''' <summary>组合处理顺序：upscale-first（画质优先，默认）或 interp-first（速度/算力优先）。</summary>
         Public Property ProcessOrder As String = "upscale-first"
+        ''' <summary>对视频启用 NVIDIA RTX Video HDR 映射。</summary>
+        Public Property RtxHdrEnabled As Boolean = False
+        ''' <summary>RTX VSR 输出规格：倍率或按横竖方向映射的目标边。</summary>
+        Public Property RtxTarget As String = "2x"
+        ''' <summary>RTX VSR 质量等级（1-4）。</summary>
+        Public Property RtxQuality As Integer = 3
+        ''' <summary>资源管理器“超分辨率”级联菜单中启用的模型。</summary>
+        Public Property ShellModels As New Collections.Generic.List(Of ShellUpscaleModel)()
+        ''' <summary>按完整视频路径保存的逐帧分段超分配置。</summary>
+        Public Property SegmentedVideos As New Collections.Generic.List(Of SegmentedVideoConfig)()
         Public Property ImageOutput As String = ""
         Public Property ImageOutputOriginal As Boolean = False
         Public Property ImagePng As Boolean = True
@@ -153,6 +163,28 @@ Namespace videoenhancer
             End Try
         End Sub
 
+    End Class
+
+    Public Class ShellUpscaleModel
+        Public Property Backend As String = "ncnn"
+        Public Property Model As String = ""
+        Public Property DisplayName As String = ""
+    End Class
+
+    Public Class SegmentedVideoConfig
+        Public Property Path As String = ""
+        Public Property FrameCount As Long
+        Public Property Enabled As Boolean
+        Public Property Segments As New Collections.Generic.List(Of SegmentedUpscaleRange)()
+    End Class
+
+    Public Class SegmentedUpscaleRange
+        Public Property Start As Long
+        Public Property [End] As Long
+        Public Property Backend As String = ""
+        Public Property Model As String = ""
+        Public Property DisplayName As String = ""
+        Public Property Scale As Integer
     End Class
 
 End Namespace

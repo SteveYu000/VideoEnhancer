@@ -29,11 +29,25 @@ class UserModelImportContractTests(unittest.TestCase):
         source = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
         self.assertIn("ModernContextMenu.ModernMenuItem", source)
         self.assertIn(".SubMenu = submenu", source)
-        expected = ["超分工作台", "实时预览", "模型下载", "模型转换", "模型导入", "使用教程"]
+        expected = ["超分工作台", "实时预览", "模型下载", "模型转换", "模型导入", "分段超分", "右键超分", "使用教程"]
         positions = [source.index(f'ModernTab("{name}")') for name in expected]
         self.assertEqual(positions, sorted(positions))
         self.assertNotIn('ModernTab("对比工具")', source)
         self.assertNotIn('ModernTab("模型指南")', source)
+
+    def test_segmented_page_and_shell_per_item_delete_are_wired(self):
+        panel = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
+        segmented = (ROOT / "VideoEnhancerPlugin" / "SegmentedUpscalePage.vb").read_text(encoding="utf-8")
+        queue = (ROOT / "VideoEnhancerPlugin" / "QueueHook.vb").read_text(encoding="utf-8")
+        program = (ROOT / "cli" / "Program.cs").read_text(encoding="utf-8")
+        self.assertIn("_cmbRtxHdrMode.Enabled = True", panel)
+        self.assertIn("OnShellModelItemClick", panel)
+        self.assertIn("分段总开关", segmented)
+        self.assertIn("必须覆盖全部帧", segmented)
+        self.assertIn('New String() {"ncnn", "cuda", "tensorrt", "onnx"}', segmented)
+        self.assertIn("segmentsBase64", queue)
+        self.assertIn('case "--segments-base64"', program)
+        self.assertIn("RunSegmentedVideo", program)
 
     def test_import_page_lists_models_and_exposes_capability_editor(self):
         source = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
