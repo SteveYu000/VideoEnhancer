@@ -19,7 +19,7 @@ internal sealed class RtxVideoBackendClient : IDisposable
         bool NvencAv1Available,
         string[] Messages);
 
-    internal sealed record JobResult(bool Succeeded, bool Canceled, string Error);
+    internal sealed record JobResult(bool Succeeded, bool Canceled, string Error, IReadOnlyList<string> Warnings);
 
     private readonly Process _process;
     private readonly HttpClient _http;
@@ -136,21 +136,45 @@ internal sealed class RtxVideoBackendClient : IDisposable
         double scale,
         bool hdrEnabled,
         string codec,
+        string container,
+        string audioMode,
+        IReadOnlyDictionary<string, string> encoderOptions,
         Func<bool> stopRequested,
+        Func<bool>? isPaused,
         CancellationToken token)
     {
-        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, codec));
+        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, codec, container, audioMode, encoderOptions));
         using var create = await _http.PostAsync("/api/jobs", createContent, token);
         var createText = await create.Content.ReadAsStringAsync(token);
-        if (!create.IsSuccessStatusCode) return new JobResult(false, false, ApiError(createText, create.StatusCode));
+        if (!create.IsSuccessStatusCode) return new JobResult(false, false, ApiError(createText, create.StatusCode), Array.Empty<string>());
         using var createDocument = JsonDocument.Parse(createText);
         var id = createDocument.RootElement.GetProperty("id").GetString();
-        if (string.IsNullOrWhiteSpace(id)) return new JobResult(false, false, "RTX Video sidecar 未返回任务 ID");
+        if (string.IsNullOrWhiteSpace(id)) return new JobResult(false, false, "RTX Video sidecar 未返回任务 ID", Array.Empty<string>());
 
         var cancelSent = false;
+        var warnings = new List<string>();
+        var totalFrames = 0L;
+        var lastPause = false;
         while (true)
         {
             token.ThrowIfCancellationRequested();
+            if (isPaused is not null)
+            {
+                // 边沿触发：暂停状态变化时通知 sidecar；请求失败时下个轮询重试。
+                var paused = isPaused();
+                if (paused != lastPause)
+                {
+                    var endpoint = paused ? "pause" : "resume";
+                    try
+                    {
+                        using var _ = await _http.PostAsync($"/api/jobs/{Uri.EscapeDataString(id)}/{endpoint}", JsonContent("{}"), token);
+                    }
+                    catch
+                    {
+                    }
+                    lastPause = paused;
+                }
+            }
             if (stopRequested() && !cancelSent)
             {
                 cancelSent = true;
@@ -160,13 +184,10 @@ internal sealed class RtxVideoBackendClient : IDisposable
 
             using var response = await _http.GetAsync($"/api/jobs/{Uri.EscapeDataString(id)}", token);
             var text = await response.Content.ReadAsStringAsync(token);
-            if (!response.IsSuccessStatusCode) return new JobResult(false, cancelSent, ApiError(text, response.StatusCode));
+            if (!response.IsSuccessStatusCode) return new JobResult(false, cancelSent, ApiError(text, response.StatusCode), warnings);
             using var document = JsonDocument.Parse(text);
             var root = document.RootElement;
             var state = root.TryGetProperty("state", out var stateElement) ? stateElement.GetString() ?? "" : "";
-            var progress = root.TryGetProperty("progress", out var progressElement) && progressElement.TryGetDouble(out var parsedProgress)
-                ? Math.Clamp(parsedProgress, 0.0, 1.0)
-                : 0.0;
             var framesDone = root.TryGetProperty("framesDone", out var framesElement) && framesElement.TryGetInt64(out var parsedFrames)
                 ? parsedFrames
                 : 0;
@@ -176,9 +197,28 @@ internal sealed class RtxVideoBackendClient : IDisposable
             var eta = root.TryGetProperty("etaSeconds", out var etaElement) && etaElement.TryGetInt64(out var parsedEta)
                 ? parsedEta
                 : 0;
-            Console.WriteLine($"RTX_PROGRESS|{progress.ToString("0.000", CultureInfo.InvariantCulture)}|{framesDone}|{fps.ToString("0.0", CultureInfo.InvariantCulture)}|{eta}");
 
-            if (state == "succeeded") return new JobResult(true, false, "");
+            // 输出 3FUI 插件 BackendProgress 可直接解析的原生进度行：
+            // "Total Output Frames: N" + "FPS: … Current Frame: … ETA: H:MM:SS"。
+            if (root.TryGetProperty("framesTotal", out var totalElement) && totalElement.TryGetInt64(out var parsedTotal) && parsedTotal > 0)
+            {
+                if (parsedTotal != totalFrames)
+                {
+                    totalFrames = parsedTotal;
+                    Console.WriteLine("Total Output Frames: " + totalFrames.ToString(CultureInfo.InvariantCulture));
+                }
+            }
+            Console.WriteLine($"FPS: {fps.ToString("0.0", CultureInfo.InvariantCulture)} Current Frame: {framesDone.ToString(CultureInfo.InvariantCulture)} ETA: {FormatEtaSeconds(eta)}");
+
+            if (root.TryGetProperty("warnings", out var warningsElement) && warningsElement.ValueKind == JsonValueKind.Array)
+            {
+                warnings = warningsElement.EnumerateArray()
+                    .Select(item => item.GetString() ?? "")
+                    .Where(item => item.Length > 0)
+                    .ToList();
+            }
+
+            if (state == "succeeded") return new JobResult(true, false, "", warnings);
             if (state is "failed" or "canceled")
             {
                 var error = "";
@@ -189,7 +229,7 @@ internal sealed class RtxVideoBackendClient : IDisposable
                     error = string.Join("：", new[] { message, details }.Where(value => !string.IsNullOrWhiteSpace(value)));
                 }
                 if (string.IsNullOrWhiteSpace(error)) error = LastDiagnostic();
-                return new JobResult(false, state == "canceled" || cancelSent, error);
+                return new JobResult(false, state == "canceled" || cancelSent, error, warnings);
             }
             await Task.Delay(500, token);
         }
@@ -205,7 +245,8 @@ internal sealed class RtxVideoBackendClient : IDisposable
     }
 
     private static string CreateJobJson(string inputPath, string outputPath, bool vsrEnabled,
-        int quality, double scale, bool hdrEnabled, string codec)
+        int quality, double scale, bool hdrEnabled, string codec, string container, string audioMode,
+        IReadOnlyDictionary<string, string> encoderOptions)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -232,10 +273,20 @@ internal sealed class RtxVideoBackendClient : IDisposable
             writer.WriteEndObject();
             writer.WritePropertyName("output");
             writer.WriteStartObject();
-            writer.WriteString("container", "mp4");
+            writer.WriteString("container", container);
             writer.WriteString("videoCodec", codec);
-            writer.WriteString("audioMode", "copy");
+            writer.WriteString("audioMode", audioMode);
             writer.WriteString("subtitleMode", "copy-compatible");
+            if (encoderOptions.Count > 0)
+            {
+                writer.WritePropertyName("encoderOptions");
+                writer.WriteStartObject();
+                foreach (var option in encoderOptions)
+                {
+                    writer.WriteString(option.Key, option.Value);
+                }
+                writer.WriteEndObject();
+            }
             writer.WriteEndObject();
             writer.WriteEndObject();
         }
@@ -243,6 +294,21 @@ internal sealed class RtxVideoBackendClient : IDisposable
     }
 
     private static StringContent JsonContent(string json) => new(json, Encoding.UTF8, "application/json");
+
+    /// <summary>ETA 格式与 rve-backend 一致：H:MM:SS（小时不补零，分/秒补零）。</summary>
+    private static string FormatEtaSeconds(long seconds)
+    {
+        if (seconds < 0)
+        {
+            seconds = 0;
+        }
+        var h = seconds / 3600;
+        var mm = (seconds % 3600) / 60;
+        var ss = seconds % 60;
+        return h.ToString(CultureInfo.InvariantCulture) + ":" +
+               mm.ToString("00", CultureInfo.InvariantCulture) + ":" +
+               ss.ToString("00", CultureInfo.InvariantCulture);
+    }
 
     private static bool ReadBoolean(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;

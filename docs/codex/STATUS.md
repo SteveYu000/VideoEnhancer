@@ -1,17 +1,39 @@
 # Project Status
 
-Last updated: 2026-09-12 12:55
-Updated by: Codex
+Last updated: 2026-09-12 17:42
+Updated by: ZCode
 
 ## Current Snapshot
 
-- Current objective: 保留已完成、部署并同步的 VideoEnhancer 1.3.0 开发结果，等待 maxzrb 审查合并 PR，并由用户重新启动 3FUI 验证新增的分段超分页。
-- Current state: RTX VSR / RTX Video HDR、Windows 图片右键超分（含逐项删除）、FlashVSR / BasicVSR++ 图片桥、图片“移除所有”和分段超分均已实现；最终 EXE/DLL/分段后端已部署到便携 3FUI，关键实跑、构建和 22 项测试通过。源码分支已推送到 `user-Wing/VideoEnhancer`，PR `maxzrb/VideoEnhancer#1` 已打开；`user-Wing/main` 已用保留双方历史的合并提交直接更新。版本未发布。
-- Last active agent: Codex
-- Likely next agent: user / Codex / ZCode
-- Next recommended step: maxzrb 审查并合并 PR #1；用户重新启动 3FUI，检查“分段超分”页的视频识别、分段增删与模型锁定。RTX SDK 文件进入公开发行资产前复核 NVIDIA 许可，确认后再决定是否正式发布 1.3.0。
+- Current objective: RTX 路径接入 3FUI 编码参数控制（码率/画质）并彻底移除 MP4 中间容器；本地 fork sidecar 补丁已完成、部署并经真实素材验证，供用户实测。
+- Current state: sidecar fork `C:\Codex Program\RTXHDR-RTXVSR`（分支 `rve-patches`，提交 `a9e63d9`）补丁：`output.encoderOptions` NVENC 参数透传、mkv/matroska 容器支持、TrueHD/MLP 实验性门禁仅作用于 mov/mp4、m2ts 音轨元数据修复（TrueHD 补 48kHz、参数不完整流跳过并告警）。CLI：ffmpeg-settings → encoderOptions 映射、.mkv 目标 sidecar 直写最终文件（其内部临时+原子改名）、其余后缀 mkv 兜底无损重封装、sidecar 警告透传。两者已部署到 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer`。
+- Current verification: 上游单测 85/85（新增 2 用例）；真实 F1 m2ts 剪辑直写 mkv = hevc 3840×2160 10bit PQ + TrueHD 原音轨保留；cq 20/28/45 输出大小呈数量级差异证明码率控制生效；mp4 目标走 mkv 兜底 + AAC 256k 转码；仓库 Python 测试 `22/22`、CLI 0 错误。部署备份于 `C:\Users\maxzr\AppData\Local\Temp\rtx-patch-deploy-20260912-170117`。
+- Last active agent: ZCode
+- Likely next agent: user / ZCode / Codex
+- Next recommended step: 用户在真实 3FUI 用完整 F1 文件等素材实测（m2ts 的 ac3 副轨因元数据不完整会被跳过，主 TrueHD 轨正常）；建议把 sidecar 补丁整理后向上游 Zennmn/RTXHDR-RTXVSR 提 PR；当前工作树 5 个未提交文件建议尽快提交。
 
 ## Active TODO
+
+- [x] Task: 验证 PR1 文件框与 RTX HDR UI 修复。
+  - Owner: user / Codex
+  - Status: 用户已确认文件框空心和 RTX HDR 换行两处视觉问题修复。HDR 使用透明、右对齐、180px 状态列的 LakeUI `ModernButton`，不走 `HtmlColorLabel` 换行路径；`CreateOfficialValueBox` 已恢复背景依赖。
+  - Verification: LakeUI 5.9 构建、Python `22/22`、安装 DLL SHA-256 `9ECC9B444321C08BED63BC63B618AEEAB530A3EF71476AC29B38ACC72A906555` 与部署一致；用户实机确认通过。
+  - Blockers: 无；PR 仍保持未合并，等待整体验收。
+  - Relevant files: `VideoEnhancerPlugin/PluginPanel.vb`
+
+- [ ] Task: 验证换入的完整后端 python-20260912.7z。
+  - Owner: user / ZCode
+  - Status: 已将 `C:\Users\maxzr\Downloads\python-20260912.7z`（3,086,044,296 bytes，SHA-256 `DBC365B74E6D8AC039DFEAF218644202EAA7568118CA2320975A6358285BA78C`）解压换入 `Plugin\videoenhancer\python`，包内标记保持 2026.08.26.1；冒烟验证通过，等待用户真实任务测试。
+  - Verification: 全树 blake2b 对比仅缓存/行尾差异；Python 3.12.9、torch 2.9.0+cu130 CUDA available、onnxruntime 1.29.0；`--backend-status` current；仓库测试 `22/22`。旧后端备份于 `C:\Users\maxzr\AppData\Local\Temp\rve-backend-prev-20260912-144723\python`。
+  - Blockers: 未做真实视频任务回归；标记版本号是否改为 2026.09.12.x 留待用户决定；本轮按用户要求未走发布流程。RTX sidecar 缺失问题已解决：组件已部署且实跑验证通过。
+  - Relevant files: `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\python`（安装位置，非仓库文件）
+
+- [ ] Task: PR #1 本地安装回归。
+  - Owner: user / Codex
+  - Status: PR head 已建立独立本地分支并编译、安装；等待用户真实 3FUI 窗口测试，当前不合并、不发布。
+  - Verification: `22/22` Python 测试；插件 LakeUI 5.9 构建；CLI 1.3.0 发布构建；安装目录 DLL/EXE 与构建源一致，后端脚本经 CLI 启动同步后仅改变为 CRLF 行尾且 UTF-8 内容一致；安装前备份已保存；本轮插件 DLL 已再次覆盖安装。
+  - Blockers: 尚未完成真实宿主启动、分段页交互、RTX 功能和实际视频任务回归；PR 分支未合并。
+  - Relevant files: `VideoEnhancerPlugin/SegmentedUpscalePage.vb`, `VideoEnhancerPlugin/PluginPanel.vb`, `cli/Program.cs`, `cli/embedded-tools/rve-image-backend.py`, `cli/embedded-tools/rve-segmented-backend.py`
 
 - [x] Task: 完成 1.3.0 本地功能更新与部署。
   - Owner: Codex / user
@@ -1686,3 +1708,139 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Commit/PR: 将 1.3.0 更新提交为 `9551296 feat: add RTX and segmented upscale workflows`，推送至 `user-Wing/VideoEnhancer:feat/rtx-segmented-upscale-1.3.0`；向 `maxzrb/VideoEnhancer:main` 创建 PR #1：`https://github.com/maxzrb/VideoEnhancer/pull/1`。
 - Direct user-Wing update: 为避免强推覆盖 user-Wing 的独有历史，以功能提交和旧 `user-Wing/main` 为双父创建 `becc929 merge: sync user-Wing with maxzrb 1.3.0 maintenance line`。合并树与功能提交逐字节一致，随后从 `cbfda2f` 快进推送到 `user-Wing/main`；双方历史均保持可达，当前文件内容以 maxzrb 维护线为准。
 - Scope: Git 提交仅包含 18 个本次功能/测试/文档文件；未包含 EXE、DLL、INI、Python 缓存、临时验证素材或安装目录文件。版本保持 1.3.0，未创建标签、Release 或发布资产。
+
+### 2026-09-12 13:14 - Codex
+
+- Startup/sync: 按项目要求读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md` 和 HandShake skill；执行 `git pull --ff-only` 成功。起始分支 `release/1.2.2` 工作树干净，随后未合并地获取 PR #1。
+- PR checkout: PR 标题为 `feat: add RTX and segmented upscale workflows`，base 为 `maxzrb/main@1a475e9`，head 为 `user-Wing/feat/rtx-segmented-upscale-1.3.0@00946ce`；建立本地 `pr/1-rtx-segmented-upscale`，跟踪 `origin/feat/rtx-segmented-upscale-1.3.0`，没有使用 PR merge ref 或执行合并。
+- Backend input: 核验 `C:\Users\maxzr\Downloads\backend更新.zip`，SHA-256 为 `74B0377597EBCC9925026D4D24C82A2D9BF1DA96E71E36C550D0783B99993DF8`；其中 `rve-image-backend.py`（16,461 bytes）和 `rve-segmented-backend.py`（9,654 bytes）与 PR 内嵌脚本逐字节一致。
+- Verification: `python -m unittest discover -s cli/tests -p 'test_*.py' -v` 为 `22/22`；PR `git diff --check` 通过；`pwsh VideoEnhancerPlugin/build.ps1 -HostBin C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host -SkipInstall` 成功，LakeUI baseline `5.9.0.0`；`pwsh cli/build.ps1` 成功，只有既有 CA1416 Windows 平台警告；CLI `--version` 为 `1.3.0`。
+- Build artifacts: 插件 DLL 与 `VideoEnhancerPlugin/out/videoenhancer.dll` 均为 4,654,592 bytes、SHA-256 `FEC4117758409897530AED7EAF499572C9D63A60274CF10730E31196BC072DA3`；CLI EXE 与 `cli/.publish/videoenhancer.exe` 均为 16,919,258 bytes、SHA-256 `C8657D85C694088F7215E36D3FE0AD7E03EB452EB140BF369FD3151B68A617B6`。
+- Deployment: 确认 `FFmpegFreeUI`、`3FUI` 和 `videoenhancer` 进程均未运行；覆盖 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`、`Plugin\videoenhancer\videoenhancer.exe` 及两个后端脚本。初次复制时目标哈希与构建/ZIP 源一致；安装版 `--version` 启动同步后仅将两个脚本的 LF 行尾改为 CRLF，UTF-8 解码内容一致。覆盖前备份位于 `C:\Users\maxzr\AppData\Local\Temp\3fui-pr1-backup-20260912-131309`。
+- Runtime limit: PR1 分支不包含此前兼容性工作分支的 `HostCompatibility` 回归项目，本轮未声称该项通过；未启动真实 3FUI，也未声称分段页、RTX 页面或真实视频任务视觉/功能回归通过。
+- Git/next: 源码分支仍未合并 PR；HandShake 本次记录和中文进度记录产生待提交文档改动，构建产物被忽略。下一步由用户重启 3FUI 做本地测试；测试结果确认后再决定是否提交、合并或回滚。
+
+### 2026-09-12 13:40 - Codex
+
+- UI regression diagnosis: 对照 PR1 与 `6bc7b3a` 旧版本确认，PR1 的 `CreateOfficialValueBox` 删除了 `HtmlColorLabel.BackgroundSource = box`，导致 `_lblExe` 等文件/路径显示标签直接采样宿主背景，恢复该绑定以修复框内空心。RTX HDR 状态提示原本使用固定 112px 状态列，`RTX Video HDR` 在截图中换行；为 `BuildOfficialModeHeader` 增加可选状态列宽，HDR 调用使用 150px，并保留 `MiddleRight`、清空 Padding。
+- Changed file: `VideoEnhancerPlugin/PluginPanel.vb`。
+- Build: 执行 `pwsh VideoEnhancerPlugin/build.ps1 -HostBin C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host -SkipInstall`，LakeUI baseline `5.9.0.0`，构建成功；Python 测试 `22/22`，`git diff --check` 通过，源码断言确认背景绑定、HDR 宽度和右对齐设置存在。
+- Deployment: 确认宿主及 CLI 未运行后，覆盖 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`。构建源和安装目标均为 4,654,592 bytes、SHA-256 `358939CF211853B03A29C4584BC2C57C59B0F40150566535088780DC672CA8B1`；旧 DLL 备份位于 `C:\Users\maxzr\AppData\Local\Temp\3fui-pr1-ui-fix-backup-20260912-133939`。
+- Runtime limit: 未启动真实 3FUI，因此尚未声称文件框底色和 RTX HDR 单行提示的视觉回归通过；未合并、未推送、未发布。
+- Git/next: 当前分支 `pr/1-rtx-segmented-upscale` 仍基于 `00946ce`；工作树含 `PluginPanel.vb` 以及 HandShake 两份记录的未提交修改。下一步用户重启 3FUI 核对两个截图问题，确认后再决定提交和 PR 合并。
+
+### 2026-09-12 14:04 - Codex
+
+- Follow-up diagnosis: 用户反馈 150px 状态列仍然换行。对照 LakeUI `HtmlColorLabel` 源码确认其 HTML 排版路径固定按可绘制单元换行，控件没有可用的 `NoWrap` 属性，因此仅增加宽度不能保证单行。
+- Source fix: `PluginPanel.vb` 将 `_lblSwitchRtxHdr` 改为透明的 LakeUI `ModernButton` 文本控件，设置 `TextAlign=Right`、无内边距、无边框、无渐变/水波纹/长按交互、180px 状态列；ModernButton 的 `DrawText` 默认 `wordWrap=False`。RTX HDR 开启/关闭状态改为普通文本和 `ForeColor`，其他状态标签保持原有 `HtmlColorLabel` 实现。
+- Build/deployment: `pwsh VideoEnhancerPlugin/build.ps1 -HostBin C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host -SkipInstall` 成功，LakeUI baseline `5.9.0.0`；Python 测试 `22/22`、源码断言和 `git diff --check` 通过。确认宿主进程未运行后覆盖安装 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`，源/目标 SHA-256 均为 `9ECC9B444321C08BED63BC63B618AEEAB530A3EF71476AC29B38ACC72A906555`。
+- Backup/runtime: 覆盖前 DLL 备份位于 `C:\Users\maxzr\AppData\Local\Temp\3fui-pr1-ui-fix-backup-20260912-135714`。已启动真实 3FUI 主程序做宿主检查，但未自动进入插件页，故不宣称两个视觉问题已确认；随后测试宿主已关闭。PR 仍未合并、未推送、未发布。
+- Git/next: 当前分支仍为 `pr/1-rtx-segmented-upscale`，工作树有 `PluginPanel.vb`、`docs/codex/STATUS.md`、`version/工作进度.md` 未提交修改；下一步用户完全重启 3FUI，进入 VideoEnhancer 插件页确认文件框底色和 RTX HDR 单行提示。完成本轮后建议考虑 Git 提交，再继续 PR 决策。
+
+### 2026-09-12 14:49 - ZCode
+
+- Startup/orientation: 按 `AGENTS.md` 读取 `INDEX.md` 与 `STATUS.md`；`git pull` 显示已最新；分支 `pr/1-rtx-segmented-upscale`，工作树含上一轮 UI 修复与记录的未提交改动。用户确认两处 UI 视觉问题已修复。
+- Backend intake: 核验 `C:\Users\maxzr\Downloads\python-20260912.7z` = 3,086,044,296 bytes，SHA-256 `DBC365B74E6D8AC039DFEAF218644202EAA7568118CA2320975A6358285BA78C`。解压到临时暂存区（32,637 文件 / 6.0 GB）后与换出前安装做 blake2b 全树对比：content_diff 2,898 个中非缓存仅 8 个（标记 JSON 时间戳、3 个 triton 内核、2 个 inspect 脚本与 2 个 rve 脚本的行尾差异，内容一致）；only_installed 5,021 个全部为 `__pycache__` .pyc、triton 缓存和旧 `python_20260824.7z`。代码内容与原环境一致，torch 2.9.0+cu130 / Python 3.12.9 / onnxruntime 1.29.0 相同。
+- Swap: 确认 3FUI/FFmpegFreeUI/videoenhancer/python 无进程后，旧 `Plugin\videoenhancer\python` 整目录移动备份至 `C:\Users\maxzr\AppData\Local\Temp\rve-backend-prev-20260912-144723\python`，新后端自暂存区整目录移入，暂存目录删除。models、bin、插件 DLL/EXE 未改动。
+- Marker decision: 包内 `.videoenhancer-backend.json` 仍为 2026.08.26.1（打包方未更新版本号），本轮未擅自改号以免与未来发布编号冲突；`--backend-status` 因此仍报 current/2026.08.26.1，不会触发更新提示。
+- Verification: 嵌入式 Python 3.12.9 启动正常；`import torch` 2.9.0+cu130 且 `torch.cuda.is_available()=True`；onnxruntime 1.29.0；安装版 `videoenhancer.exe --version`=1.3.0（启动同步未改变包内 rve 脚本哈希）；`--backend-status --json` state=current；仓库 Python 测试 `22/22`。
+- Scope/Git: 按用户要求仅本地替换用于测试，未使用发布脚本，未上传任何远端，未合并 PR，未创建标签/Release。工作树仍为 `PluginPanel.vb` + 两份记录的未提交改动。
+- Next: 用户在真实 3FUI 继续实测新后端；之后决定标记版本号、提交与 PR 合并。
+
+### 2026-09-12 15:01 - ZCode
+
+- User report: 真实 3FUI 中 RTX 环境检查报 `[缺失] RTX Video sidecar ... vsr_backend.exe`，退出码 1，用户询问与后端换入的关系。
+- Diagnosis: 后端换入仅替换 `Plugin\videoenhancer\python`（Python 推理环境）；RTX VSR/HDR 依赖独立的 `bin\rtx-video\vsr_backend.exe` HTTP sidecar（RTXHDR-RTXVSR v1.0.1 便携包组件 + nvngx DLL + FFmpeg 运行库），不在 Python 包内。本机安装 `bin` 下只有 PortableGit/ffmpeg/mkvtoolnix，`bin\rtx-video` 从未存在；`C:\PortableSoft` 旧安装不在本机；全盘（C 盘 5 层深度）未找到任何 `vsr_backend.exe`。此前 sidecar 只部署在另一环境（`C:\PortableSoft\FFmpegFreeUI ReadyToRun x64`）。环境检查报缺失并退出 1 属正确行为，与后端换入无关。
+- Note: 本机 `torch.cuda.is_available()=True`（有 NVIDIA GPU），sidecar 部署后 RTX 路径应可用。CLI 接受 `rtx-video\vsr_backend.exe` 或 `rtx-video\runtime\vsr_backend.exe` 两种布局（`RtxVideoBackendClient.FindBackend`）。
+- Next: 等用户从原机器拷贝 `bin\rtx-video` 整目录，或重新提供 RTXHDR-RTXVSR v1.0.1 便携包后按原布局部署。本轮无文件修改，仓库状态不变。
+
+### 2026-09-12 15:17 - ZCode
+
+- Package intake: 用户提供 `C:\Users\maxzr\Downloads\RTX.Video.Converter_1.0.2_x64-portable.zip`（116,754,076 bytes，SHA-256 `03547ACE397A8B0408F1C8E8AE361B8FFD00AA1F32566BB3A5E3D22D0403F248`），内含 `runtime\vsr_backend.exe`（2026-09-12 打包）、`nvngx_vsr.dll`、`nvngx_truehdr.dll`、7 个 FFmpeg 共享库 DLL 与 `THIRD_PARTY_LICENSES\`。仅提取 `runtime\*` 与 `THIRD_PARTY_LICENSES\*` 到 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\bin\rtx-video\`（对应 CLI `FindBackend` 第二候选布局），未部署转换器 GUI 部分。
+- First check: `--check -backend rtxvsr` 显示 sidecar/D3D11/SDK 文件通过，但 RTX SDK 运行时初始化失败且三个 NVENC 路径全部不可用。本机 GPU 为 RTX 3060 Laptop（驱动 616.92，支持 VSR/HDR），三症状同向指向 Optimus 双显卡下 sidecar 把 D3D11 设备建在核显。
+- Fix: 按 Windows 标准机制为 `vsr_backend.exe` 写入用户级 GPU 偏好：`HKCU\Software\Microsoft\DirectX\UserGpuPreferences`，值名 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\bin\rtx-video\runtime\vsr_backend.exe`，值 `GpuPreference=2;`（等同系统设置→显示→显卡中指定高性能；删除该值即可回滚）。重跑检查全部通过；av1_nvenc 不可用属 RTX 3060（Ampere）无 AV1 编码硬件的正常表现。
+- Real-run verification: testsrc2 320×180/1s 输入，RTX VSR 2x 输出 640×360 h264（30 帧）；RTX HDR 1x 输出 HEVC `yuv420p10le`、`bt2020nc`/`smpte2084`/`bt2020`，与 1.3.0 在原机器上的验证记录一致。临时测试素材已清理。
+- Scope/Git: 仅本地安装目录新增 `bin\rtx-video` 与一条 HKCU 注册表偏好；未改动仓库代码、DLL/EXE、models、python 环境；未发布、未合并。工作树仍为 `PluginPanel.vb` + 两份记录的未提交修改。
+- Next: 用户在插件页重跑 RTX 环境检查应全部通过（无需重启宿主）；继续实测其他后端后决定提交与 PR 合并。
+
+### 2026-09-12 15:28 - ZCode
+
+- User report: 真实 3FUI 任务（杜比全景声F1测试.m2ts，rtxvsr 2x 质量四 + RTX HDR）失败：`FFmpeg could not write the MP4 header.：Experimental feature`。用户询问是否因 VSR+HDR 同时开启。
+- Diagnosis: 不是。RTX 流水线中 sidecar 先把结果写入临时 MP4（`CreateJobJson` 硬编码 `container: "mp4"`、`audioMode: "copy"`），成功后才由 `CommitRtxOutput` 重封装为用户目标容器。ffprobe 确认该 m2ts 含 TrueHD+Dolby Atmos 音轨；FFmpeg 将 TrueHD 封装进 MP4 视为实验性特性，sidecar 内部 FFmpeg 因此写头失败。
+- Verification: 用 bundled ffmpeg 生成含 TrueHD 音轨的测试输入，CLI 同参数完整复现同一错误；E-AC3 Atmos 输入与无音轨输入对照均成功。同时确认 RTX 路径的最终重封装固定 `-map 0 -c copy`，用户 ffmpeg-settings 中的 `-map/-c:a` 参数只影响 `SelectRtxCodec` 编码器选择，不参与最终封装。
+- Workaround/fix options: 当前设置层面无解（audioMode 硬编码）。可选修复：CLI 探测到 TrueHD 等与 MP4 不兼容音轨时，先剥离音频交给 sidecar，最终重封装时从原输入按用户设置混回音轨/字幕（`Program.cs` RTX 分支 + `CommitRtxOutput`）。待用户决定是否实现。
+- Scope/Git: 仅临时测试文件（已清理），仓库与安装目录无改动。
+
+### 2026-09-12 15:41 - ZCode
+
+- User direction: 用户询问能否改掉或绕过 RTX 临时 MP4，倾向 MKV 中转（不喜欢 MP4 容器）；要求先做可行性验证再实现。
+- MKV feasibility: 反汇编级字符串扫描 + 直连 sidecar HTTP 实测确认不可行。`vsr_backend.exe` 明确返回 `unsupported_container: "The first backend release writes MP4 output."`，`container` 仅支持 mp4；该组件为闭源二进制，无法修改。注意 `videoCodec` 需传通用名（h264/hevc/av1），而非 ffmpeg 编码器名（hevc_nvenc 会被 `unsupported_video_codec` 拒绝）；CLI `SelectRtxCodec` 已做该映射。
+- Bypass validated: 手动驱动 sidecar 实测通过——TrueHD 输入 + `audioMode: "none"`（sidecar 原生支持的选项）→ 临时 MP4 仅含 hevc 640×360 视频；再用 bundled ffmpeg `-map 0:v:0 -map 1:a? -map 1:s? -c copy` 与原输入混流 → 最终 .mkv 含 hevc 视频 + TrueHD 音轨原样保留。
+- Planned implementation (await user approval): CLI 探测 `rveInput` 音轨，命中 MP4 不兼容编码（truehd/mlp/pcm_bluray/pcm_dvd）时任务 JSON 改用 `audioMode: "none"`；`CommitRtxOutput` 增加"从原输入混回音轨/字幕"分支（mkv 输出 `-c copy`；mp4 输出音轨转 AAC 并提示，位图字幕跳过）。改动集中在 `Program.cs` RTX 分支、`CreateJobJson`、`CommitRtxOutput`。
+- Scope/Git: 本轮仅实验（临时文件已清理、实验 sidecar 已关停），仓库与安装目录无改动。
+
+### 2026-09-12 15:58 - ZCode
+
+- User context: 插件的核心诉求就是让 3FUI 参数控制编码；RTX 路径参数被 sidecar 固定，用户询问是否让 RTX Video Converter 保持独立软件。
+- Source-verified facts (Zennmn/RTXHDR-RTXVSR，MIT 许可的原生源码，NVIDIA SDK 组件仍按 NVIDIA 许可)：任务 JSON 无任何编码器选项字段；NVENC 参数在 `ffmpeg_transcode_pipeline.cpp` 硬编码为 preset p7、tune hq、rc vbr、cq 18.0（h264/hevc）/24.0（AV1，`nvenc_policy.h`）、spatial-aq 1、rc-lookahead 32、multipass 2（全分辨率）。该固定组合质量高于用户惯用的 cq 28。CLI 的 `SelectRtxCodec` 仅映射编码器家族。独立 GUI 版的编码参数同样写死，独立使用并不带来更多控制。
+- Upstream bug mechanism confirmed: 音频/字幕 skip 策略用 `avformat_query_codec(FF_COMPLIANCE_NORMAL)`，TrueHD 在 MP4 有封装标签被放行，movenc 写头时才按实验性合规拒绝 → 整个任务失败而非优雅跳过音轨。可向上游提 issue/PR。
+- Build feasibility: 本机无 MSVC/vcpkg（仅 .NET 工具链）。上游依赖轻（cpp-httplib、nlohmann-json、gtest）且有 windows-ci.yml；自建还需 NVIDIA RTX Video SDK（专有，不可再分发）与最小 LGPL FFmpeg（上游提供构建脚本）。
+- Options presented to user: A) 向上游提 issue/PR 请求参数透传+TrueHD 修复（成本最低，作者活跃，今天刚发 v1.0.2）；B) fork 自建 sidecar（满足完全控制，但需搭建 C++/vcpkg/NVIDIA SDK 构建链并长期 rebase）；C) 维持现状（RTX 固定高画质，参数控制覆盖常规后端）。推荐 A 与 TrueHD CLI 绕过修复并行，视上游响应再决定是否 B。
+
+### 2026-09-12 17:42 - ZCode
+
+- User direction: 用户明确插件核心诉求是 3FUI 端码率/文件大小与画质的精细控制，拒绝维持 sidecar 固定参数；随后要求本地构建（工具链写入环境变量复用）、废除 mp4 中转、mkv 兜底。
+- Local build chain (persisted for reuse): VS BuildTools 18（MSVC 14.51.36231，`C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools`），用户 PATH 追加 cmake/ninja/MSVC bin；用户环境变量 `FFMPEG_ROOT=C:\Codex Program\RTXHDR-RTXVSR-artifacts\ffmpeg-root`、`CMAKE_TLS_VERIFY=0`（代理吊销检查失败所需）。FFmpeg dev 布局：头文件取自 v1.0.2 发布页对应源码包（commit a09be9b，avutil 61/avcodec 63 与 3FUI 运行时 DLL 匹配），导入库用 dumpbin/lib.exe 从 `bin\rtx-video\runtime` 的 DLL 生成（初版 .def 误抓 RVA 列已修正），`python\Lib` 外依赖走 CMake FetchContent，无需 vcpkg。NVIDIA RTX Video SDK 1.1.0 直链下载解压至 `C:\Codex Program\RTX_Video_SDK_v1.1.0`（`-DVSR_RTX_SDK_ROOT` 指定）。CMake 配置 `-DVSR_ENABLE_FFMPEG=ON -DVSR_ENABLE_RTX_SDK=ON`。
+- Sidecar fork patch (`C:\Codex Program\RTXHDR-RTXVSR` 分支 `rve-patches` 提交 `a9e63d9`，5 文件 +130/-12)：`job_types.h` OutputSettings 增加 `encoder_options` 并在 validate_request 白名单校验（preset/tune/rc/cq/qp/b:v/maxrate/bufsize/spatial-aq/temporal-aq/aq-strength/rc-lookahead/multipass/g）；`json_dto.cpp` 解析 `output.encoderOptions`（字符串/数值/布尔均收）；`ffmpeg_transcode_pipeline.cpp` 默认参数后应用覆盖（非法值降级为日志跳过）、容器选择支持 mkv/matroska、TrueHD/MLP 实验性门禁仅作用于 mov/mp4 系封装器、m2ts 音轨 TrueHD 补 sample_rate=48000、参数不完整音频流跳过并告警。单测新增 2 例（encoderOptions 解析/拒绝未知选项、muxer 兼容性含 matroska TrueHD），85/85 通过。
+- CLI patch: `RtxVideoBackendClient` CreateJobJson/RunAsync 增加 container/audioMode/encoderOptions 参数并透传 job warnings；`Program.cs` 新增 `ParseRtxEncoderOptions`（剔除 `:v:0` 流后缀、白名单映射）、`ProbeStreamTypes`；RTX 分支重构：.mkv 目标 sidecar 直写最终文件（sidecar 内部 TemporaryOutputCleanupGuard 失败清理 + 成功才 replace，崩溃安全），非 mkv 后缀一律 mkv 临时文件 + `CommitRtxOutput` 无损重封装（mp4 目标 TrueHD→AAC 256k、位图字幕省略，均有提示），sidecar 警告以 `[RTX Video] 警告：` 透传。曾修复两处自伤 bug：直写路径误入 finally 清理删除成品、ffprobe csv 字段顺序按位置无关解析。
+- Verification: 真实 F1 m2ts 5 秒剪辑（h264+TrueHD+AC3）经安装版 CLI：mkv 直写输出 hevc 3840×2160 10bit PQ + TrueHD 原音轨；cq 20/28/45 输出 505KB/约180KB/104KB 量级差异证明码率控制生效；mp4 目标走 mkv 兜底转 AAC 256k；上游单测 85/85、仓库 Python 22/22、CLI 0 错误（仅既有 CA1416 警告）。
+- Deployment: 覆盖 `Plugin\videoenhancer\videoenhancer.exe`（SHA-256 `de46a44f7b8dd97de94df6746736c55eaa9f200f21c74afbbb70598d121e390d`）与 `bin\rtx-video\runtime\vsr_backend.exe`（SHA-256 `02b94a54291620f3fb1d2a59f78d64d9cbae8533c493844395fbc7219c2104dd`），旧文件备份于 `C:\Users\maxzr\AppData\Local\Temp\rtx-patch-deploy-20260912-170117`。nvngx/FFmpeg 运行库保持 1.0.2 包原件未覆盖。
+- Known behavior notes: 经查随包 FFmpeg 源码 nvenc_hevc.c，`tune uhq`（Ultra high quality，NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY）为合法值并原样生效，此前"不合法/降级"的说法有误已更正；m2ts 的 ac3 副轨因 demux 元数据不完整（0 声道）被跳过并告警，主 TrueHD 轨正常；Optimus 双显卡下新 exe 路径需 GPU 偏好（已为构建/部署路径写入）。
+- Git/next: 仓库工作树 5 个未提交修改（PluginPanel.vb、cli/Program.cs、cli/RtxVideoBackendClient.cs、两份记录），建议尽快提交；sidecar 补丁建议整理后向上游提 PR；用户继续真实任务实测。
+
+### 2026-09-12 18:05 - ZCode
+
+- User direction: 最终架构定为"直连最终容器"——3FUI 输出什么后缀就用什么容器，不做 mkv 兜底与无损搬运；容器装不下的特性直接透出 FFmpeg 原生报错。
+- Architecture change: sidecar `container:"auto"`（或任意值）时按最终输出文件后缀 `av_guess_format` 选择封装器（mkv/mp4/webm/avi/ts 等全部 FFmpeg 封装器），validate_request 移除容器白名单；写头失败信息改为携带真实容器名（"could not write the webm header..."）；`ffmpeg_muxer_supports_copy` 回归纯 `avformat_query_codec` 语义（移除我此前加的 TrueHD/mp4 门禁，TrueHD 进 MP4 时由 movenc 在 write_header 原生报 Experimental feature）。CLI 删除 CommitRtxOutput/ProbeStreamTypes/HasMp4IncompatibleAudio 与 mkv 临时文件，一律 `RunAsync(input, outputFile, ...,"auto","copy",...)` 直写。保留：TrueHD 48kHz 元数据修复、参数不完整音频流跳过告警（属源数据修复而非容器规避）。
+- Fix during build: 上游源码为非 BOM/936 代码页，我误写的中文注释触发 C4819，已改英文注释；`ffmpeg_error` 参数为 const char*，临时 std::string 需取 c_str()。
+- Verification (端到端矩阵，安装版 CLI + 真实 F1 m2ts 剪辑): .mkv 直连成功（hevc 3840×2160 10bit PQ + TrueHD 原音轨，ac3 副轨元数据不完整跳过并告警）；.mp4 直连原生报 `could not write the MP4 header：Experimental feature` 且最终文件未被创建；.webm 原生报 `could not write the webm header...Invalid argument`（新文案带真实容器名）；正常 h264+aac 素材 .mp4 直连成功（hevc+aac）；上游单测 85/85、仓库 Python 22/22、CLI 0 错误。
+- Git: sidecar fork 分支 `rve-patches` 修订为 `5de2ef9`（5 文件 +133/-10）；插件仓库工作树未提交修改为 PluginPanel.vb、cli/Program.cs、cli/RtxVideoBackendClient.cs 与两份记录。
+- Next: 用户完整 F1 文件等真实任务实测；将 `rve-patches` 整理为上游 PR（补丁即 PR 内容，含单测）；建议提交当前插件仓库改动。
+
+### 2026-09-12 18:16 - ZCode
+
+- User direction: 确认门禁也不应设——`avformat_query_codec` 只是提示性接口（TrueHD 误报案例），真正的裁决者是 `avformat_write_header`；另外更正此前错误：查随包 FFmpeg 源码 `nvenc_hevc.c`，`tune uhq`（Ultra high quality，NV_ENC_TUNING_INFO_ULTRA_HIGH_QUALITY）为合法调优档且原样生效，"不合法/降级"说法已更正。
+- Sidecar change (fork `rve-patches` 修订为 `fe0b269`，6 文件 +119/-37)：音频/字幕 copy 循环移除 `ffmpeg_muxer_supports_copy` 预过滤（连同 helper、头声明与单测），封装器兼容性完全交给 `avformat_write_header` 原生判断；写头错误信息携带真实容器名。保留 TrueHD 48kHz 修复与参数残缺流跳过告警（属源数据修复，非容器规避）。
+- Verification (84/84 单测 + 安装版 CLI 真实 F1 素材矩阵): .mkv 直连成功（hevc 4K 10bit PQ + TrueHD 原音轨，ac3 副轨元数据残缺跳过告警）；.mp4 直连原生报 `could not write the mp4 header...Experimental feature`；.webm 直连原生报 `could not write the webm header...Invalid argument`；正常 h264+aac 素材 .mp4 直连成功（hevc+aac）；仓库 Python 22/22。
+- Next: 用户完整文件实测；`rve-patches`（fe0b269）整理上游 PR（注意：copy 策略变更是 API 语义调整，PR 描述需说明理由）；插件仓库 5 个未提交文件待用户确认后提交。
+
+### 2026-09-12 18:35 - ZCode
+
+- User direction: 把 `RTX_PROGRESS|p|frames|fps|eta` 进度拆解映射到 3FUI 任务进度。
+- Implementation: `RtxVideoBackendClient.RunAsync` 轮询改为输出插件 `BackendProgress` 原生协议——首次拿到 `framesTotal` 时打印 `Total Output Frames: N`（总量变化时重打），每拍打印 `FPS: … Current Frame: … ETA: H:MM:SS`（etaSeconds 按后端惯例格式化为 H:MM:SS），替换原 `RTX_PROGRESS` 行。插件端零改动：`BackendProgress.OnQueueEvent` 既有解析直接得到 百分比=帧/总、进度文本、效率文本（FPS）、时间文本与预览遥测。已知语义：sidecar 无暂停 API，3FUI 暂停时 RTX 编码继续、进度如实显示。
+- Verification: 0 错误构建并部署 CLI；真实 F1 剪辑任务实测输出 `Total Output Frames: 121` 与逐拍 `FPS: 22.4 Current Frame: 88 ETA: 0:00:02`。仓库 Python 22/22。
+- Git: 插件仓库工作树 5 个未提交修改不变。
+
+### 2026-09-12 19:56 - ZCode
+
+- User direction: 为 sidecar 增加暂停能力，打通 3FUI 暂停按钮到 RTX 任务的链路。
+- Sidecar implementation (fork `rve-patches` 修订为 `9ec12f6`，9 文件 +210/-37)：`CancellationToken` 增加 `paused` 原子标志；`job_runner` 增加 `request_pause/request_resume`（镜像 cancel 的活动令牌查找）；`http_server` 新增 `POST /api/jobs/{id}/pause` 与 `/resume` 路由；管道在读循环与 `process_decoded_frame` 检查点调用 `wait_while_job_paused`（50ms 轮询等待，取消优先于暂停，进入/恢复各记一条日志）。
+- CLI implementation: `RunAsync` 增加 `Func<bool>? isPaused`，轮询循环内边沿触发 `POST /pause` 或 `/resume`（失败不中断、下轮重试）；`Program.cs` 传入 `() => ReadShmByte(pauseShm) == 1`，3FUI 的 PauseControl 写共享内存即驱动 sidecar 暂停/恢复。
+- Verification: 单测 84/84；真实暂停测试（120s 素材，PowerShell 模拟 3FUI 写暂停字节）：Current Frame 在暂停窗口冻结于 210（19:54:33 与 19:54:36 两行相同），恢复后帧数走动、FPS 从 87 回升至 190，任务完成耗时准确包含暂停时长；mkv 直连与完成状态回归正常。首轮 30s 素材因处理太快未到暂停触发点，改用 120s 素材完成验证。
+- Known notes: sidecar 无暂停 API 的旧说法已过时；RTX 任务暂停期间进度帧数冻结、FPS 显示下降属真实状态；取消优先于暂停。
+- Git: 插件仓库工作树 5 个未提交修改（PluginPanel.vb、cli/Program.cs、cli/RtxVideoBackendClient.cs、两份记录）。
+- Next: 用户完整文件实测（含 3FUI 界面点暂停）；`rve-patches`（9ec12f6）整理上游 PR；插件仓库改动待用户确认后提交。
+
+### 2026-09-12 20:15 - ZCode
+
+- User report: RTX 输出视频时间轴异常，2 分钟的 F1 视频时间轴显示 11:02。
+- Root cause: 完整 F1 m2ts 的时间戳基线为 600.000 秒（蓝光标准做法，全部流 start_time=600），内容时长 62.752 秒；600+62.75=662.75s=11:02.75 与用户所见完全吻合。sidecar 直接用 libavformat 写封装，缺少 ffmpeg 命令行默认的起始偏移归零，600 秒基线被原样写入 mkv。我此前的 30s 测试剪辑偏移仅 1.44s，故复现不明显（31.5s vs 30.08s）。
+- Fix: 管道在读入后计算 `input_start_time_us`（input->start_time，>0 时），编码视频与拷贝流两条写包路径逐包按当前流时间基换算偏移并钳制非负（matroska 写头会改写流时间基，故必须逐包计算）；效果与 ffmpeg CLI 默认行为一致。
+- Verification: 30s 剪辑输出 start_time 归零（video 0.016/audio 0.000）、时长 30.058s；完整 F1 文件 + 用户原始参数直连 mkv：全部流 start_time=0.000000、duration=62.752s、1506 帧（62.75×24 ✓）；完整文件的 ac3/eac3 副轨元数据完整、全部保留（此前"跳过"仅发生在剪辑测试产物上）。单测与 Python 22/22 前轮已过，本轮无 CLI 改动。
+- Git: fork `rve-patches` 修订为 `ea16ce4`（9 文件 +242/-40）。F1 修复验证产物：`C:\压制测试\F1_fix_test.mkv`（可直接播放核对时间轴）。
+- Next: 用户播放 `F1_fix_test.mkv` 核对时间轴与音画；插件仓库 5 个未提交文件建议提交；fork 补丁待整理上游 PR。
+
+### 2026-09-12 20:25 - ZCode
+
+- User direction: 提交本地改动；sidecar 不向上游提 PR（用户确认已脱离其框架），fork 分支 `rve-patches`（ea16ce4）保持本地。
+- Commit plan: ① `fix: restore value box background and single-line RTX HDR status label`（PluginPanel.vb）；② `feat: mux RTX output directly into the target container`（cli/Program.cs、cli/RtxVideoBackendClient.cs、两份记录）。仅本地提交，不推送、不合并 PR #1。
