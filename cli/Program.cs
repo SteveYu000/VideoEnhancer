@@ -349,8 +349,6 @@ internal static class Program
             rveInput = intermediate;
         }
 
-        var sidecarOutput = Path.Combine(outputDir,
-            "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-rtx-output-" + Guid.NewGuid().ToString("N") + ".mp4");
         try
         {
             using var cancellation = new CancellationTokenSource();
@@ -372,51 +370,81 @@ internal static class Program
                 Console.WriteLine($"[RTX VSR] 输出映射：{sourceWidth}x{sourceHeight} × {resolvedScale.ToString("0.###", CultureInfo.InvariantCulture)} → {outputWidth}x{outputHeight}；质量 {rtxQuality}");
             }
             var codec = SelectRtxCodec(customEncoder, rtxHdr, capabilities);
-            var result = client.RunAsync(rveInput, sidecarOutput, rtxVsr, rtxQuality, resolvedScale,
-                rtxHdr, codec, () => stopWatcher?.IsStopRequested() == true, cancellation.Token).GetAwaiter().GetResult();
+            var encoderOptions = ParseRtxEncoderOptions(customEncoder);
+            if (encoderOptions.Count > 0)
+            {
+                Console.WriteLine("[RTX Video] 编码参数覆盖：" + string.Join("，", encoderOptions.Select(o => o.Key + "=" + o.Value)));
+            }
+            // sidecar 直接对接最终输出容器（按输出后缀选择 FFmpeg 封装器，mkv/
+            // mp4/webm/avi 等均可）；容器装不下的特性由 FFmpeg 原生报错。
+            // sidecar 内部自带临时文件与失败清理，失败不会碰最终文件。
+            if (overwrite && File.Exists(outputFile)) File.Delete(outputFile);
+            var result = client.RunAsync(rveInput, outputFile, rtxVsr, rtxQuality, resolvedScale,
+                rtxHdr, codec, "auto", "copy", encoderOptions,
+                () => stopWatcher?.IsStopRequested() == true,
+                () => ReadShmByte(pauseShm) == 1,
+                cancellation.Token).GetAwaiter().GetResult();
+            foreach (var warning in result.Warnings)
+            {
+                Console.WriteLine("[RTX Video] 警告：" + warning);
+            }
             if (!result.Succeeded)
                 return result.Canceled ? 130 : Fail("RTX Video 处理失败：" + result.Error, 1);
-            return CommitRtxOutput(sidecarOutput, outputFile, overwrite);
+            Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
+            return 0;
         }
         finally
         {
-            foreach (var temporary in new[] { intermediate, sidecarOutput })
+            if (!string.IsNullOrWhiteSpace(intermediate))
             {
-                if (string.IsNullOrWhiteSpace(temporary)) continue;
-                try { if (File.Exists(temporary)) File.Delete(temporary); }
+                try { if (File.Exists(intermediate)) File.Delete(intermediate); }
                 catch (Exception ex) { Console.Error.WriteLine("[警告] 无法清理 RTX 临时文件：" + ex.Message); }
             }
         }
     }
 
-    private static int CommitRtxOutput(string source, string outputFile, bool overwrite)
+    /// <summary>
+    /// 从 ffmpeg-settings 的编码参数中提取 NVENC 编码选项，映射为 sidecar 的
+    /// output.encoderOptions。忽略流指示后缀（如 -preset:v:0），非编码选项
+    /// （-c:v、-pix_fmt、-map、-y 等）一并忽略。
+    /// </summary>
+    private static readonly string[] RtxEncoderOptionNames =
     {
-        if (string.Equals(Path.GetExtension(outputFile), ".mp4", StringComparison.OrdinalIgnoreCase))
+        "preset", "tune", "rc", "cq", "qp", "b:v", "maxrate", "bufsize",
+        "spatial-aq", "temporal-aq", "aq-strength", "rc-lookahead", "multipass", "g",
+    };
+
+    private static Dictionary<string, string> ParseRtxEncoderOptions(string customEncoder)
+    {
+        var options = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(customEncoder)) return options;
+        var tokens = Tokenize(customEncoder);
+        for (var i = 0; i < tokens.Count; i++)
         {
-            File.Move(source, outputFile, overwrite);
-            Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
-            return 0;
+            var token = tokens[i];
+            if (!token.StartsWith('-') || token.Length < 2) continue;
+            var name = token.TrimStart('-');
+            string? value = null;
+            var equals = name.IndexOf('=');
+            if (equals >= 0)
+            {
+                value = name[(equals + 1)..];
+                name = name[..equals];
+            }
+            var colon = name.IndexOf(':');
+            if (colon > 0) name = name[..colon];
+            if (Array.IndexOf(RtxEncoderOptionNames, name) < 0) continue;
+            if (value is null)
+            {
+                if (i + 1 >= tokens.Count) break;
+                value = tokens[++i];
+            }
+            if (value.Length > 0 && value.Length <= 64)
+            {
+                options[name] = value;
+            }
         }
-        var start = new ProcessStartInfo
-        {
-            FileName = FfmpegExe,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        start.ArgumentList.Add(overwrite ? "-y" : "-n");
-        start.ArgumentList.Add("-hide_banner");
-        start.ArgumentList.Add("-i");
-        start.ArgumentList.Add(source);
-        start.ArgumentList.Add("-map");
-        start.ArgumentList.Add("0");
-        start.ArgumentList.Add("-c");
-        start.ArgumentList.Add("copy");
-        start.ArgumentList.Add(outputFile);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 FFmpeg 封装 RTX 输出");
-        process.WaitForExit();
-        if (process.ExitCode != 0) return Fail("RTX 输出重新封装失败，FFmpeg 退出码：" + process.ExitCode, 1);
-        Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
-        return 0;
+        return options;
     }
 
     /// <summary>
