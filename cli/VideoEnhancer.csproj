@@ -7,7 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>videoenhancer</AssemblyName>
     <RootNamespace>VideoEnhancer</RootNamespace>
-    <Version>1.2.1</Version>
+    <Version>1.3.0</Version>
     <!-- 单文件自包含发布：双击后安装到 3FUI\Plugin\videoenhancer 子目录 -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
@@ -42,6 +42,10 @@
                       LogicalName="VideoEnhancer.Embedded.inspect_upscale_models.py" />
     <EmbeddedResource Include="embedded-tools\prepare_rife_tensorrt.py"
                       LogicalName="VideoEnhancer.Embedded.prepare_rife_tensorrt.py" />
+    <EmbeddedResource Include="embedded-tools\rve-image-backend.py"
+                      LogicalName="VideoEnhancer.Embedded.rve-image-backend.py" />
+    <EmbeddedResource Include="embedded-tools\rve-segmented-backend.py"
+                      LogicalName="VideoEnhancer.Embedded.rve-segmented-backend.py" />
     <EmbeddedResource Include="model-capabilities.json"
                       LogicalName="VideoEnhancer.Embedded.model-capabilities.json" />
   </ItemGroup>

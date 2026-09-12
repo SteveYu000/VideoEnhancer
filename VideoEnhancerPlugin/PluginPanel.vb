@@ -17,7 +17,7 @@ Imports LakeUI
 Namespace videoenhancer
 
     ''' <summary>"视频超分"插件页面：插件总开关 + 超分/补帧两行开关与模型选择 + 状态信息。</summary>
-    Public Class PluginPanel
+    Public Partial Class PluginPanel
         Inherits UserControl
 
         ' 关闭状态的选项框不应因鼠标滚轮经过显示区域而悄悄改变配置。
@@ -75,6 +75,16 @@ Namespace videoenhancer
         Private ReadOnly _lblFactor As New HtmlColorLabel()
         Private ReadOnly _cmbProcessOrder As New WheelLockedComboBox()
         Private ReadOnly _lblProcessOrder As New HtmlColorLabel()
+        Private ReadOnly _switchRtxHdr As New LakeUI.BooleanSwitch()
+        Private ReadOnly _lblSwitchRtxHdr As New HtmlColorLabel()
+        Private ReadOnly _cmbRtxHdrMode As New WheelLockedComboBox()
+        Private ReadOnly _cmbRtxTarget As New WheelLockedComboBox()
+        Private ReadOnly _cmbRtxQuality As New WheelLockedComboBox()
+        Private _upscaleModelField As Control
+        Private _upscaleTileField As Control
+        Private _upscaleTileHint As LakeTextLabel
+        Private _rtxTargetField As Control
+        Private _rtxQualityField As Control
         Private _syncingMaster As Boolean = False
         Private _syncingBackend As Boolean = False
         Private _syncingInterpBackend As Boolean = False
@@ -87,6 +97,7 @@ Namespace videoenhancer
         Private _syncingInterpSwitch As Boolean = False
         Private _syncingUpscaleHalfSwitch As Boolean = False
         Private _syncingInterpHalfSwitch As Boolean = False
+        Private _syncingRtxHdrSwitch As Boolean = False
         Private _modelsLoaded As Boolean = False
         Private _loadingModels As Boolean = False
         Private _interpModelsLoaded As Boolean = False
@@ -112,6 +123,7 @@ Namespace videoenhancer
         Private ReadOnly _pageDownloader As New ModernPanel()
         Private ReadOnly _pageConverter As New ModernPanel()
         Private ReadOnly _pageImporter As New ModernPanel()
+        Private ReadOnly _pageShell As New ModernPanel()
         Private ReadOnly _pageTutorial As New ModernPanel()
         Private ReadOnly _markdownSources As New Dictionary(Of ModernPanel, String)()
         Private ReadOnly _markdownReady As New HashSet(Of ModernPanel)()
@@ -120,6 +132,7 @@ Namespace videoenhancer
         Private ReadOnly _btnImageFolder As New ModernButton()
         Private ReadOnly _btnImageOutput As New ModernButton()
         Private ReadOnly _btnImageStart As New ModernButton()
+        Private ReadOnly _btnImageClear As New ModernButton()
         Private ReadOnly _switchImageOriginal As New LakeUI.BooleanSwitch()
         Private ReadOnly _switchImagePng As New LakeUI.BooleanSwitch()
         Private ReadOnly _txtImageOutput As New ModernTextBox()
@@ -134,6 +147,15 @@ Namespace videoenhancer
         Private _imageProcess As Process
         Private _imageRunning As Boolean
         Private _imageCompleteReceived As Boolean
+        ' ── 资源管理器右键超分页 ──
+        Private ReadOnly _cmbShellBackend As New WheelLockedComboBox()
+        Private ReadOnly _cmbShellModel As New WheelLockedComboBox()
+        Private ReadOnly _btnShellAdd As New ModernButton()
+        Private ReadOnly _btnShellClear As New ModernButton()
+        Private ReadOnly _btnShellApply As New ModernButton()
+        Private ReadOnly _btnShellRemove As New ModernButton()
+        Private ReadOnly _shellModelList As New UltraDetailListView()
+        Private ReadOnly _shellCatalog As New List(Of ModelCatalogItem)()
         ' ── 实时预览页 ──
         Private ReadOnly _picPreview As New PixelPictureBox()
         Private ReadOnly _cmbTask As New WheelLockedComboBox()         ' 多任务选择
@@ -743,6 +765,31 @@ Namespace videoenhancer
             UpdateHookState()
         End Sub
 
+        Private Sub OnRtxHdrSwitchChanged(sender As Object, e As EventArgs)
+            If _syncingRtxHdrSwitch Then Return
+            If _switchRtxHdr.Checked AndAlso Not _config.Enabled Then
+                _switchRtxHdr.Checked = False
+                ShowStatus("请先开启「插件总开关」", True)
+                Return
+            End If
+            _config.RtxHdrEnabled = _switchRtxHdr.Checked
+            _config.Save()
+            UpdateModeStateLabels()
+            UpdateHookState()
+        End Sub
+
+        Private Sub OnRtxTargetSelected(sender As Object, e As EventArgs)
+            If _cmbRtxTarget.SelectedItem Is Nothing Then Return
+            _config.RtxTarget = _cmbRtxTarget.SelectedItem.ToString().Split(" "c)(0).Trim()
+            _config.Save()
+        End Sub
+
+        Private Sub OnRtxQualitySelected(sender As Object, e As EventArgs)
+            If _cmbRtxQuality.SelectedIndex < 0 Then Return
+            _config.RtxQuality = _cmbRtxQuality.SelectedIndex + 1
+            _config.Save()
+        End Sub
+
         ''' <summary>超分精度开关：开启时优先半精度，关闭时强制 FP32。</summary>
         Private Sub OnUpscaleHalfSwitchChanged(sender As Object, e As EventArgs)
             If _syncingUpscaleHalfSwitch Then Return
@@ -766,7 +813,7 @@ Namespace videoenhancer
         ''' <summary>按主开关 + 超分/补帧开关状态统一挂载/卸载"加入编码队列"hook。</summary>
         Private Sub UpdateHookState()
             Dim wantHook As Boolean = _config.Enabled AndAlso File.Exists(_config.ExePath) AndAlso
-                (_config.UpscaleEnabled OrElse _config.InterpEnabled)
+                (_config.UpscaleEnabled OrElse _config.InterpEnabled OrElse _config.RtxHdrEnabled OrElse HasEnabledSegmentedVideo())
             If wantHook Then
                 If Not QueueHook.Install() Then
                     ShowStatus("未能挂载""加入编码队列""按钮，请确认 3FUI 版本兼容", True)
@@ -1633,17 +1680,21 @@ Namespace videoenhancer
             If backend = "basicvsrpp" Then
                 _config.InterpEnabled = False
                 _config.InterpModel = ""
+            ElseIf backend = "rtxvsr" AndAlso _config.InterpEnabled Then
+                _config.ProcessOrder = "interp-first"
             End If
             _config.Save()
             SyncInterpSwitchFromConfig()
             ' 切换后端后重新读取两个模型列表（CUDA 需要 .pth 模型；活动模式无 .pth 时由 Apply*List 自动回退）
-            RefreshUpscaleModels()
+            If backend <> "rtxvsr" Then RefreshUpscaleModels()
             RefreshInterpModels()
             UpdateModeStateLabels()
             UpdateProcessOrderState()
             UpdateAdvancedControlState()
-            Dim modeText = If(backend = "basicvsrpp",
-                "BasicVSR++（NVIDIA）：官方 x4 权重或 1x 优化目录，不与补帧/图片模式混用",
+            Dim modeText = If(backend = "rtxvsr",
+                "RTX VSR（NVIDIA RTX Video）：无需模型；可选倍率或目标分辨率，与补帧组合时固定先补帧",
+                If(backend = "basicvsrpp",
+                "BasicVSR++（NVIDIA）：官方 x4 权重或 1x 优化目录；图片通过单帧视频桥处理",
                 If(backend = "tensorrt",
                 "TensorRT（NVIDIA）：超分与 RIFE 补帧均按实际输入尺寸自动构建 Engine",
                 If(backend = "onnx",
@@ -1652,7 +1703,7 @@ Namespace videoenhancer
                 "FlashVSR（NVIDIA）：连续视频帧扩散超分；组合补帧会自动分两阶段",
                 If(backend = "cuda",
                 "CUDA（PyTorch）：超分用 models 下的权重，补帧用 Frame-Interpolation 下的权重",
-                "NCNN（Vulkan）")))))
+                "NCNN（Vulkan）"))))))
             ShowStatus("推理方式：" & modeText, False)
         End Sub
 
@@ -1671,6 +1722,9 @@ Namespace videoenhancer
 
         Private Shared Function BackendValue(item As Object) As String
             Dim text = If(item Is Nothing, "", item.ToString())
+            If text.Contains("RTX VSR") Then
+                Return "rtxvsr"
+            End If
             If text.Contains("BasicVSR++") Then
                 Return "basicvsrpp"
             End If
@@ -2441,11 +2495,13 @@ Namespace videoenhancer
             BuildOfficialModelDownloadPage()
             BuildOfficialConverterPage()
             BuildOfficialImporterPage()
+            BuildOfficialSegmentedPage()
+            BuildOfficialShellPage()
             BuildMarkdownPage(_pageTutorial, BeginnerTutorialMarkdown())
 
             For Each page As ModernPanel In New ModernPanel() {
                 _pageUpscale, _pagePreview, _pageDownloader,
-                _pageConverter, _pageImporter, _pageTutorial
+                _pageConverter, _pageImporter, _pageSegmented, _pageShell, _pageTutorial
             }
                 page.BackColor = Color.Transparent
                 page.BackColor1 = Color.Transparent
@@ -2462,12 +2518,16 @@ Namespace videoenhancer
             Dim tabDownloader As New ModernTabControl.ModernTab("模型下载") With {.BoundControl = _pageDownloader}
             Dim tabConverter As New ModernTabControl.ModernTab("模型转换") With {.BoundControl = _pageConverter}
             Dim tabImporter As New ModernTabControl.ModernTab("模型导入") With {.BoundControl = _pageImporter}
+            Dim tabSegmented As New ModernTabControl.ModernTab("分段超分") With {.BoundControl = _pageSegmented}
+            Dim tabShell As New ModernTabControl.ModernTab("右键超分") With {.BoundControl = _pageShell}
             Dim tabTutorial As New ModernTabControl.ModernTab("使用教程") With {.BoundControl = _pageTutorial}
             _tabs.Items.Add(tabMain)
             _tabs.Items.Add(tabPreview)
             _tabs.Items.Add(tabDownloader)
             _tabs.Items.Add(tabConverter)
             _tabs.Items.Add(tabImporter)
+            _tabs.Items.Add(tabSegmented)
+            _tabs.Items.Add(tabShell)
             _tabs.Items.Add(tabTutorial)
             ' 每次打开插件都从超分主界面开始，避免保留上次停留在实时预览/高级功能页的状态。
             _tabs.SelectedIndex = 0
@@ -2697,8 +2757,8 @@ Namespace videoenhancer
                 .Dock = DockStyle.None,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
                 .AutoSize = False,
-                .MinimumSize = New Size(0, 850),
-                .Height = 850,
+                .MinimumSize = New Size(0, 970),
+                .Height = 970,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
@@ -2761,6 +2821,7 @@ Namespace videoenhancer
             _cmbBackend.Items.Add("ONNX Runtime")
             _cmbBackend.Items.Add("FlashVSR (NVIDIA · 视频)")
             _cmbBackend.Items.Add("BasicVSR++ (NVIDIA · 视频)")
+            _cmbBackend.Items.Add("RTX VSR (NVIDIA RTX Video)")
             AddHandler _cmbBackend.SelectedIndexChanged, AddressOf OnBackendSelected
             _cmbModel.WaterText = "选择放大模型…"
             ConfigureModelSelector(_cmbModel)
@@ -2768,7 +2829,7 @@ Namespace videoenhancer
             AddHandler _cmbModel.Click, AddressOf OnModelComboClicked
             AddHandler _cmbModel.SelectedIndexChanged, AddressOf OnModelSelected
             Dim upscaleBackendField = CreateOfficialField("推理后端", _cmbBackend)
-            Dim upscaleModelField = CreateOfficialField("放大模型", _cmbModel, 0)
+            _upscaleModelField = CreateOfficialField("放大模型", _cmbModel, 0)
             _cmbTileSize.WaterText = "RVE 默认（0）"
             ConfigureCombo(_cmbTileSize)
             _cmbTileSize.Items.Add("RVE 默认（0）")
@@ -2779,10 +2840,36 @@ Namespace videoenhancer
             _cmbTileSize.Items.Add("768 px")
             _cmbTileSize.Items.Add("1024 px")
             AddHandler _cmbTileSize.SelectedIndexChanged, AddressOf OnTileSizeSelected
-            Dim upscaleTileField = CreateOfficialField("超分分块尺寸", _cmbTileSize)
-            Dim tileHint = CreateOfficialCaption("0=RVE默认；越小越省显存但更慢", UiTextMuted)
-            tileHint.TextAlign = ContentAlignment.BottomLeft
-            tileHint.Margin = Padding.Empty
+            _upscaleTileField = CreateOfficialField("超分分块尺寸", _cmbTileSize)
+            _upscaleTileHint = CreateOfficialCaption("0=RVE默认；越小越省显存但更慢", UiTextMuted)
+            _upscaleTileHint.TextAlign = ContentAlignment.BottomLeft
+            _upscaleTileHint.Margin = Padding.Empty
+
+            _cmbRtxTarget.WaterText = "选择目标分辨率…"
+            ConfigureCombo(_cmbRtxTarget)
+            For Each target In New String() {"1x 原尺寸", "1.5x", "2x", "3x", "4x", "1080p", "1440p", "2160p", "4320p"}
+                _cmbRtxTarget.Items.Add(target)
+            Next
+            AddHandler _cmbRtxTarget.SelectedIndexChanged, AddressOf OnRtxTargetSelected
+            _cmbRtxQuality.WaterText = "质量 3"
+            ConfigureCombo(_cmbRtxQuality)
+            For quality = 1 To 4 : _cmbRtxQuality.Items.Add("质量 " & quality) : Next
+            AddHandler _cmbRtxQuality.SelectedIndexChanged, AddressOf OnRtxQualitySelected
+            _rtxTargetField = CreateOfficialField("RTX 输出规格", _cmbRtxTarget)
+            _rtxQualityField = CreateOfficialField("RTX VSR 质量", _cmbRtxQuality)
+
+            ConfigureDpiSwitch(_switchRtxHdr)
+            _syncingRtxHdrSwitch = True
+            _switchRtxHdr.Checked = _config.RtxHdrEnabled
+            _syncingRtxHdrSwitch = False
+            _switchRtxHdr.Enabled = _config.Enabled
+            AddHandler _switchRtxHdr.CheckedChanged, AddressOf OnRtxHdrSwitchChanged
+            Dim hdrHeader = BuildOfficialModeHeader("HDR 映射", "", _switchRtxHdr, _lblSwitchRtxHdr)
+            _cmbRtxHdrMode.Items.Add("RTX Video HDR")
+            _cmbRtxHdrMode.SelectedIndex = 0
+            ConfigureCombo(_cmbRtxHdrMode)
+            _cmbRtxHdrMode.Enabled = True
+            Dim hdrModeField = CreateOfficialField("HDR 处理方式", _cmbRtxHdrMode)
             ConfigureDpiSwitch(_switchInterp)
             ConfigureDpiSwitch(_switchInterpHalf)
             _switchInterpHalf.Checked = _config.InterpHalfPrecision
@@ -2838,17 +2925,21 @@ Namespace videoenhancer
             ' 放大模型名称较长（例如 AnimeJaNai...-430K），给模型列保留更多文本区，
             ' 避免箭头区域遮住名称末尾；后端列仍足以完整显示 TensorRT (NVIDIA)。
             AddWorkbenchControl(root, upscaleBackendField, 187, 76, 0.0F, 0.38F, 0, -12)
-            AddWorkbenchControl(root, upscaleModelField, 187, 76, 0.38F, 1.0F)
-            AddWorkbenchControl(root, upscaleTileField, 263, 70, 0.0F, 0.46F, 0, -12)
-            AddWorkbenchControl(root, tileHint, 263, 70, 0.46F, 1.0F)
-            AddWorkbenchRow(root, interpHeader, 345, 38)
+            AddWorkbenchControl(root, _upscaleModelField, 187, 76, 0.38F, 1.0F)
+            AddWorkbenchControl(root, _rtxTargetField, 187, 76, 0.38F, 1.0F)
+            AddWorkbenchControl(root, _upscaleTileField, 263, 70, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchControl(root, _rtxQualityField, 263, 70, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchControl(root, _upscaleTileHint, 263, 70, 0.46F, 1.0F)
+            AddWorkbenchRow(root, hdrHeader, 345, 38)
+            AddWorkbenchControl(root, hdrModeField, 383, 76, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchRow(root, interpHeader, 459, 38)
             ' 补帧后端的固定选项（尤其是 TensorRT (NVIDIA)）需要在箭头区域前保留
             ' 足够文本宽度；将窄列从 29% 调整到 34%，模型列仍保留主要空间。
-            AddWorkbenchControl(root, interpBackendField, 383, 76, 0.0F, 0.34F, 0, -12)
-            AddWorkbenchControl(root, interpModelField, 383, 76, 0.34F, 0.80F, 0, -12)
-            AddWorkbenchControl(root, interpFactorField, 383, 76, 0.80F, 1.0F)
-            AddWorkbenchControl(root, interpThresholdField, 459, 70, 0.0F, 0.34F, 0, -12)
-            AddWorkbenchControl(root, interpFlowField, 459, 70, 0.34F, 0.80F, 0, -12)
+            AddWorkbenchControl(root, interpBackendField, 497, 76, 0.0F, 0.34F, 0, -12)
+            AddWorkbenchControl(root, interpModelField, 497, 76, 0.34F, 0.80F, 0, -12)
+            AddWorkbenchControl(root, interpFactorField, 497, 76, 0.80F, 1.0F)
+            AddWorkbenchControl(root, interpThresholdField, 573, 70, 0.0F, 0.34F, 0, -12)
+            AddWorkbenchControl(root, interpFlowField, 573, 70, 0.34F, 0.80F, 0, -12)
 
             Dim orderRow As New ModernHorizontalPanel(150.0F, -54.0F, -46.0F) With {
                 .Margin = New Padding(0, 8, 0, 0)
@@ -2875,33 +2966,38 @@ Namespace videoenhancer
             orderRow.AddColumn(orderCaption, 0)
             orderRow.AddColumn(_cmbProcessOrder, 1)
             orderRow.AddColumn(_lblProcessOrder, 2)
-            AddWorkbenchRow(root, orderRow, 529, 56)
-            AddWorkbenchRow(root, CreateOfficialSeparator(), 585, 25)
+            AddWorkbenchRow(root, orderRow, 643, 56)
+            AddWorkbenchRow(root, CreateOfficialSeparator(), 699, 25)
 
             AddWorkbenchRow(root, CreateOfficialSectionHeading(
-                "图片增强", "沿用上方超分后端与模型，可选择文件、文件夹或直接拖入"), 610, 36)
+                "图片增强", "沿用上方超分后端与模型，可选择文件、文件夹或直接拖入"), 724, 36)
 
             Dim imageInputRow As New ModernHorizontalPanel(
-                150.0F, 12.0F, 170.0F, 12.0F, -1.0F) With {
+                150.0F, 12.0F, 170.0F, 12.0F, 110.0F, 12.0F, -1.0F) With {
                 .AllowDrop = True
             }
             ConfigureImageButton(_btnImageFiles, "选择图片", 150)
             ConfigureImageButton(_btnImageFolder, "选择文件夹", 170)
+            ConfigureImageButton(_btnImageClear, "移除所有", 110)
             _btnImageFiles.Dock = DockStyle.Fill
             _btnImageFolder.Dock = DockStyle.Fill
             _btnImageFiles.Margin = New Padding(0, 6, 0, 6)
             _btnImageFolder.Margin = New Padding(0, 6, 0, 6)
+            _btnImageClear.Dock = DockStyle.Fill
+            _btnImageClear.Margin = New Padding(0, 6, 0, 6)
             AddHandler _btnImageFiles.Click, AddressOf OnPickImageFiles
             AddHandler _btnImageFolder.Click, AddressOf OnPickImageFolder
+            AddHandler _btnImageClear.Click, AddressOf OnClearImages
             _lblImageInputs.AutoSize = False
             _lblImageInputs.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleLeft
             _lblImageInputs.Text = "<font color=#888888>尚未选择图片</font>"
             imageInputRow.AddColumn(_btnImageFiles, 0)
             imageInputRow.AddColumn(_btnImageFolder, 2)
-            imageInputRow.AddColumn(CreateOfficialValueBox(_lblImageInputs), 4)
+            imageInputRow.AddColumn(_btnImageClear, 4)
+            imageInputRow.AddColumn(CreateOfficialValueBox(_lblImageInputs), 6)
             AddHandler imageInputRow.DragEnter, AddressOf OnImageDragEnter
             AddHandler imageInputRow.DragDrop, AddressOf OnImageDragDrop
-            AddWorkbenchRow(root, imageInputRow, 646, 54)
+            AddWorkbenchRow(root, imageInputRow, 760, 54)
 
             Dim imageOutputRow As New ModernHorizontalPanel(170.0F, 12.0F, -1.0F)
             ConfigureImageButton(_btnImageOutput, "选择输出目录", 170)
@@ -2916,7 +3012,7 @@ Namespace videoenhancer
             AddHandler _txtImageOutput.TextChanged, AddressOf OnImageOutputTextChanged
             imageOutputRow.AddColumn(_btnImageOutput, 0)
             imageOutputRow.AddColumn(_txtImageOutput, 2)
-            AddWorkbenchRow(root, imageOutputRow, 700, 54)
+            AddWorkbenchRow(root, imageOutputRow, 814, 54)
 
             Dim imageOptionsRow As New ModernHorizontalPanel(
                 82.0F, 220.0F, 20.0F, 82.0F, 220.0F, -1.0F, 16.0F, 170.0F)
@@ -2956,7 +3052,7 @@ Namespace videoenhancer
             imageOptionsRow.AddColumn(formatLabel, 3)
             imageOptionsRow.AddColumn(_cmbImageFormat, 4)
             imageOptionsRow.AddColumn(_btnImageStart, 7)
-            AddWorkbenchRow(root, imageOptionsRow, 754, 54)
+            AddWorkbenchRow(root, imageOptionsRow, 868, 54)
 
             Dim progressRow As New ModernHorizontalPanel(-1.0F, 16.0F, 300.0F)
             _imageProgress.Minimum = 0
@@ -2978,13 +3074,198 @@ Namespace videoenhancer
             _lblImageProgress.Text = "<font color=#888888>等待开始</font>"
             progressRow.AddColumn(_imageProgress, 0)
             progressRow.AddColumn(_lblImageProgress, 2)
-            AddWorkbenchRow(root, progressRow, 808, 42)
+            AddWorkbenchRow(root, progressRow, 922, 42)
 
             _pageUpscale.Controls.Add(root)
             BindScrollableGpuBackgroundSources(root, ModernPanel1)
             ' 为 LakeUI 覆盖式滚动条保留绘制带，避免子窗口覆盖父面板的 GPU 滚动条。
             SyncUpscaleRootBounds()
             UpdateModeStateLabels()
+            UpdateAdvancedControlState()
+        End Sub
+
+        Private Sub BuildOfficialShellPage()
+            _pageShell.Dock = DockStyle.Fill
+            _pageShell.LayoutMode = ModernPanel.LayoutModeEnum.Absolute
+            Dim root As New ModernPanel With {
+                .Dock = DockStyle.Fill, .BackColor = Color.Transparent, .BackColor1 = Color.Transparent,
+                .LayoutMode = ModernPanel.LayoutModeEnum.Absolute, .BorderSize = 0
+            }
+            AddWorkbenchRow(root, CreateOfficialSectionHeading(
+                "资源管理器右键超分", "当前用户生效：图片右键 → 超分辨率 → 模型；输出固定为无损 PNG"), 12, 42)
+
+            _cmbShellBackend.WaterText = "选择图片后端…"
+            ConfigureCombo(_cmbShellBackend)
+            For Each item In New String() {"NCNN (Vulkan)", "CUDA (PyTorch)", "TensorRT (NVIDIA)", "ONNX Runtime", "FlashVSR (NVIDIA)", "BasicVSR++ (NVIDIA)"}
+                _cmbShellBackend.Items.Add(item)
+            Next
+            _cmbShellBackend.SelectedIndex = 0
+            AddHandler _cmbShellBackend.SelectedIndexChanged, AddressOf OnShellBackendSelected
+            _cmbShellModel.WaterText = "选择要加入菜单的模型…"
+            ConfigureCombo(_cmbShellModel)
+            Dim backendField = CreateOfficialField("推理后端", _cmbShellBackend)
+            Dim modelField = CreateOfficialField("模型", _cmbShellModel)
+            AddWorkbenchControl(root, backendField, 66, 76, 0.0F, 0.36F, 0, -12)
+            AddWorkbenchControl(root, modelField, 66, 76, 0.36F, 1.0F)
+
+            Dim actionRow As New ModernHorizontalPanel(140.0F, 12.0F, 140.0F, -1.0F)
+            ConfigureSecondaryButton(_btnShellAdd) : _btnShellAdd.Text = "添加当前模型"
+            ConfigureSecondaryButton(_btnShellClear) : _btnShellClear.Text = "清空模型列表"
+            _btnShellAdd.Dock = DockStyle.Fill : _btnShellAdd.Margin = New Padding(0, 6, 0, 6)
+            _btnShellClear.Dock = DockStyle.Fill : _btnShellClear.Margin = New Padding(0, 6, 0, 6)
+            AddHandler _btnShellAdd.Click, AddressOf OnShellAdd
+            AddHandler _btnShellClear.Click, AddressOf OnShellClear
+            actionRow.AddColumn(_btnShellAdd, 0)
+            actionRow.AddColumn(_btnShellClear, 2)
+            AddWorkbenchRow(root, actionRow, 150, 52)
+
+            ConfigureShellModelList()
+            AddWorkbenchRow(root, _shellModelList, 214, 150)
+
+            Dim applyRow As New ModernHorizontalPanel(170.0F, 12.0F, 190.0F, -1.0F)
+            ConfigurePrimaryButton(_btnShellApply) : _btnShellApply.Text = "应用设置"
+            ConfigureSecondaryButton(_btnShellRemove) : _btnShellRemove.Text = "移除右键菜单"
+            _btnShellApply.Dock = DockStyle.Fill : _btnShellApply.Margin = New Padding(0, 6, 0, 6)
+            _btnShellRemove.Dock = DockStyle.Fill : _btnShellRemove.Margin = New Padding(0, 6, 0, 6)
+            AddHandler _btnShellApply.Click, AddressOf OnShellApply
+            AddHandler _btnShellRemove.Click, AddressOf OnShellRemove
+            applyRow.AddColumn(_btnShellApply, 0)
+            applyRow.AddColumn(_btnShellRemove, 2)
+            AddWorkbenchRow(root, applyRow, 376, 54)
+            _pageShell.Controls.Add(root)
+            RefreshShellSummary()
+        End Sub
+
+        Private Sub OnShellBackendSelected(sender As Object, e As EventArgs)
+            LoadShellModels()
+        End Sub
+
+        Private Sub LoadShellModels()
+            If Not File.Exists(_config.ExePath) OrElse _cmbShellBackend.SelectedItem Is Nothing Then Return
+            Dim backend = BackendValue(_cmbShellBackend.SelectedItem)
+            _cmbShellModel.Items.Clear()
+            _shellCatalog.Clear()
+            _cmbShellModel.WaterText = "正在读取模型列表…"
+            Task.Run(Sub()
+                Dim catalog = RunModelCatalog(_config.ExePath, "--list-model-catalog", "-backend", backend)
+                If IsHandleCreated Then BeginInvoke(New Action(Sub()
+                    _shellCatalog.Clear() : _shellCatalog.AddRange(catalog)
+                    _cmbShellModel.Items.Clear()
+                    For Each entry In catalog
+                        _cmbShellModel.Items.Add(If(String.IsNullOrWhiteSpace(entry.DisplayName), entry.Id, entry.DisplayName))
+                    Next
+                    If _cmbShellModel.Items.Count > 0 Then _cmbShellModel.SelectedIndex = 0
+                    _cmbShellModel.WaterText = If(catalog.Count = 0, "当前后端没有可用模型", "选择模型…")
+                End Sub))
+            End Sub)
+        End Sub
+
+        Private Sub OnShellAdd(sender As Object, e As EventArgs)
+            If _cmbShellModel.SelectedIndex < 0 OrElse _cmbShellModel.SelectedIndex >= _shellCatalog.Count Then
+                ShowStatus("请先选择一个模型", True) : Return
+            End If
+            If _config.ShellModels Is Nothing Then _config.ShellModels = New List(Of ShellUpscaleModel)()
+            Dim entry = _shellCatalog(_cmbShellModel.SelectedIndex)
+            Dim backend = BackendValue(_cmbShellBackend.SelectedItem)
+            If Not _config.ShellModels.Any(Function(item) String.Equals(item.Backend, backend, StringComparison.OrdinalIgnoreCase) AndAlso String.Equals(item.Model, entry.Id, StringComparison.OrdinalIgnoreCase)) Then
+                _config.ShellModels.Add(New ShellUpscaleModel With {.Backend = backend, .Model = entry.Id, .DisplayName = If(String.IsNullOrWhiteSpace(entry.DisplayName), entry.Id, entry.DisplayName)})
+                _config.Save()
+            End If
+            RefreshShellSummary()
+        End Sub
+
+        Private Sub OnShellClear(sender As Object, e As EventArgs)
+            If _config.ShellModels Is Nothing Then _config.ShellModels = New List(Of ShellUpscaleModel)()
+            _config.ShellModels.Clear() : _config.Save() : RefreshShellSummary()
+        End Sub
+
+        Private Sub ConfigureShellModelList()
+            If _shellModelList.Columns.Count > 0 Then Return
+            _shellModelList.Dock = DockStyle.Fill
+            _shellModelList.Margin = Padding.Empty
+            _shellModelList.AutoScroll = False
+            _shellModelList.Font = New Font("Microsoft YaHei UI", 9.2F)
+            _shellModelList.BackColor = Color.Transparent
+            _shellModelList.BackgroundColor = Color.Transparent
+            _shellModelList.BackgroundSource = ModernPanel1
+            _shellModelList.BorderColor = Color.Transparent
+            _shellModelList.BorderSize = 0
+            _shellModelList.BorderRadius = 0
+            _shellModelList.HeaderVisible = True
+            _shellModelList.HeaderHeight = 34
+            _shellModelList.HeaderBackColor = Color.FromArgb(36, 36, 36)
+            _shellModelList.HeaderForeColor = UiTextSecondary
+            _shellModelList.HeaderBorderColor = Color.FromArgb(52, 52, 52)
+            _shellModelList.HeaderBorderWidth = 1
+            _shellModelList.MultiSelect = False
+            _shellModelList.AllowDragReorder = False
+            _shellModelList.ItemForeColor = UiTextSecondary
+            _shellModelList.ItemHoverBackColor = Color.FromArgb(48, 255, 255, 255)
+            _shellModelList.ItemSelectedBackColor = Color.FromArgb(54, 71, 156, 255)
+            _shellModelList.ItemPadding = New Padding(12, 6, 10, 6)
+            _shellModelList.Columns.AddRange(New UltraDetailListView.ListColumn() {
+                New UltraDetailListView.ListColumn("模型", 560),
+                New UltraDetailListView.ListColumn("后端", 130),
+                New UltraDetailListView.ListColumn("操作", 100)
+            })
+            AddHandler _shellModelList.ItemClick, AddressOf OnShellModelItemClick
+            AddHandler _shellModelList.ClientSizeChanged,
+                Sub(sender, e)
+                    If _shellModelList.Columns.Count = 0 Then Return
+                    Dim modelWidth = Math.Max(260, _shellModelList.ClientSize.Width - 10 - 130 - 100)
+                    If _shellModelList.Columns(0).Width <> modelWidth Then
+                        _shellModelList.Columns(0).Width = modelWidth
+                        _shellModelList.RefreshItems()
+                    End If
+                End Sub
+        End Sub
+
+        Private Sub OnShellModelItemClick(sender As Object, e As UltraDetailListView.ListItemEventArgs)
+            If e Is Nothing OrElse e.ColumnIndex <> 2 OrElse e.Item Is Nothing Then Return
+            Dim target = TryCast(e.Item.Tag, ShellUpscaleModel)
+            If target Is Nothing OrElse _config.ShellModels Is Nothing Then Return
+            _config.ShellModels.Remove(target)
+            _config.Save()
+            RefreshShellSummary()
+            ShowStatus("已从右键超分列表删除模型；点击「应用设置」后更新资源管理器菜单", False)
+        End Sub
+
+        Private Sub OnShellApply(sender As Object, e As EventArgs)
+            Try
+                ShellUpscaleMenu.Apply(_config.ExePath, If(_config.ShellModels, New List(Of ShellUpscaleModel)()))
+                ShowStatus("右键超分菜单已应用；资源管理器刷新后生效", False)
+            Catch ex As Exception
+                ShowStatus("应用右键菜单失败：" & ex.Message, True)
+            End Try
+        End Sub
+
+        Private Sub OnShellRemove(sender As Object, e As EventArgs)
+            Try
+                ShellUpscaleMenu.Remove()
+                ShowStatus("已移除右键超分菜单", False)
+            Catch ex As Exception
+                ShowStatus("移除右键菜单失败：" & ex.Message, True)
+            End Try
+        End Sub
+
+        Private Sub RefreshShellSummary()
+            Dim entries = If(_config.ShellModels, New List(Of ShellUpscaleModel)())
+            _shellModelList.Items.Clear()
+            If entries.Count = 0 Then
+                _shellModelList.Items.Add(New UltraDetailListView.ListItem(New UltraDetailListView.ListSubItem() {
+                    New UltraDetailListView.ListSubItem("尚未添加模型。请从上方添加。", Nothing, UiTextMuted),
+                    New UltraDetailListView.ListSubItem(""),
+                    New UltraDetailListView.ListSubItem("")
+                }))
+                Return
+            End If
+            For Each entry In entries
+                _shellModelList.Items.Add(New UltraDetailListView.ListItem(New UltraDetailListView.ListSubItem() {
+                    New UltraDetailListView.ListSubItem(entry.DisplayName, Nothing, UiText),
+                    New UltraDetailListView.ListSubItem(entry.Backend, Nothing, UiAccent),
+                    New UltraDetailListView.ListSubItem("删除", Nothing, UiDanger)
+                }) With {.Tag = entry})
+            Next
         End Sub
 
         ''' <summary>BooleanSwitch 按宿主窗口的实际 DPI 重新计算尺寸（96 DPI 基准为 38×20）。</summary>
@@ -3076,6 +3357,16 @@ Namespace videoenhancer
             _lblImageInputs.Text = "<font color=#DCDCDC>已选择 " & _imageFiles.Count & " 个文件、" & _imageFolders.Count & " 个递归文件夹</font>"
         End Sub
 
+        Private Sub OnClearImages(sender As Object, e As EventArgs)
+            If _imageRunning Then
+                ShowStatus("图片任务运行中，暂不能清空输入", True)
+                Return
+            End If
+            _imageFiles.Clear()
+            _imageFolders.Clear()
+            _lblImageInputs.Text = "<font color=#888888>尚未选择图片</font>"
+        End Sub
+
         Private Sub OnImageOriginalChanged(sender As Object, e As EventArgs)
             _config.ImageOutputOriginal = _switchImageOriginal.Checked
             _config.Save()
@@ -3107,8 +3398,8 @@ Namespace videoenhancer
 
         Private Sub OnStartImageProcessing(sender As Object, e As EventArgs)
             If _imageRunning Then Return
-            If _config.Backend = "flashvsr" Then
-                ShowStatus("FlashVSR 是连续视频帧模型，图片超分请选择 NCNN、CUDA、TensorRT 或 ONNX。", True)
+            If _config.Backend = "rtxvsr" Then
+                ShowStatus("RTX VSR 只处理视频；图片增强请选择其他超分后端。", True)
                 Return
             End If
             If _imageFiles.Count = 0 AndAlso _imageFolders.Count = 0 Then
@@ -5490,7 +5781,7 @@ Namespace videoenhancer
             If _engine IsNot Nothing Then
                 _engine.PreviewVisible = (_tabs.SelectedIndex = 1)
             End If
-            If _tabs.SelectedIndex = 5 Then
+            If _tabs.SelectedIndex = 7 Then
                 EnsureMarkdownPage(_pageTutorial)
             End If
             ' 切换页面时清除底部状态提示
@@ -5502,6 +5793,8 @@ Namespace videoenhancer
             If _tabs.SelectedIndex = 4 Then
                 LoadUserModels()
             End If
+            If _tabs.SelectedIndex = 5 Then ActivateSegmentedPage()
+            If _tabs.SelectedIndex = 6 Then LoadShellModels()
         End Sub
 
         Private Sub OnStatusClearTick(sender As Object, e As EventArgs)
@@ -5600,6 +5893,9 @@ Namespace videoenhancer
                 "<font color=#888888>关闭</font>")
             _lblSwitchInterp.Text = If(_config.InterpEnabled,
                 "<font color=#3FCD87><b>已开启</b></font>",
+                "<font color=#888888>关闭</font>")
+            _lblSwitchRtxHdr.Text = If(_config.RtxHdrEnabled,
+                "<font color=#D4A9FF><b>RTX Video HDR</b></font>",
                 "<font color=#888888>关闭</font>")
         End Sub
 
@@ -5736,7 +6032,9 @@ Namespace videoenhancer
 
         Private Sub UpdateProcessOrderState()
             Dim combined = _config.UpscaleEnabled AndAlso _config.InterpEnabled
-            _cmbProcessOrder.Enabled = _config.Enabled AndAlso combined
+            Dim forceInterpFirst = combined AndAlso String.Equals(_config.Backend, "rtxvsr", StringComparison.OrdinalIgnoreCase)
+            If forceInterpFirst Then _config.ProcessOrder = "interp-first"
+            _cmbProcessOrder.Enabled = _config.Enabled AndAlso combined AndAlso Not forceInterpFirst
             Dim interpFirst = String.Equals(_config.ProcessOrder, "interp-first", StringComparison.OrdinalIgnoreCase)
             If interpFirst Then
                 _lblProcessOrder.Text = "<font color=#B1BCCA>当前：先补帧，再超分。</font>"
@@ -5773,6 +6071,10 @@ Namespace videoenhancer
             _syncingUpscaleHalfSwitch = True
             _switchUpscaleHalf.Checked = _config.UpscaleHalfPrecision
             _syncingUpscaleHalfSwitch = False
+            _syncingRtxHdrSwitch = True
+            _switchRtxHdr.Checked = _config.RtxHdrEnabled
+            _syncingRtxHdrSwitch = False
+            _switchRtxHdr.Enabled = _config.Enabled
             ' 补帧开关：仅主开关开启时可操作
             If String.Equals(_config.Backend, "basicvsrpp", StringComparison.OrdinalIgnoreCase) Then
                 _config.InterpEnabled = False
@@ -5804,6 +6106,14 @@ Namespace videoenhancer
             _syncingTileSize = True
             SyncTileSizeCombo()
             _syncingTileSize = False
+            If _cmbRtxTarget.Items.Count > 0 Then
+                Dim targetIndex = 2
+                For i = 0 To _cmbRtxTarget.Items.Count - 1
+                    If _cmbRtxTarget.Items(i).ToString().StartsWith(_config.RtxTarget, StringComparison.OrdinalIgnoreCase) Then targetIndex = i : Exit For
+                Next
+                _cmbRtxTarget.SelectedIndex = targetIndex
+            End If
+            _cmbRtxQuality.SelectedIndex = Math.Max(0, Math.Min(3, _config.RtxQuality - 1))
             UpdateAdvancedControlState()
             _syncingProcessOrder = True
             If _cmbProcessOrder.Items.Count > 0 Then
@@ -5819,12 +6129,12 @@ Namespace videoenhancer
             End If
         End Sub
 
-        ''' <summary>把配置的推理后端同步到下拉框（0=NCNN，1=CUDA，2=TensorRT，3=ONNX，4=FlashVSR，5=BasicVSR++）。</summary>
+        ''' <summary>把配置的推理后端同步到下拉框（6=RTX VSR）。</summary>
         Private Sub SyncBackendCombo()
             If _cmbBackend.Items.Count = 0 Then
                 Return
             End If
-            _cmbBackend.SelectedIndex = If(_config.Backend = "basicvsrpp", 5, If(_config.Backend = "flashvsr", 4, If(_config.Backend = "onnx", 3, If(_config.Backend = "tensorrt", 2, If(_config.Backend = "cuda", 1, 0)))))
+            _cmbBackend.SelectedIndex = If(_config.Backend = "rtxvsr", 6, If(_config.Backend = "basicvsrpp", 5, If(_config.Backend = "flashvsr", 4, If(_config.Backend = "onnx", 3, If(_config.Backend = "tensorrt", 2, If(_config.Backend = "cuda", 1, 0))))))
         End Sub
 
         ''' <summary>把配置的补帧倍率同步到下拉框（2/3/4/8）。</summary>
@@ -5880,6 +6190,15 @@ Namespace videoenhancer
         End Sub
 
         Private Sub UpdateAdvancedControlState()
+            Dim rtxVsr = String.Equals(_config.Backend, "rtxvsr", StringComparison.OrdinalIgnoreCase)
+            If _upscaleModelField IsNot Nothing Then _upscaleModelField.Visible = Not rtxVsr
+            If _upscaleTileField IsNot Nothing Then _upscaleTileField.Visible = Not rtxVsr
+            If _upscaleTileHint IsNot Nothing Then _upscaleTileHint.Visible = Not rtxVsr
+            If _rtxTargetField IsNot Nothing Then _rtxTargetField.Visible = rtxVsr
+            If _rtxQualityField IsNot Nothing Then _rtxQualityField.Visible = rtxVsr
+            _cmbRtxTarget.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso rtxVsr
+            _cmbRtxQuality.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso rtxVsr
+            _cmbModel.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso Not rtxVsr
             _cmbDynamicOpticalFlow.Enabled = _config.Enabled AndAlso _config.InterpEnabled AndAlso String.Equals(_config.InterpBackend, "cuda", StringComparison.OrdinalIgnoreCase)
             _cmbSceneThreshold.Enabled = _config.Enabled AndAlso _config.InterpEnabled
             Dim tileBackend = String.Equals(_config.Backend, "ncnn", StringComparison.OrdinalIgnoreCase) OrElse

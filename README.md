@@ -3,15 +3,17 @@
 VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、图片推理和批处理能力。
 原作者：[user-wing](https://github.com/user-Wing/VideoEnhancer)
 
-当前版本：**1.2.1**
+当前版本：**1.3.0（开发中）**
 
 ## 功能概览
 
 - 通过 3FUI 图形界面管理视频增强任务、模型、推理后端和处理顺序。
 - 通过 `videoenhancer.exe` 提供命令行处理入口，适合脚本和批量任务。
-- 支持视频超分辨率、仅补帧、超分与补帧组合处理。
-- 支持图片单张推理和图片文件夹处理。
-- 支持 NCNN/Vulkan、CUDA/PyTorch、TensorRT、ONNX 和 FlashVSR 超分后端。
+- 支持视频超分辨率、仅补帧、超分与补帧组合处理，以及 NVIDIA RTX VSR 和 RTX Video HDR。
+- 支持图片单张推理和图片文件夹处理；FlashVSR 与 BasicVSR++ 通过无损单帧视频桥处理图片。
+- 支持 NCNN/Vulkan、CUDA/PyTorch、TensorRT、ONNX、FlashVSR、BasicVSR++ 和 RTX VSR 超分后端。
+- 支持为 Windows 图片文件注册“超分辨率 → 模型”当前用户级联右键菜单，结果固定输出为 PNG。
+- 支持按视频保存“分段超分”配置；分段必须连续覆盖全部帧，第一段会锁定后端类别和放大倍率，每段可选择不同的同类单帧模型。
 - 支持 NCNN、CUDA/PyTorch 和 TensorRT 补帧后端；RIFE TensorRT Engine 会按当前设备自动构建。
 - 支持 `upscale-first` 与 `interp-first` 两种组合顺序；跨后端阶段使用临时无损中间文件。
 - TensorRT Engine 按 GPU、运行时版本、输入尺寸、倍率、分块、精度和转换配置隔离缓存，并在失效时重建。
@@ -38,6 +40,7 @@ stable.json
 - Windows 10 1809 或更高版本，64 位系统。`videoenhancer.exe` 是自包含单文件，不要求另外安装 .NET。
 - 安装 [Microsoft Visual C++ 2015–2022 x64 运行库](https://aka.ms/vc14/vc_redist.x64.exe)。便携 Python 及部分推理扩展仍依赖该运行库。
 - CUDA/PyTorch、TensorRT、FlashVSR 和 BasicVSR++ 需要 NVIDIA GPU。当前后端包含 CUDA 13.0，建议使用 580 或更高版本的 NVIDIA 驱动。
+- RTX VSR / RTX Video HDR 需要兼容的 NVIDIA RTX GPU、驱动和 RTX Video sidecar 运行组件。RTX 组件来自 `Zennmn/RTXHDR-RTXVSR`；其 NVIDIA SDK 文件受 NVIDIA 许可约束，公开再分发前必须单独核对许可。
 - NCNN 使用显卡驱动提供的 Vulkan 运行时，不要求安装 Vulkan SDK；显卡和驱动至少需要支持 Vulkan 1.0。
 
 插件的环境检查会针对当前选择的后端实际导入关键模块并检查 GPU/执行提供程序，不会加载模型或 TensorRT Engine。若新机器不能运行，请先按检查结果处理 VC++ 运行库或显卡驱动问题。
@@ -90,6 +93,8 @@ Plugin\
 TensorRT 不依赖远端预置 Engine。任务启动时会根据当前视频和设备配置生成或复用本地 Engine。没有 NVIDIA/TensorRT 环境时，应选择 NCNN 或其他可用后端。
 
 BasicVSR++ 与运动补帧不能同时启用；切换到 BasicVSR++ 时，插件会关闭并禁用补帧开关，切回可组合后端后保持关闭但恢复可操作。
+
+“分段超分”只允许 NCNN、CUDA/PyTorch、TensorRT 和 ONNX 单帧模型，不会列出 FlashVSR、BasicVSR++ 或 RTX VSR。由于同一 FFmpeg 原始帧输入流的尺寸必须固定，第一段选定模型后，后续段同时锁定为相同后端和相同倍率。当前分段模式不与运动补帧、RTX HDR 或 PQ/HLG HDR 输入组合。
 
 ## 补帧模型
 

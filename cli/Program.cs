@@ -41,6 +41,8 @@ internal static class Program
     private const string EmbeddedInterpolationInspectorResource = "VideoEnhancer.Embedded.inspect_interpolation_models.py";
     private const string EmbeddedUpscaleInspectorResource = "VideoEnhancer.Embedded.inspect_upscale_models.py";
     private const string EmbeddedRifeTensorRTPrepareResource = "VideoEnhancer.Embedded.prepare_rife_tensorrt.py";
+    private const string EmbeddedImageBackendResource = "VideoEnhancer.Embedded.rve-image-backend.py";
+    private const string EmbeddedSegmentedBackendResource = "VideoEnhancer.Embedded.rve-segmented-backend.py";
     private const int InterpolationCapabilityCacheVersion = 1;
     private const string DefaultModelScopeDataset = "AerithDream/VideoEnhancer-Models";
     private static string? ModelScopeToken =>
@@ -72,6 +74,7 @@ internal static class Program
     private static string PythonExe => Path.Combine(CoreRoot, "python", "python", "python.exe");
     private static string BackendScript => Path.Combine(CoreRoot, "python", "backend", "rve-backend.py");
     private static string ImageBackendScript => Path.Combine(CoreRoot, "python", "backend", "rve-image-backend.py");
+    private static string SegmentedBackendScript => Path.Combine(CoreRoot, "python", "backend", "rve-segmented-backend.py");
     private static string TensorRTValidatorScript => Path.Combine(CoreRoot, "python", "backend", "validate_tensorrt_engines.py");
     private static string TensorRTConverterScript => Path.Combine(CoreRoot, "python", "backend", "convert_tensorrt.py");
     private static string InterpolationInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_interpolation_models.py");
@@ -79,6 +82,7 @@ internal static class Program
     private static string RifeTensorRTPrepareScript => Path.Combine(CoreRoot, "python", "backend", "prepare_rife_tensorrt.py");
     private static string FfmpegExe => Path.Combine(CoreRoot, "bin", "ffmpeg", "ffmpeg.exe");
     private static string FfprobeExe => Path.Combine(CoreRoot, "bin", "ffmpeg", "ffprobe.exe");
+    private static string RtxVideoBackendExe => RtxVideoBackendClient.FindBackend(CoreRoot);
     private static string ModelsDir => Path.Combine(CoreRoot, "models");
     private static string FrameInterpolationDir => Path.Combine(ModelsDir, "Frame-Interpolation");
     private static string UserInterpolationDir => Path.Combine(ModelsDir, "User", "Interpolation");
@@ -261,6 +265,160 @@ internal static class Program
         }
     }
 
+    private static string NormaliseRtxTarget(string value)
+    {
+        var target = value.Trim().ToLowerInvariant();
+        if (Regex.IsMatch(target, @"^(1(?:\.5)?|2|3|4)x$", RegexOptions.CultureInvariant)
+            || target is "1080p" or "1440p" or "2160p" or "4320p")
+            return target;
+        Fail("-rtx-target 仅支持 1x、1.5x、2x、3x、4x、1080p、1440p、2160p 或 4320p，当前值：" + value);
+        return "";
+    }
+
+    private static double ResolveRtxScale(string input, string target)
+    {
+        if (target.EndsWith('x')
+            && double.TryParse(target[..^1], NumberStyles.Float, CultureInfo.InvariantCulture, out var direct))
+            return Math.Clamp(direct, 1.0, 4.0);
+
+        var (width, height) = GetInputResolution(input);
+        if (width <= 0 || height <= 0) throw new InvalidOperationException("RTX VSR 无法探测输入分辨率：" + input);
+        var reference = width >= height ? height : width;
+        var requested = target switch
+        {
+            "1080p" => 1080,
+            "1440p" => 1440,
+            "2160p" => 2160,
+            "4320p" => 4320,
+            _ => throw new InvalidOperationException("未知 RTX VSR 输出规格：" + target),
+        };
+        return Math.Clamp((double)requested / reference, 1.0, 4.0);
+    }
+
+    private static string SelectRtxCodec(string customEncoder, bool hdr, RtxVideoBackendClient.Capabilities capabilities)
+    {
+        var lower = customEncoder.ToLowerInvariant();
+        if (!hdr && lower.Contains("av1", StringComparison.Ordinal) && capabilities.NvencAv1Available) return "av1";
+        if ((lower.Contains("hevc", StringComparison.Ordinal) || lower.Contains("h265", StringComparison.Ordinal))
+            && capabilities.NvencHevcMain10Available) return "hevc";
+        if (hdr)
+        {
+            if (capabilities.NvencHevcMain10Available) return "hevc";
+            if (capabilities.NvencAv1Available) return "av1";
+            throw new InvalidOperationException("RTX HDR 需要 NVENC HEVC Main10 或 AV1 编码器");
+        }
+        if (capabilities.NvencH264Available) return "h264";
+        if (capabilities.NvencHevcMain10Available) return "hevc";
+        if (capabilities.NvencAv1Available) return "av1";
+        throw new InvalidOperationException("RTX Video sidecar 未检测到可用的 NVENC 编码器");
+    }
+
+    private static int RunVideoWithRtx(
+        string input, string outputFile, string model, string customEncoder, bool overwrite, string? scale,
+        string pauseShm, StopWatcher? stopWatcher, string? interpModel, string? interpFactor,
+        string upscaleBackend, string interpBackend, string processOrder, bool hdrMode, bool dynamicOpticalFlow,
+        double sceneThreshold, int tileSize, string requestedUpscalePrecision, string requestedInterpPrecision,
+        bool rtxVsr, bool rtxHdr, string rtxTarget, int rtxQuality)
+    {
+        var outputDir = Path.GetDirectoryName(outputFile);
+        if (string.IsNullOrWhiteSpace(outputDir)) outputDir = Environment.CurrentDirectory;
+        Directory.CreateDirectory(outputDir);
+        if (File.Exists(outputFile) && !overwrite) return Fail("输出文件已存在；请在 FFmpeg 参数中加入 -y 允许覆盖：" + outputFile, 1);
+
+        var rveInput = input;
+        string? intermediate = null;
+        var useRegularUpscale = !rtxVsr && !string.IsNullOrEmpty(model);
+        var useRve = useRegularUpscale || interpModel is not null;
+        if (useRve)
+        {
+            intermediate = Path.Combine(outputDir,
+                "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-rtx-input-" + Guid.NewGuid().ToString("N") + ".mkv");
+            var pixelFormat = hdrMode ? "gbrp16le" : "gbrp10le";
+            var losslessEncoder = "-c:v ffv1 -level 3 -coder 1 -context 1 -g 1 -pix_fmt " + pixelFormat + " -c:a copy -c:s copy";
+            var rveModel = useRegularUpscale ? model : "";
+            var forcedOrder = rtxVsr ? "interp-first" : processOrder;
+            if (rtxVsr && interpModel is not null)
+                Console.WriteLine("[处理顺序] RTX VSR 与补帧组合固定为：先补帧，再 RTX 超分。");
+            var exit = RunVideoPipeline(input, intermediate, rveModel, losslessEncoder, true,
+                useRegularUpscale ? scale : null, pauseShm, stopWatcher, interpModel, interpFactor,
+                useRegularUpscale ? upscaleBackend : interpBackend, interpBackend, forcedOrder, hdrMode,
+                dynamicOpticalFlow, sceneThreshold, tileSize, requestedUpscalePrecision, requestedInterpPrecision);
+            if (exit != 0) return exit;
+            if (!File.Exists(intermediate) || new FileInfo(intermediate).Length == 0)
+                return Fail("RTX 前置阶段未生成有效的无损中间视频：" + intermediate, 1);
+            rveInput = intermediate;
+        }
+
+        var sidecarOutput = Path.Combine(outputDir,
+            "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-rtx-output-" + Guid.NewGuid().ToString("N") + ".mp4");
+        try
+        {
+            using var cancellation = new CancellationTokenSource();
+            using var client = RtxVideoBackendClient.StartAsync(RtxVideoBackendExe, cancellation.Token).GetAwaiter().GetResult();
+            var capabilities = client.GetCapabilitiesAsync(cancellation.Token).GetAwaiter().GetResult();
+            if (!capabilities.D3d11Available || !capabilities.RtxSdkFound)
+                return Fail("RTX Video 运行环境不可用：" + string.Join("；", capabilities.Messages), 1);
+            if (rtxVsr && !capabilities.VsrAvailable) return Fail("当前 GPU/驱动不支持 RTX VSR", 1);
+            if (rtxHdr && !capabilities.TruehdrAvailable) return Fail("当前 GPU/驱动不支持 RTX Video HDR", 1);
+
+            var resolvedScale = rtxVsr ? ResolveRtxScale(rveInput, rtxTarget) : 1.0;
+            if (rtxVsr)
+            {
+                var (sourceWidth, sourceHeight) = GetInputResolution(rveInput);
+                var outputWidth = Math.Max(2, (int)Math.Round(sourceWidth * resolvedScale));
+                var outputHeight = Math.Max(2, (int)Math.Round(sourceHeight * resolvedScale));
+                if ((outputWidth & 1) != 0) outputWidth++;
+                if ((outputHeight & 1) != 0) outputHeight++;
+                Console.WriteLine($"[RTX VSR] 输出映射：{sourceWidth}x{sourceHeight} × {resolvedScale.ToString("0.###", CultureInfo.InvariantCulture)} → {outputWidth}x{outputHeight}；质量 {rtxQuality}");
+            }
+            var codec = SelectRtxCodec(customEncoder, rtxHdr, capabilities);
+            var result = client.RunAsync(rveInput, sidecarOutput, rtxVsr, rtxQuality, resolvedScale,
+                rtxHdr, codec, () => stopWatcher?.IsStopRequested() == true, cancellation.Token).GetAwaiter().GetResult();
+            if (!result.Succeeded)
+                return result.Canceled ? 130 : Fail("RTX Video 处理失败：" + result.Error, 1);
+            return CommitRtxOutput(sidecarOutput, outputFile, overwrite);
+        }
+        finally
+        {
+            foreach (var temporary in new[] { intermediate, sidecarOutput })
+            {
+                if (string.IsNullOrWhiteSpace(temporary)) continue;
+                try { if (File.Exists(temporary)) File.Delete(temporary); }
+                catch (Exception ex) { Console.Error.WriteLine("[警告] 无法清理 RTX 临时文件：" + ex.Message); }
+            }
+        }
+    }
+
+    private static int CommitRtxOutput(string source, string outputFile, bool overwrite)
+    {
+        if (string.Equals(Path.GetExtension(outputFile), ".mp4", StringComparison.OrdinalIgnoreCase))
+        {
+            File.Move(source, outputFile, overwrite);
+            Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
+            return 0;
+        }
+        var start = new ProcessStartInfo
+        {
+            FileName = FfmpegExe,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+        start.ArgumentList.Add(overwrite ? "-y" : "-n");
+        start.ArgumentList.Add("-hide_banner");
+        start.ArgumentList.Add("-i");
+        start.ArgumentList.Add(source);
+        start.ArgumentList.Add("-map");
+        start.ArgumentList.Add("0");
+        start.ArgumentList.Add("-c");
+        start.ArgumentList.Add("copy");
+        start.ArgumentList.Add(outputFile);
+        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 FFmpeg 封装 RTX 输出");
+        process.WaitForExit();
+        if (process.ExitCode != 0) return Fail("RTX 输出重新封装失败，FFmpeg 退出码：" + process.ExitCode, 1);
+        Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
+        return 0;
+    }
+
     /// <summary>
     /// FPS 精确重算：rve-backend 自报的 FPS 是整数值且把暂停时间计入（暂停后恢复平均值偏低）。
     /// 这里用"已渲染帧数 / 有效耗时（总耗时 − 暂停耗时）"重算，输出保留两位小数；
@@ -408,6 +566,10 @@ internal static class Program
         public string InterpFactor = "";
         public bool HasInterpFactor;
         public bool NoUpscale;
+        public bool RtxHdr;
+        public string RtxTarget = "2x";
+        public string RtxQuality = "3";
+        public string SegmentsBase64 = "";
         public bool ListInterpModels;
         public string Backend = "ncnn";
         public bool HasBackend;
@@ -578,9 +740,9 @@ internal static class Program
         if (o.HasBackend)
         {
             var b = o.Backend.Trim().ToLowerInvariant();
-            if (b is not ("ncnn" or "cuda" or "tensorrt" or "onnx" or "flashvsr" or "basicvsrpp"))
+            if (b is not ("ncnn" or "cuda" or "tensorrt" or "onnx" or "flashvsr" or "basicvsrpp" or "rtxvsr"))
             {
-                return Fail("-backend 仅支持 ncnn、cuda、tensorrt、onnx、flashvsr 或 basicvsrpp，当前值：" + o.Backend);
+                return Fail("-backend 仅支持 ncnn、cuda、tensorrt、onnx、flashvsr、basicvsrpp 或 rtxvsr，当前值：" + o.Backend);
             }
             o.Backend = b;
         }
@@ -602,6 +764,11 @@ internal static class Program
         if (o.UpscalePrecision.Length == 0) return 2;
         o.InterpPrecision = NormalisePrecisionOption(o.InterpPrecision, "-interp-precision");
         if (o.InterpPrecision.Length == 0) return 2;
+        o.RtxTarget = NormaliseRtxTarget(o.RtxTarget);
+        if (o.RtxTarget.Length == 0) return 2;
+        if (!int.TryParse(o.RtxQuality, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxQuality)
+            || rtxQuality is < 1 or > 4)
+            return Fail("-rtx-quality 必须是 1-4 的整数，当前值：" + o.RtxQuality);
         if (!double.TryParse(o.SceneThreshold, NumberStyles.Float, CultureInfo.InvariantCulture, out var sceneThreshold) || sceneThreshold <= 0 || sceneThreshold > 10.0)
             return Fail("-scene-threshold 必须是官方 0-10 标尺中的大于 0 数字，当前值：" + o.SceneThreshold);
         if (!int.TryParse(o.TileSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out var tileSize) || tileSize < 0 || (tileSize > 0 && tileSize < 32))
@@ -748,7 +915,7 @@ internal static class Program
         // 图片超分是独立路径：不依赖 FFmpegFreeUI/FFmpeg 编码参数。
         if (o.ImageInputs.Count > 0 || o.ImageFolders.Count > 0)
         {
-            if (o.Backend == "basicvsrpp") return Fail("BasicVSR++ 是连续视频帧模型，不能用于图片超分");
+            if (o.Backend == "rtxvsr") return Fail("RTX VSR 仅支持视频；图片请改用 NCNN、CUDA、TensorRT、ONNX、FlashVSR 或 BasicVSR++");
             return RunImageJob(o);
         }
 
@@ -782,6 +949,14 @@ internal static class Program
         {
             return 1;
         }
+        if (o.Backend == "rtxvsr" && o.HasInterpModel && !RunCheck(verbose: false, backend: o.InterpBackend))
+        {
+            return 1;
+        }
+        if (o.RtxHdr && o.Backend != "rtxvsr" && !RunRtxCheck(verbose: false, requireVsr: false, requireHdr: true))
+        {
+            return 1;
+        }
 
         // 2. 输入视频
         var input = Path.GetFullPath(o.Input);
@@ -790,6 +965,15 @@ internal static class Program
             return Fail("输入视频不存在：" + input);
         }
 
+        var segmentedUpscale = !string.IsNullOrWhiteSpace(o.SegmentsBase64);
+        if (segmentedUpscale && o.NoUpscale)
+        {
+            return Fail("分段超分不能与 -no-upscale 同时使用");
+        }
+        if (segmentedUpscale && (o.HasInterpModel || o.RtxHdr))
+        {
+            return Fail("分段超分当前只执行逐帧超分，不能同时启用运动补帧或 RTX HDR");
+        }
         var useUpscale = !o.NoUpscale;
         // TensorRT Engine 与输入 profile 绑定，先探测尺寸再解析/构建模型。
         var inputResolution = useUpscale && o.Backend == "tensorrt" ? GetInputResolution(input) : (0, 0);
@@ -801,43 +985,50 @@ internal static class Program
         // 3. 放大模型（-no-upscale 时跳过，用于"仅补帧"模式）
         var model = "";
         string? requestedScale = null;
-        if (useUpscale)
+        if (useUpscale && !segmentedUpscale)
         {
-            model = ResolveModel(o.Model, o.Backend);
-            if (model.Length == 0)
+            if (o.Backend == "rtxvsr")
             {
-                return 1;
-            }
-            if (o.HasScaleOverride)
-            {
-                if (!int.TryParse(o.ScaleOverride, out var requestedScaleValue) || requestedScaleValue < 1)
-                {
-                    return Fail("-scale 必须是大于 0 的整数，当前值：" + o.ScaleOverride);
-                }
-                requestedScale = requestedScaleValue.ToString(CultureInfo.InvariantCulture);
+                model = "__rtx_vsr__";
             }
             else
             {
-                requestedScale = o.Backend == "basicvsrpp" ? BasicVsrPlusPlusScale(model) : DetectScale(model);
-            }
-            if (o.Backend == "tensorrt")
-            {
-                var engineScale = int.TryParse(requestedScale, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedScale)
-                    ? parsedScale
-                    : 0;
-                var engineWidth = inputResolution.Item1;
-                var engineHeight = inputResolution.Item2;
-                if (ModelCapabilityCatalog.TryGet(model, ModelsDir, out var engineCapability)
-                    && engineCapability.InputMultiple > 1)
+                model = ResolveModel(o.Model, o.Backend);
+                if (model.Length == 0)
                 {
-                    engineWidth = (engineWidth + engineCapability.InputMultiple - 1)
-                        / engineCapability.InputMultiple * engineCapability.InputMultiple;
-                    engineHeight = (engineHeight + engineCapability.InputMultiple - 1)
-                        / engineCapability.InputMultiple * engineCapability.InputMultiple;
+                    return 1;
                 }
-                model = EnsureTensorRtEngine(model, engineWidth, engineHeight, stopWatcher, tileSize, engineScale,
-                    o.UpscalePrecision);
-                if (model.Length == 0) return stopWatcher?.IsStopRequested() == true ? 130 : 1;
+                if (o.HasScaleOverride)
+                {
+                    if (!int.TryParse(o.ScaleOverride, out var requestedScaleValue) || requestedScaleValue < 1)
+                    {
+                        return Fail("-scale 必须是大于 0 的整数，当前值：" + o.ScaleOverride);
+                    }
+                    requestedScale = requestedScaleValue.ToString(CultureInfo.InvariantCulture);
+                }
+                else
+                {
+                    requestedScale = o.Backend == "basicvsrpp" ? BasicVsrPlusPlusScale(model) : DetectScale(model);
+                }
+                if (o.Backend == "tensorrt")
+                {
+                    var engineScale = int.TryParse(requestedScale, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedScale)
+                        ? parsedScale
+                        : 0;
+                    var engineWidth = inputResolution.Item1;
+                    var engineHeight = inputResolution.Item2;
+                    if (ModelCapabilityCatalog.TryGet(model, ModelsDir, out var engineCapability)
+                        && engineCapability.InputMultiple > 1)
+                    {
+                        engineWidth = (engineWidth + engineCapability.InputMultiple - 1)
+                            / engineCapability.InputMultiple * engineCapability.InputMultiple;
+                        engineHeight = (engineHeight + engineCapability.InputMultiple - 1)
+                            / engineCapability.InputMultiple * engineCapability.InputMultiple;
+                    }
+                    model = EnsureTensorRtEngine(model, engineWidth, engineHeight, stopWatcher, tileSize, engineScale,
+                        o.UpscalePrecision);
+                    if (model.Length == 0) return stopWatcher?.IsStopRequested() == true ? 130 : 1;
+                }
             }
         }
 
@@ -851,18 +1042,14 @@ internal static class Program
                 return 1;
             }
         }
-        if (!useUpscale && interpModel is null)
+        if (!useUpscale && interpModel is null && !o.RtxHdr)
         {
-            return Fail("-no-upscale 已指定但未提供 -interp-model（仅补帧模式需要补帧模型）");
-        }
-        if (interpModel is null && o.NoUpscale)
-        {
-            return Fail("需要至少一个模型：-no-upscale 时请提供 -interp-model");
+            return Fail("-no-upscale 已指定，但未启用补帧或 RTX HDR");
         }
 
         // 4. 倍率：优先用户指定，其次从模型名自动识别（与 GUI 一致）
         string? scale = null;
-        if (useUpscale)
+        if (useUpscale && o.Backend != "rtxvsr")
         {
             if (o.HasScaleOverride)
             {
@@ -926,6 +1113,10 @@ internal static class Program
 
         // 6. 自动识别 PQ/HLG；HDR 组合阶段必须保留 16-bit RGB 数据。
         var hdrMode = DetectHdrMode(input);
+        if (o.RtxHdr && hdrMode)
+        {
+            return Fail("输入已经是 PQ/HLG HDR，不能再次应用 RTX HDR 映射；请关闭 RTX HDR");
+        }
         if (hdrMode)
         {
             var unsupportedHdrBackends = new[] { "ncnn", "onnx", "flashvsr" };
@@ -940,6 +1131,22 @@ internal static class Program
                     " 不支持 RVE 的 16-bit RGB 帧管线；请改用 CUDA/PyTorch 或 TensorRT，不能静默降为 SDR。");
             }
             Console.WriteLine("[HDR] 检测到 PQ/HLG 视频；组合中间帧将使用 16-bit RGB FFV1，并向 RVE 后端启用 HDR 模式。");
+        }
+        if (segmentedUpscale)
+        {
+            if (hdrMode)
+            {
+                return Fail("分段超分使用 RGB24 逐帧管线，当前不支持 PQ/HLG HDR 输入");
+            }
+            return RunSegmentedVideo(o, input, outputFile, customEncoder, overwrite, o.PauseShm,
+                stopWatcher, tileSize);
+        }
+        if (o.Backend == "rtxvsr" || o.RtxHdr)
+        {
+            return RunVideoWithRtx(input, outputFile, model, customEncoder, overwrite, scale,
+                o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend,
+                o.ProcessOrder, hdrMode, o.DynamicOpticalFlow, sceneThreshold, tileSize, o.UpscalePrecision,
+                o.InterpPrecision, o.Backend == "rtxvsr" && useUpscale, o.RtxHdr, o.RtxTarget, rtxQuality);
         }
         return RunVideoPipeline(input, outputFile, model, customEncoder, overwrite, scale,
             o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend, o.ProcessOrder, hdrMode,
@@ -1132,6 +1339,21 @@ internal static class Program
                 case "-no-upscale":
                 case "--no-upscale":
                     o.NoUpscale = true;
+                    break;
+                case "-rtx-hdr":
+                case "--rtx-hdr":
+                    o.RtxHdr = true;
+                    break;
+                case "-rtx-target":
+                case "--rtx-target":
+                    o.RtxTarget = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "-rtx-quality":
+                case "--rtx-quality":
+                    o.RtxQuality = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "--segments-base64":
+                    o.SegmentsBase64 = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--list-interp-models":
                 case "--search-interp-models":
@@ -2170,6 +2392,8 @@ internal static class Program
             InstallEmbeddedBackendScript(EmbeddedInterpolationInspectorResource, InterpolationInspectorScript);
             InstallEmbeddedBackendScript(EmbeddedUpscaleInspectorResource, UpscaleInspectorScript);
             InstallEmbeddedBackendScript(EmbeddedRifeTensorRTPrepareResource, RifeTensorRTPrepareScript);
+            InstallEmbeddedBackendScript(EmbeddedImageBackendResource, ImageBackendScript);
+            InstallEmbeddedBackendScript(EmbeddedSegmentedBackendResource, SegmentedBackendScript);
             EnsureGmfssModelTypeCompatibility();
             EnsureGimmModelCompatibility();
             EnsurePytorchUpscaleCompatibility();
@@ -2648,7 +2872,7 @@ internal static class Program
     /// <summary>启动完全独立于 FFmpeg 的静态图片超分后端。</summary>
     private static readonly HashSet<string> SupportedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff"
+        ".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff", ".avif"
     };
 
     /// <summary>找到图片任务中的第一张有效图片，用于 TensorRT 输入尺寸探测。</summary>
@@ -2747,6 +2971,8 @@ internal static class Program
         start.ArgumentList.Add(o.Backend);
         start.ArgumentList.Add("--model");
         start.ArgumentList.Add(model);
+        start.ArgumentList.Add("--ffmpeg-path");
+        start.ArgumentList.Add(FfmpegExe);
 
         using var process = new Process { StartInfo = start };
         var job = CreateKillOnCloseJob();
@@ -3987,6 +4213,211 @@ internal static class Program
         return 130;
     }
 
+    private sealed class SegmentRequest
+    {
+        public long Start { get; set; }
+        public long End { get; set; }
+        public string Backend { get; set; } = "";
+        public string Model { get; set; } = "";
+    }
+
+    private sealed class PreparedSegment
+    {
+        public long Start { get; set; }
+        public long End { get; set; }
+        public string Backend { get; set; } = "";
+        public string Model { get; set; } = "";
+        public int Scale { get; set; }
+        public int InputMultiple { get; set; } = 1;
+    }
+
+    private static string EncodePreparedSegments(IEnumerable<PreparedSegment> segments)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartArray();
+            foreach (var segment in segments)
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("start", segment.Start);
+                writer.WriteNumber("end", segment.End);
+                writer.WriteString("backend", segment.Backend);
+                writer.WriteString("model", segment.Model);
+                writer.WriteNumber("scale", segment.Scale);
+                writer.WriteNumber("inputMultiple", segment.InputMultiple);
+                writer.WriteEndObject();
+            }
+            writer.WriteEndArray();
+        }
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private static string EncodeStringList(IEnumerable<string> values)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            writer.WriteStartArray();
+            foreach (var value in values) writer.WriteStringValue(value);
+            writer.WriteEndArray();
+        }
+        return Convert.ToBase64String(stream.ToArray());
+    }
+
+    private static List<string> GetFfmpegEncoderArguments(string settings)
+    {
+        var tokens = Tokenize(settings);
+        while (tokens.Count > 0 && tokens[^1].Equals("-y", StringComparison.OrdinalIgnoreCase))
+            tokens.RemoveAt(tokens.Count - 1);
+        if (tokens.Count == 0) throw new ArgumentException("FFmpeg 参数中缺少输出文件");
+        tokens.RemoveAt(tokens.Count - 1);
+        var cleaned = new List<string>();
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+            if (token.Equals("-map", StringComparison.OrdinalIgnoreCase))
+            {
+                index++;
+                continue;
+            }
+            if (index + 1 < tokens.Count &&
+                (token.Equals("-map_metadata", StringComparison.OrdinalIgnoreCase) ||
+                 token.Equals("-map_chapters", StringComparison.OrdinalIgnoreCase)) &&
+                tokens[index + 1].StartsWith('0'))
+            {
+                cleaned.Add(token);
+                var target = tokens[index + 1];
+                cleaned.Add(target.Length > 1 ? "1" + target[1..] : "1");
+                index++;
+                continue;
+            }
+            cleaned.Add(token);
+        }
+        return cleaned;
+    }
+
+    private static int RunSegmentedVideo(
+        Options options, string input, string outputFile, string customEncoder, bool overwrite,
+        string pauseShm, StopWatcher? stopWatcher, int tileSize)
+    {
+        var requested = new List<SegmentRequest>();
+        try
+        {
+            var bytes = Convert.FromBase64String(options.SegmentsBase64);
+            using var document = JsonDocument.Parse(bytes);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return Fail("分段配置根节点必须是数组");
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                requested.Add(new SegmentRequest
+                {
+                    Start = item.GetProperty("Start").GetInt64(),
+                    End = item.GetProperty("End").GetInt64(),
+                    Backend = item.GetProperty("Backend").GetString() ?? "",
+                    Model = item.GetProperty("Model").GetString() ?? "",
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            return Fail("分段配置无法解析：" + ex.Message);
+        }
+        if (requested.Count == 0)
+            return Fail("分段配置为空");
+
+        var video = ProbeVideoOutput(input);
+        if (video is null)
+            return Fail("无法准确检测视频帧数，不能执行分段超分");
+        var expectedStart = 1L;
+        var prepared = new List<PreparedSegment>();
+        string? lockedBackend = null;
+        var lockedScale = 0;
+        var segmentedPrecision = options.UpscalePrecision;
+        for (var index = 0; index < requested.Count; index++)
+        {
+            var segment = requested[index];
+            var backend = segment.Backend.Trim().ToLowerInvariant();
+            if (backend is not ("ncnn" or "cuda" or "tensorrt" or "onnx"))
+                return Fail($"第 {index + 1} 段使用了流式或不支持的后端：{segment.Backend}");
+            if (segment.Start != expectedStart || segment.End < segment.Start)
+                return Fail($"第 {index + 1} 段必须从第 {expectedStart} 帧开始，当前为 {segment.Start}-{segment.End}");
+            var model = ResolveModel(segment.Model, backend);
+            if (model.Length == 0) return 1;
+            var scaleText = DetectScale(model);
+            if (!int.TryParse(scaleText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var modelScale) || modelScale < 1)
+                return Fail($"第 {index + 1} 段无法识别模型倍率：{segment.Model}");
+            if (lockedBackend is null)
+            {
+                lockedBackend = backend;
+                lockedScale = modelScale;
+            }
+            else if (!backend.Equals(lockedBackend, StringComparison.OrdinalIgnoreCase))
+                return Fail($"第 {index + 1} 段后端为 {backend}；第一段已锁定为 {lockedBackend}");
+            else if (modelScale != lockedScale)
+                return Fail($"第 {index + 1} 段倍率为 {modelScale}x；第一段已锁定为 {lockedScale}x");
+
+            var inputMultiple = 1;
+            if (ModelCapabilityCatalog.TryGet(model, ModelsDir, out var capability))
+                inputMultiple = Math.Max(1, capability.InputMultiple);
+            if (backend == "tensorrt")
+            {
+                var engineWidth = (video.Width + inputMultiple - 1) / inputMultiple * inputMultiple;
+                var engineHeight = (video.Height + inputMultiple - 1) / inputMultiple * inputMultiple;
+                model = EnsureTensorRtEngine(model, engineWidth, engineHeight, stopWatcher, tileSize, modelScale,
+                    options.UpscalePrecision);
+                if (model.Length == 0) return stopWatcher?.IsStopRequested() == true ? 130 : 1;
+            }
+            if (ResolveUpscalePrecision(model, backend, options.UpscalePrecision) == "float32")
+                segmentedPrecision = "float32";
+            prepared.Add(new PreparedSegment
+            {
+                Start = segment.Start,
+                End = segment.End,
+                Backend = backend,
+                Model = model,
+                Scale = modelScale,
+                InputMultiple = inputMultiple,
+            });
+            expectedStart = segment.End + 1;
+        }
+        if (prepared[0].Start != 1 || prepared[^1].End != video.Frames)
+            return Fail($"分段必须从第 1 帧连续覆盖到第 {video.Frames} 帧；当前最后一帧为 {prepared[^1].End}");
+
+        List<string> encoderArguments;
+        try
+        {
+            encoderArguments = GetFfmpegEncoderArguments(options.FfmpegSettings);
+        }
+        catch (ArgumentException ex)
+        {
+            return Fail(ex.Message);
+        }
+        var segmentPayload = EncodePreparedSegments(prepared);
+        var encoderPayload = EncodeStringList(encoderArguments);
+        var script = EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
+        var arguments = new List<string>
+        {
+            script,
+            "--input", input,
+            "--output", outputFile,
+            "--segments-base64", segmentPayload,
+            "--encoder-args-base64", encoderPayload,
+            "--ffmpeg-path", FfmpegExe,
+        };
+        if (!string.IsNullOrWhiteSpace(pauseShm))
+        {
+            arguments.Add("--pause-shm");
+            arguments.Add(pauseShm);
+        }
+        if (overwrite) arguments.Add("--overwrite");
+
+        Console.WriteLine($"[分段超分] 已验证 {prepared.Count} 段连续覆盖 1-{video.Frames} 帧；后端 {lockedBackend}，倍率 {lockedScale}x。");
+        return LaunchBackend(arguments, input, prepared[0].Model, outputFile, customEncoder, stopWatcher,
+            null, null, lockedBackend!, pauseShm, "分段逐帧超分", isFinalStage: true,
+            upscalePrecision: segmentedPrecision);
+    }
+
     /// <summary>
     /// 运行视频增强管线。同后端组合在单进程内按帧处理；后端格式不兼容时才使用 FFV1 无损中间视频。
     /// 这样既不把 NCNN RIFE 模型错误地交给 TensorRT/ONNX，也不让同后端任务产生整段临时视频。
@@ -4956,6 +5387,9 @@ internal static class Program
 
     private static bool RunCheck(bool verbose, string? backend = null)
     {
+        if (string.Equals(backend, "rtxvsr", StringComparison.OrdinalIgnoreCase))
+            return RunRtxCheck(verbose, requireVsr: true, requireHdr: false);
+
         var ok = true;
 
         Console.WriteLine("[环境检查] videoenhancer v" + ToolVersion);
@@ -5036,6 +5470,37 @@ internal static class Program
 
         Console.WriteLine("[环境检查] " + (ok ? "全部通过。" : "存在缺失项，请检查上方 [缺失] 标记。"));
         return ok;
+    }
+
+    private static bool RunRtxCheck(bool verbose, bool requireVsr, bool requireHdr)
+    {
+        Console.WriteLine("[环境检查] videoenhancer v" + ToolVersion + " / RTX Video");
+        var exists = File.Exists(RtxVideoBackendExe);
+        Report(exists, "RTX Video sidecar", RtxVideoBackendExe,
+            exists ? "已安装" : "缺少 vsr_backend.exe 及其运行库");
+        if (!exists) return false;
+        try
+        {
+            using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            using var client = RtxVideoBackendClient.StartAsync(RtxVideoBackendExe, cancellation.Token).GetAwaiter().GetResult();
+            var capabilities = client.GetCapabilitiesAsync(cancellation.Token).GetAwaiter().GetResult();
+            var ok = capabilities.D3d11Available && capabilities.RtxSdkFound
+                && (!requireVsr || capabilities.VsrAvailable)
+                && (!requireHdr || capabilities.TruehdrAvailable);
+            Report(capabilities.D3d11Available, "Direct3D 11", "Windows D3D11");
+            Report(capabilities.RtxSdkFound, "NVIDIA RTX Video SDK", Path.GetDirectoryName(RtxVideoBackendExe)!);
+            if (requireVsr || verbose) Report(capabilities.VsrAvailable, "RTX VSR", "NVIDIA RTX Video Super Resolution");
+            if (requireHdr || verbose) Report(capabilities.TruehdrAvailable, "RTX Video HDR", "NVIDIA TrueHDR");
+            if (verbose && capabilities.Messages.Length > 0)
+                Console.WriteLine("[RTX Video] " + string.Join("；", capabilities.Messages));
+            Console.WriteLine("[环境检查] " + (ok ? "全部通过。" : "RTX Video 能力不满足当前任务。"));
+            return ok;
+        }
+        catch (Exception ex)
+        {
+            Report(false, "RTX Video sidecar 启动", RtxVideoBackendExe, ex.Message);
+            return false;
+        }
     }
 
     /// <summary>只导入所选后端的关键模块并检查设备，不加载模型或 TensorRT Engine。</summary>
@@ -5606,6 +6071,7 @@ internal static class Program
         writer.WriteLine("  videoenhancer.exe -i <输入视频> -no-upscale -backend cuda -interp-model <CUDA 补帧模型> -ffmpeg-settings \"<FFmpeg 参数 + 输出路径>\"");
         writer.WriteLine("  videoenhancer.exe --image-input <图片> --image-output <文件夹> -backend onnx -modelpath <模型>");
         writer.WriteLine("  videoenhancer.exe --image-folder <文件夹> --image-output-original -modelpath <模型>");
+        writer.WriteLine("  videoenhancer.exe -i <输入视频> -backend rtxvsr -rtx-target 2160p -rtx-quality 3 -rtx-hdr -ffmpeg-settings \"...\"");
         writer.WriteLine("  videoenhancer.exe --list-download-models --json");
         writer.WriteLine("  videoenhancer.exe --import-model <模型文件、目录或压缩包> --json");
         writer.WriteLine("  videoenhancer.exe --clean-download-archives");
@@ -5644,14 +6110,19 @@ internal static class Program
         writer.WriteLine("  -scene-threshold <N>  转场检测阈值（RVE 官方外部 0-10 标尺；数值越低越敏感，默认 4）");
         writer.WriteLine("  -dynamic-optical-flow  开启 RIFE 动态光流尺度（仅 CUDA/PyTorch 补帧有效）");
         writer.WriteLine("  -tile-size <N>  超分分块边长（0 为 RVE 默认；至少 32；支持 NCNN/CUDA/TensorRT/ONNX）");
-        writer.WriteLine("  -backend <ncnn|cuda|tensorrt|onnx|flashvsr|basicvsrpp>  超分推理后端；");
+        writer.WriteLine("  -backend <ncnn|cuda|tensorrt|onnx|flashvsr|basicvsrpp|rtxvsr>  超分推理后端；");
         writer.WriteLine("        basicvsrpp 支持官方 x4 PTH，及 config.py/chkpts.pth 的 1x 优化目录；");
         writer.WriteLine("        所有后端均递归扫描 models 子目录；Frame-Interpolation 仅用于补帧；");
         writer.WriteLine("        cuda 使用 .pth/.pt/.pkl/.ckpt/.safetensors；tensorrt 接受可转换权重，缺少缓存时会自动构建；");
         writer.WriteLine("        TensorRT 缓存名包含 GPU、TensorRT 版本、输入尺寸和源模型摘要；onnx 使用 .onnx；");
         writer.WriteLine("        超分与补帧可同时指定；同一后端逐帧执行，跨后端才使用 FFV1 无损中间视频；");
         writer.WriteLine("        SDR 内部为 8-bit RGB；PQ/HLG 使用 16-bit RGB，且仅支持 CUDA/PyTorch 或 TensorRT");
-        writer.WriteLine("  -no-upscale         不放大（仅补帧模式，需配合 -interp-model）");
+        writer.WriteLine("  -rtx-target <规格>  RTX VSR 输出规格：1x/1.5x/2x/3x/4x 或 1080p/1440p/2160p/4320p；最大 4x，输出边长取偶数");
+        writer.WriteLine("  -rtx-quality <1-4>  RTX VSR 质量等级，默认 3");
+        writer.WriteLine("  -rtx-hdr            启用 RTX Video HDR；输入已是 PQ/HLG 时会拒绝重复映射");
+        writer.WriteLine("  --segments-base64 <Base64 JSON>");
+        writer.WriteLine("        按帧段选择单帧超分模型；所有段必须连续覆盖全片，并锁定同一后端与倍率");
+        writer.WriteLine("  -no-upscale         不放大（可用于仅补帧或仅 RTX HDR）");
         writer.WriteLine("  -pause-shm <ID>     暂停共享内存名（透传给 rve-backend --pause_shared_memory_id）");
         writer.WriteLine("  -stop-shm <ID>      停止共享内存名：字节变 1 时优雅停止，已处理部分写入输出文件");
         writer.WriteLine("  --list-models, --search-models  列出可用的放大模型并退出（默认 ncnn 文件夹）");

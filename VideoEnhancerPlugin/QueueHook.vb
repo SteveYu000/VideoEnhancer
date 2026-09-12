@@ -7,6 +7,7 @@ Imports System.IO
 Imports System.Linq
 Imports System.Reflection
 Imports System.Text
+Imports System.Text.Json
 Imports System.Windows.Forms
 Imports FFmpegFreeUI
 Imports LakeUI
@@ -609,11 +610,29 @@ Namespace videoenhancer
                 ShowTip("请先在""视频超分""页面开启插件总开关")
                 Return
             End If
-            If Not cfg.UpscaleEnabled AndAlso Not cfg.InterpEnabled Then
-                ShowTip("请先打开超分或补帧开关")
+            If cfg.SegmentedVideos Is Nothing Then cfg.SegmentedVideos = New List(Of SegmentedVideoConfig)()
+            Dim segmentedByInput As New Dictionary(Of String, SegmentedVideoConfig)(StringComparer.OrdinalIgnoreCase)
+            For Each input In entries
+                Dim segmentConfig = FindSegmentedConfig(cfg, input)
+                If segmentConfig Is Nothing OrElse Not segmentConfig.Enabled Then Continue For
+                Dim validationError = ValidateSegmentedConfig(segmentConfig)
+                If validationError.Length > 0 Then
+                    ShowTip(Path.GetFileName(input) & " 的分段配置无效：" & validationError)
+                    Return
+                End If
+                segmentedByInput(Path.GetFullPath(input)) = segmentConfig
+            Next
+            If segmentedByInput.Count > 0 AndAlso (cfg.InterpEnabled OrElse cfg.RtxHdrEnabled) Then
+                ShowTip("分段超分当前不能与运动补帧或 RTX HDR 同时启用")
                 Return
             End If
-            If cfg.UpscaleEnabled AndAlso String.IsNullOrWhiteSpace(cfg.Model) Then
+            If Not cfg.UpscaleEnabled AndAlso Not cfg.InterpEnabled AndAlso Not cfg.RtxHdrEnabled AndAlso segmentedByInput.Count = 0 Then
+                ShowTip("请先打开超分、补帧或 HDR 映射开关")
+                Return
+            End If
+            Dim needsRegularUpscale = cfg.UpscaleEnabled AndAlso entries.Any(
+                Function(filePath) Not segmentedByInput.ContainsKey(IO.Path.GetFullPath(filePath)))
+            If needsRegularUpscale AndAlso Not String.Equals(cfg.Backend, "rtxvsr", StringComparison.OrdinalIgnoreCase) AndAlso String.IsNullOrWhiteSpace(cfg.Model) Then
                 ShowTip("请先在""视频超分""页面选择放大模型")
                 Return
             End If
@@ -641,7 +660,23 @@ Namespace videoenhancer
                 Dim settings = BuildFfmpegSettings(preset, input, output)
                 Dim pauseShm = "ve_plugin_pause_" & Guid.NewGuid().ToString("N")
                 Dim stopShm = "ve_plugin_stop_" & Guid.NewGuid().ToString("N")
-                Dim args = BuildCliArgs(input, output, cfg.Model, settings, pauseShm, stopShm, cfg.UpscaleEnabled, cfg.InterpModel, cfg.InterpEnabled, cfg.Backend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision)
+                Dim segmentConfig As SegmentedVideoConfig = Nothing
+                segmentedByInput.TryGetValue(Path.GetFullPath(input), segmentConfig)
+                Dim segmentsBase64 = ""
+                Dim effectiveBackend = cfg.Backend
+                Dim effectiveModel = cfg.Model
+                Dim effectiveUpscale = cfg.UpscaleEnabled
+                Dim effectiveInterp = cfg.InterpEnabled
+                Dim effectiveHdr = cfg.RtxHdrEnabled
+                If segmentConfig IsNot Nothing Then
+                    segmentsBase64 = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(segmentConfig.Segments))
+                    effectiveBackend = segmentConfig.Segments(0).Backend
+                    effectiveModel = ""
+                    effectiveUpscale = True
+                    effectiveInterp = False
+                    effectiveHdr = False
+                End If
+                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64)
                 AddQueueTask(args, Path.GetFileName(input), output, input)
                 added += 1
             Next
@@ -651,6 +686,57 @@ Namespace videoenhancer
                 ShowTip($"已添加 {added} 个视频超分任务到编码队列")
             End If
         End Sub
+
+        Private Shared Function FindSegmentedConfig(cfg As PluginConfig, input As String) As SegmentedVideoConfig
+            If cfg Is Nothing OrElse cfg.SegmentedVideos Is Nothing Then Return Nothing
+            Dim fullPath As String
+            Try
+                fullPath = Path.GetFullPath(input)
+            Catch
+                Return Nothing
+            End Try
+            Return cfg.SegmentedVideos.FirstOrDefault(
+                Function(item)
+                    If item Is Nothing OrElse String.IsNullOrWhiteSpace(item.Path) Then Return False
+                    Try
+                        Return String.Equals(Path.GetFullPath(item.Path), fullPath, StringComparison.OrdinalIgnoreCase)
+                    Catch
+                        Return False
+                    End Try
+                End Function)
+        End Function
+
+        Private Shared Function ValidateSegmentedConfig(config As SegmentedVideoConfig) As String
+            If config.FrameCount <= 0 Then Return "尚未取得有效帧数"
+            If config.Segments Is Nothing OrElse config.Segments.Count = 0 Then Return "至少需要一个分段"
+            Dim expectedStart As Long = 1
+            Dim backend = ""
+            Dim scale As Integer = 0
+            For index = 0 To config.Segments.Count - 1
+                Dim segment = config.Segments(index)
+                If segment.Start <> expectedStart OrElse segment.[End] < segment.Start Then
+                    Return $"第 {index + 1} 段必须从第 {expectedStart} 帧开始"
+                End If
+                If String.IsNullOrWhiteSpace(segment.Model) Then Return $"第 {index + 1} 段尚未选择模型"
+                Dim currentBackend = If(segment.Backend, "").Trim().ToLowerInvariant()
+                If currentBackend <> "ncnn" AndAlso currentBackend <> "cuda" AndAlso currentBackend <> "tensorrt" AndAlso currentBackend <> "onnx" Then
+                    Return $"第 {index + 1} 段不是单帧后端"
+                End If
+                If index = 0 Then
+                    backend = currentBackend
+                    scale = segment.Scale
+                ElseIf currentBackend <> backend Then
+                    Return "所有分段必须与第一段使用同一后端类别"
+                ElseIf segment.Scale <> scale Then
+                    Return "所有分段必须与第一段使用同一放大倍率"
+                End If
+                expectedStart = segment.[End] + 1
+            Next
+            If config.Segments(0).Start <> 1 OrElse config.Segments(config.Segments.Count - 1).[End] <> config.FrameCount Then
+                Return $"必须完整覆盖第 1 到第 {config.FrameCount} 帧"
+            End If
+            Return ""
+        End Function
 
         Private Shared Sub AddQueueTask(args As String, name As String, output As String, input As String)
             Try
@@ -662,6 +748,13 @@ Namespace videoenhancer
             Catch
             End Try
         End Sub
+
+        Public Shared Function GetCurrentPrepareFilePaths() As List(Of String)
+            Dim form = _prepareForm
+            If form Is Nothing Then form = HostAccess.GetDefaultInstance("Form_v6_准备文件")
+            If form Is Nothing Then Return New List(Of String)()
+            Return GetFilePaths(form)
+        End Function
 
         Private Shared Function GetFilePaths(form As Object) As List(Of String)
             Dim result As New List(Of String)
@@ -734,7 +827,7 @@ Namespace videoenhancer
         ' ────────────────────────── 命令构建 ──────────────────────────
 
         ''' <summary>构建 videoenhancer.exe 的参数：-i / -modelpath / -ffmpeg-settings / -pause-shm / -stop-shm / -interp-model / -no-upscale。</summary>
-        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True) As String
+        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "") As String
             Dim sb As New StringBuilder()
             sb.Append("-i ").Append(Arg(input))
             If upscaleOn AndAlso Not String.IsNullOrWhiteSpace(model) Then
@@ -743,7 +836,7 @@ Namespace videoenhancer
             If interpOn AndAlso Not String.IsNullOrWhiteSpace(interpModel) Then
                 sb.Append(" -interp-model ").Append(Arg(interpModel))
             End If
-            If interpOn AndAlso Not upscaleOn Then
+            If Not upscaleOn Then
                 sb.Append(" -no-upscale")
             End If
             ' 这里传入超分后端；CLI 会为补帧安全推导 CUDA 或 NCNN，避免模型格式错配。
@@ -769,6 +862,14 @@ Namespace videoenhancer
             End If
             If upscaleOn Then
                 sb.Append(" -upscale-precision ").Append(If(upscaleHalfPrecision, "auto", "float32"))
+            End If
+            If String.Equals(backend, "rtxvsr", StringComparison.OrdinalIgnoreCase) AndAlso upscaleOn Then
+                sb.Append(" -rtx-target ").Append(Arg(If(String.IsNullOrWhiteSpace(rtxTarget), "2x", rtxTarget)))
+                sb.Append(" -rtx-quality ").Append(Math.Max(1, Math.Min(4, rtxQuality)).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            End If
+            If rtxHdr Then sb.Append(" -rtx-hdr")
+            If Not String.IsNullOrWhiteSpace(segmentsBase64) Then
+                sb.Append(" --segments-base64 ").Append(Arg(segmentsBase64))
             End If
             If interpOn Then
                 sb.Append(" -interp-precision ").Append(If(interpHalfPrecision, "auto", "float32"))
