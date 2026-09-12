@@ -1869,3 +1869,9 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Root cause: `BuildOfficialSegmentedPage` 根面板用 `Dock=Fill`，但 LakeUI ModernPanel 绝对布局在窗体尺寸变化时不触发子项重排，各控件停留在构建瞬间的不同宽度状态。
 - Fix (`SegmentedUpscalePage.vb`): 根面板改为与超分工作台同款的显式宽度同步（`_segmentRoot` + `SyncSegmentedRootBounds`，页 Resize/ClientSizeChanged 触发 SetBounds 重排），根高固定 700，页边距与滚动余量口径一致。另：进程名实为 `FFmpegFreeUI.exe`（此前 tasklist 过滤 3FUI.exe 误判"未运行"）；上轮插件 DLL 曾误拷至 `Plugin\videoenhancer\` 子目录（已删），本轮起部署核验一律使用规范绝对路径。
 - Deployment: DLL SHA-256 `7fb2664f…`（构建=安装目录，4,656,640 bytes，21:13），含图片超分选项卡与分段页修复。用户重启 3FUI 验证。
+
+### 2026-09-12 21:40 - ZCode
+
+- User direction: ① 右键超分页「添加当前模型/清空模型列表」按钮宽度不足（6 字按钮按代码惯例 140→170px）；② 超分工作台三大模块重排为 超分 → 补帧 → HDR，模块之间空一行（38px），组合处理顺序行紧跟补帧模块。
+- Implementation: `PluginPanel.vb` actionRow 列宽 140→170；工作台 Y 重映射（interpHeader 459→371、interp 字段 497→409、573→485、orderRow 643→555、hdrHeader 345→649、hdrModeField 383→687、分隔线 699→763、根高 730→795）。
+- Verification: 构建 0 错误；DLL SHA-256 `f0a8d6de…` 构建与安装目录一致，已部署（3FUI 未运行）。提交 `cafa68a` 已直接推送 fork/main。待用户目视验收。
