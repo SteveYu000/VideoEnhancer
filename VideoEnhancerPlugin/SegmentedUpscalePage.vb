@@ -16,6 +16,7 @@ Namespace videoenhancer
     Public Partial Class PluginPanel
 
         Private ReadOnly _pageSegmented As New ModernPanel()
+        Private _segmentRoot As ModernPanel
         Private ReadOnly _cmbSegmentVideo As New WheelLockedComboBox()
         Private ReadOnly _switchSegmented As New LakeUI.BooleanSwitch()
         Private ReadOnly _lblSegmentedSwitch As New HtmlColorLabel()
@@ -61,13 +62,22 @@ Namespace videoenhancer
         Private Sub BuildOfficialSegmentedPage()
             _pageSegmented.Dock = DockStyle.Fill
             _pageSegmented.LayoutMode = ModernPanel.LayoutModeEnum.Absolute
+            ' 绝对布局子项只在根 SetBounds 触发 Layout 时重排；根必须像超分工作台
+            ' 一样显式同步宽度，否则子项停留在构建瞬间的尺寸上，出现贴边和裁切。
             Dim root As New ModernPanel With {
-                .Dock = DockStyle.Fill,
+                .Dock = DockStyle.None,
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
+                .AutoSize = False,
+                .MinimumSize = New Size(0, 700),
+                .Height = 700,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
                 .BorderSize = 0
             }
+            _segmentRoot = root
+            AddHandler _pageSegmented.ClientSizeChanged, Sub(sender, e) SyncSegmentedRootBounds()
+            AddHandler _pageSegmented.SizeChanged, Sub(sender, e) SyncSegmentedRootBounds()
             AddWorkbenchRow(root, CreateOfficialSectionHeading(
                 "分段超分设置", "仅支持 NCNN / CUDA / TensorRT / ONNX 单帧模型；第一段会锁定后端类别和倍率"), 12, 42)
 
@@ -129,6 +139,23 @@ Namespace videoenhancer
             _lblSegmentStatus.Text = "<font color=#888888>切换到本页后会检测添加文件列表中的视频和准确帧数。</font>"
             AddWorkbenchRow(root, CreateOfficialValueBox(_lblSegmentStatus), 620, 62)
             _pageSegmented.Controls.Add(root)
+            SyncSegmentedRootBounds()
+        End Sub
+
+        Private Sub SyncSegmentedRootBounds()
+            Dim root = _segmentRoot
+            If root Is Nothing OrElse root.IsDisposed OrElse
+               _pageSegmented Is Nothing OrElse _pageSegmented.IsDisposed Then Return
+            Dim availableWidth = Math.Max(_pageSegmented.Width, _pageSegmented.ClientSize.Width)
+            availableWidth = Math.Max(availableWidth, Math.Max(_tabs.Width, _tabs.ClientSize.Width))
+            If ModernPanel1 IsNot Nothing AndAlso Not ModernPanel1.IsDisposed Then
+                availableWidth = Math.Max(availableWidth,
+                    ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
+            End If
+            Dim width = Math.Max(0, availableWidth - _pageSegmented.ScrollBarWidth - 2)
+            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 700 Then
+                root.SetBounds(0, 0, width, 700)
+            End If
         End Sub
 
         Private Sub ActivateSegmentedPage()

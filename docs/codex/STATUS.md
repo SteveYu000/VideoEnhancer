@@ -1856,3 +1856,16 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Implementation (`PluginPanel.vb`): 新增 `_pageImage`/`_imageRoot` 与 `BuildOfficialImagePage()`/`SyncImageRootBounds()`；「图片增强」区（标题/选图/输出目录/命名与格式/开始增强/进度条）整体从工作台迁出为独立页（Y 12/48/102/156/210，根高 260），标题改为「图片超分·沿用超分工作台的超分引擎与模型」；工作台根高 970→730、SyncUpscaleRootBounds 850→730；页面样式数组与选项卡注册插入 tabImage（实时预览与模型下载之间）。控件与事件处理全部原样复用，`OnStartImageProcessing` 仍读工作台的 `_config.Backend`/模型（rtxvsr 依旧拒绝图片）。
 - Verification: 插件构建 0 错误（LakeUI 5.9.0.0）；DLL SHA-256 `ceb94ddf9cac0fca…` 构建与安装目录一致，已部署 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`。待用户重启 3FUI 目视确认新选项卡位置与布局。
 - Git: 已按用户新流程直接提交并推送 fork/main（见下条提交）；sidecar fork 不向上游提 PR（用户确认脱离其框架）。
+
+### 2026-09-12 21:20 - ZCode
+
+- User report: 重启 3FUI 后未看到图片超分新选项卡。
+- Root cause: 上轮部署时 INST 变量误写为 `Plugin\videoenhancer`（CLI 子目录），新 DLL 被拷到 `Plugin\videoenhancer\videoenhancer.3fui.dll`（错误位置，多出一层），真正的 `Plugin\videoenhancer.3fui.dll` 未更新（仍是 13:56 的 9ecc9b44 旧版）；当时的验证查询了同一个错误路径造成假成功。教训：部署核验必须使用规范绝对路径常量，而非拼接变量。
+- Fix: DLL 已拷入正确路径并核验（构建/目标 SHA-256 一致 `ceb94ddf…`，二进制含「图片超分」UTF-16 资源），误拷文件已删除；3FUI 未运行、无文件占用。用户需再次重启 3FUI 验证。
+
+### 2026-09-12 21:20 - ZCode
+
+- User report + screenshot: 分段超分页布局歪斜——标题/标签贴左缘裁切、添加分段按钮与操作列溢出右缘、状态条通栏贴边。
+- Root cause: `BuildOfficialSegmentedPage` 根面板用 `Dock=Fill`，但 LakeUI ModernPanel 绝对布局在窗体尺寸变化时不触发子项重排，各控件停留在构建瞬间的不同宽度状态。
+- Fix (`SegmentedUpscalePage.vb`): 根面板改为与超分工作台同款的显式宽度同步（`_segmentRoot` + `SyncSegmentedRootBounds`，页 Resize/ClientSizeChanged 触发 SetBounds 重排），根高固定 700，页边距与滚动余量口径一致。另：进程名实为 `FFmpegFreeUI.exe`（此前 tasklist 过滤 3FUI.exe 误判"未运行"）；上轮插件 DLL 曾误拷至 `Plugin\videoenhancer\` 子目录（已删），本轮起部署核验一律使用规范绝对路径。
+- Deployment: DLL SHA-256 `7fb2664f…`（构建=安装目录，4,656,640 bytes，21:13），含图片超分选项卡与分段页修复。用户重启 3FUI 验证。
