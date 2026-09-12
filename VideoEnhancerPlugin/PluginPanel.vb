@@ -2749,8 +2749,8 @@ Namespace videoenhancer
                     ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
             End If
             Dim width = Math.Max(0, availableWidth - _pageUpscale.ScrollBarWidth - 2)
-            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 730 Then
-                root.SetBounds(0, 0, width, 730)
+            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 795 Then
+                root.SetBounds(0, 0, width, 795)
             End If
         End Sub
 
@@ -2800,8 +2800,8 @@ Namespace videoenhancer
                 .Dock = DockStyle.None,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
                 .AutoSize = False,
-                .MinimumSize = New Size(0, 730),
-                .Height = 730,
+                .MinimumSize = New Size(0, 795),
+                .Height = 795,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
@@ -2974,16 +2974,16 @@ Namespace videoenhancer
             AddWorkbenchControl(root, _upscaleTileField, 263, 70, 0.0F, 0.46F, 0, -12)
             AddWorkbenchControl(root, _rtxQualityField, 263, 70, 0.0F, 0.46F, 0, -12)
             AddWorkbenchControl(root, _upscaleTileHint, 263, 70, 0.46F, 1.0F)
-            AddWorkbenchRow(root, hdrHeader, 345, 38)
-            AddWorkbenchControl(root, hdrModeField, 383, 76, 0.0F, 0.46F, 0, -12)
-            AddWorkbenchRow(root, interpHeader, 459, 38)
+            AddWorkbenchRow(root, hdrHeader, 649, 38)
+            AddWorkbenchControl(root, hdrModeField, 687, 76, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchRow(root, interpHeader, 371, 38)
             ' 补帧后端的固定选项（尤其是 TensorRT (NVIDIA)）需要在箭头区域前保留
             ' 足够文本宽度；将窄列从 29% 调整到 34%，模型列仍保留主要空间。
-            AddWorkbenchControl(root, interpBackendField, 497, 76, 0.0F, 0.34F, 0, -12)
-            AddWorkbenchControl(root, interpModelField, 497, 76, 0.34F, 0.80F, 0, -12)
-            AddWorkbenchControl(root, interpFactorField, 497, 76, 0.80F, 1.0F)
-            AddWorkbenchControl(root, interpThresholdField, 573, 70, 0.0F, 0.34F, 0, -12)
-            AddWorkbenchControl(root, interpFlowField, 573, 70, 0.34F, 0.80F, 0, -12)
+            AddWorkbenchControl(root, interpBackendField, 409, 76, 0.0F, 0.34F, 0, -12)
+            AddWorkbenchControl(root, interpModelField, 409, 76, 0.34F, 0.80F, 0, -12)
+            AddWorkbenchControl(root, interpFactorField, 409, 76, 0.80F, 1.0F)
+            AddWorkbenchControl(root, interpThresholdField, 485, 70, 0.0F, 0.34F, 0, -12)
+            AddWorkbenchControl(root, interpFlowField, 485, 70, 0.34F, 0.80F, 0, -12)
 
             Dim orderRow As New ModernHorizontalPanel(150.0F, -54.0F, -46.0F) With {
                 .Margin = New Padding(0, 8, 0, 0)
@@ -3010,8 +3010,8 @@ Namespace videoenhancer
             orderRow.AddColumn(orderCaption, 0)
             orderRow.AddColumn(_cmbProcessOrder, 1)
             orderRow.AddColumn(_lblProcessOrder, 2)
-            AddWorkbenchRow(root, orderRow, 643, 56)
-            AddWorkbenchRow(root, CreateOfficialSeparator(), 699, 25)
+            AddWorkbenchRow(root, orderRow, 555, 56)
+            AddWorkbenchRow(root, CreateOfficialSeparator(), 763, 25)
 
 
             _pageUpscale.Controls.Add(root)
@@ -3196,7 +3196,7 @@ Namespace videoenhancer
             AddWorkbenchControl(root, backendField, 66, 76, 0.0F, 0.36F, 0, -12)
             AddWorkbenchControl(root, modelField, 66, 76, 0.36F, 1.0F)
 
-            Dim actionRow As New ModernHorizontalPanel(140.0F, 12.0F, 140.0F, -1.0F)
+            Dim actionRow As New ModernHorizontalPanel(170.0F, 12.0F, 170.0F, -1.0F)
             ConfigureSecondaryButton(_btnShellAdd) : _btnShellAdd.Text = "添加当前模型"
             ConfigureSecondaryButton(_btnShellClear) : _btnShellClear.Text = "清空模型列表"
             _btnShellAdd.Dock = DockStyle.Fill : _btnShellAdd.Margin = New Padding(0, 6, 0, 6)
