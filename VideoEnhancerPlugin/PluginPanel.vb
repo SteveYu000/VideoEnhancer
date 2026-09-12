@@ -128,7 +128,9 @@ Namespace videoenhancer
         Private ReadOnly _pageTutorial As New ModernPanel()
         Private ReadOnly _markdownSources As New Dictionary(Of ModernPanel, String)()
         Private ReadOnly _markdownReady As New HashSet(Of ModernPanel)()
-        ' ── 独立图片超分页（位于超分主界面内）──
+        ' ── 图片超分页（独立选项卡，沿用超分工作台的超分引擎与模型）──
+        Private ReadOnly _pageImage As New ModernPanel()
+        Private _imageRoot As ModernPanel
         Private ReadOnly _btnImageFiles As New ModernButton()
         Private ReadOnly _btnImageFolder As New ModernButton()
         Private ReadOnly _btnImageOutput As New ModernButton()
@@ -2492,6 +2494,7 @@ Namespace videoenhancer
             _tabs.AnimationFPS = 30
 
             BuildOfficialUpscalePage()
+            BuildOfficialImagePage()
             BuildOfficialPreviewPage()
             BuildOfficialModelDownloadPage()
             BuildOfficialConverterPage()
@@ -2501,7 +2504,7 @@ Namespace videoenhancer
             BuildMarkdownPage(_pageTutorial, BeginnerTutorialMarkdown())
 
             For Each page As ModernPanel In New ModernPanel() {
-                _pageUpscale, _pagePreview, _pageDownloader,
+                _pageUpscale, _pageImage, _pagePreview, _pageDownloader,
                 _pageConverter, _pageImporter, _pageSegmented, _pageShell, _pageTutorial
             }
                 page.BackColor = Color.Transparent
@@ -2516,6 +2519,7 @@ Namespace videoenhancer
 
             Dim tabMain As New ModernTabControl.ModernTab("超分工作台") With {.BoundControl = _pageUpscale}
             Dim tabPreview As New ModernTabControl.ModernTab("实时预览") With {.BoundControl = _pagePreview}
+            Dim tabImage As New ModernTabControl.ModernTab("图片超分") With {.BoundControl = _pageImage}
             Dim tabDownloader As New ModernTabControl.ModernTab("模型下载") With {.BoundControl = _pageDownloader}
             Dim tabConverter As New ModernTabControl.ModernTab("模型转换") With {.BoundControl = _pageConverter}
             Dim tabImporter As New ModernTabControl.ModernTab("模型导入") With {.BoundControl = _pageImporter}
@@ -2524,6 +2528,7 @@ Namespace videoenhancer
             Dim tabTutorial As New ModernTabControl.ModernTab("使用教程") With {.BoundControl = _pageTutorial}
             _tabs.Items.Add(tabMain)
             _tabs.Items.Add(tabPreview)
+            _tabs.Items.Add(tabImage)
             _tabs.Items.Add(tabDownloader)
             _tabs.Items.Add(tabConverter)
             _tabs.Items.Add(tabImporter)
@@ -2744,8 +2749,8 @@ Namespace videoenhancer
                     ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
             End If
             Dim width = Math.Max(0, availableWidth - _pageUpscale.ScrollBarWidth - 2)
-            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 850 Then
-                root.SetBounds(0, 0, width, 850)
+            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 730 Then
+                root.SetBounds(0, 0, width, 730)
             End If
         End Sub
 
@@ -2795,8 +2800,8 @@ Namespace videoenhancer
                 .Dock = DockStyle.None,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
                 .AutoSize = False,
-                .MinimumSize = New Size(0, 970),
-                .Height = 970,
+                .MinimumSize = New Size(0, 730),
+                .Height = 730,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
@@ -3008,8 +3013,40 @@ Namespace videoenhancer
             AddWorkbenchRow(root, orderRow, 643, 56)
             AddWorkbenchRow(root, CreateOfficialSeparator(), 699, 25)
 
+
+            _pageUpscale.Controls.Add(root)
+            BindScrollableGpuBackgroundSources(root, ModernPanel1)
+            ' 为 LakeUI 覆盖式滚动条保留绘制带，避免子窗口覆盖父面板的 GPU 滚动条。
+            SyncUpscaleRootBounds()
+            UpdateModeStateLabels()
+            UpdateAdvancedControlState()
+        End Sub
+
+        ' ────────────────────────── 图片超分页 ──────────────────────────
+
+        Private Sub BuildOfficialImagePage()
+            _pageImage.Dock = DockStyle.Fill
+            _pageImage.LayoutMode = ModernPanel.LayoutModeEnum.Absolute
+            Dim root As New ModernPanel With {
+                .Dock = DockStyle.None,
+                .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
+                .AutoSize = False,
+                .MinimumSize = New Size(0, 260),
+                .Height = 260,
+                .BackColor = Color.Transparent,
+                .BackColor1 = Color.Transparent,
+                .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
+                .ScrollBarMode = ModernPanel.ScrollMode.None,
+                .BorderSize = 0,
+                .Margin = Padding.Empty,
+                .Padding = Padding.Empty
+            }
+            _imageRoot = root
+            AddHandler _pageImage.ClientSizeChanged, Sub(sender, e) SyncImageRootBounds()
+            AddHandler _pageImage.SizeChanged, Sub(sender, e) SyncImageRootBounds()
+
             AddWorkbenchRow(root, CreateOfficialSectionHeading(
-                "图片增强", "沿用上方超分后端与模型，可选择文件、文件夹或直接拖入"), 724, 36)
+                "图片超分", "沿用超分工作台的超分引擎与模型，可选择文件、文件夹或直接拖入"), 12, 36)
 
             Dim imageInputRow As New ModernHorizontalPanel(
                 150.0F, 12.0F, 170.0F, 12.0F, 110.0F, 12.0F, -1.0F) With {
@@ -3036,7 +3073,7 @@ Namespace videoenhancer
             imageInputRow.AddColumn(CreateOfficialValueBox(_lblImageInputs), 6)
             AddHandler imageInputRow.DragEnter, AddressOf OnImageDragEnter
             AddHandler imageInputRow.DragDrop, AddressOf OnImageDragDrop
-            AddWorkbenchRow(root, imageInputRow, 760, 54)
+            AddWorkbenchRow(root, imageInputRow, 48, 54)
 
             Dim imageOutputRow As New ModernHorizontalPanel(170.0F, 12.0F, -1.0F)
             ConfigureImageButton(_btnImageOutput, "选择输出目录", 170)
@@ -3051,7 +3088,7 @@ Namespace videoenhancer
             AddHandler _txtImageOutput.TextChanged, AddressOf OnImageOutputTextChanged
             imageOutputRow.AddColumn(_btnImageOutput, 0)
             imageOutputRow.AddColumn(_txtImageOutput, 2)
-            AddWorkbenchRow(root, imageOutputRow, 814, 54)
+            AddWorkbenchRow(root, imageOutputRow, 102, 54)
 
             Dim imageOptionsRow As New ModernHorizontalPanel(
                 82.0F, 220.0F, 20.0F, 82.0F, 220.0F, -1.0F, 16.0F, 170.0F)
@@ -3091,7 +3128,7 @@ Namespace videoenhancer
             imageOptionsRow.AddColumn(formatLabel, 3)
             imageOptionsRow.AddColumn(_cmbImageFormat, 4)
             imageOptionsRow.AddColumn(_btnImageStart, 7)
-            AddWorkbenchRow(root, imageOptionsRow, 868, 54)
+            AddWorkbenchRow(root, imageOptionsRow, 156, 54)
 
             Dim progressRow As New ModernHorizontalPanel(-1.0F, 16.0F, 300.0F)
             _imageProgress.Minimum = 0
@@ -3113,14 +3150,26 @@ Namespace videoenhancer
             _lblImageProgress.Text = "<font color=#888888>等待开始</font>"
             progressRow.AddColumn(_imageProgress, 0)
             progressRow.AddColumn(_lblImageProgress, 2)
-            AddWorkbenchRow(root, progressRow, 922, 42)
-
-            _pageUpscale.Controls.Add(root)
+            AddWorkbenchRow(root, progressRow, 210, 42)
+            _pageImage.Controls.Add(root)
             BindScrollableGpuBackgroundSources(root, ModernPanel1)
-            ' 为 LakeUI 覆盖式滚动条保留绘制带，避免子窗口覆盖父面板的 GPU 滚动条。
-            SyncUpscaleRootBounds()
-            UpdateModeStateLabels()
-            UpdateAdvancedControlState()
+            SyncImageRootBounds()
+        End Sub
+
+        Private Sub SyncImageRootBounds()
+            Dim root = _imageRoot
+            If root Is Nothing OrElse root.IsDisposed OrElse
+               _pageImage Is Nothing OrElse _pageImage.IsDisposed Then Return
+            Dim availableWidth = Math.Max(_pageImage.Width, _pageImage.ClientSize.Width)
+            availableWidth = Math.Max(availableWidth, Math.Max(_tabs.Width, _tabs.ClientSize.Width))
+            If ModernPanel1 IsNot Nothing AndAlso Not ModernPanel1.IsDisposed Then
+                availableWidth = Math.Max(availableWidth,
+                    ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
+            End If
+            Dim width = Math.Max(0, availableWidth - _pageImage.ScrollBarWidth - 2)
+            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 260 Then
+                root.SetBounds(0, 0, width, 260)
+            End If
         End Sub
 
         Private Sub BuildOfficialShellPage()

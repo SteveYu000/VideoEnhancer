@@ -1849,3 +1849,10 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 
 - Merge record: PR #1（9551296+00946ce，merge commit 198842b）与 PR #2（ddc3325+607e0b1，merge commit e154af1）均已合并进 maxzrb/main；其中 PR #1 的 head 分支在 user-Wing 仓库（早期会话所推），合并过程对 user-Wing 仅读取未写入；PR #2 起全部在 maxzrb 仓库内完成。
 - User preference: maxzrb 是用户自有仓库，后续改动**直接推 main，不再走 PR 流程**；本地分支与 fork/main 的对齐已在本次完成（rebase 后仅文档提交新增）。
+
+### 2026-09-12 21:05 - ZCode
+
+- User direction: 图片超分从超分工作台独立为新选项卡，位置在「实时预览」右侧、「模型下载」左侧，沿用工作台的超分引擎与模型。
+- Implementation (`PluginPanel.vb`): 新增 `_pageImage`/`_imageRoot` 与 `BuildOfficialImagePage()`/`SyncImageRootBounds()`；「图片增强」区（标题/选图/输出目录/命名与格式/开始增强/进度条）整体从工作台迁出为独立页（Y 12/48/102/156/210，根高 260），标题改为「图片超分·沿用超分工作台的超分引擎与模型」；工作台根高 970→730、SyncUpscaleRootBounds 850→730；页面样式数组与选项卡注册插入 tabImage（实时预览与模型下载之间）。控件与事件处理全部原样复用，`OnStartImageProcessing` 仍读工作台的 `_config.Backend`/模型（rtxvsr 依旧拒绝图片）。
+- Verification: 插件构建 0 错误（LakeUI 5.9.0.0）；DLL SHA-256 `ceb94ddf9cac0fca…` 构建与安装目录一致，已部署 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`。待用户重启 3FUI 目视确认新选项卡位置与布局。
+- Git: 已按用户新流程直接提交并推送 fork/main（见下条提交）；sidecar fork 不向上游提 PR（用户确认脱离其框架）。
