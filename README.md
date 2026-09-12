@@ -1,16 +1,16 @@
 # VideoEnhancer
 
-VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、图片推理和批处理能力。
+VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、RTX VSR / RTX Video HDR、图片推理和批处理能力。
 原作者：[user-wing](https://github.com/user-Wing/VideoEnhancer)
 
-当前版本：**1.3.0（开发中）**
+当前版本：**1.3.0（2026-09-12 已发布）**
 
 ## 功能概览
 
 - 通过 3FUI 图形界面管理视频增强任务、模型、推理后端和处理顺序。
 - 通过 `videoenhancer.exe` 提供命令行处理入口，适合脚本和批量任务。
 - 支持视频超分辨率、仅补帧、超分与补帧组合处理，以及 NVIDIA RTX VSR 和 RTX Video HDR。
-- 支持图片单张推理和图片文件夹处理；FlashVSR 与 BasicVSR++ 通过无损单帧视频桥处理图片。
+- 支持图片单张推理和图片文件夹处理；FlashVSR 与 BasicVSR++ 通过无损单帧视频桥处理图片。图片超分已独立为专用页，引擎与模型沿用超分工作台的当前选择。
 - 支持 NCNN/Vulkan、CUDA/PyTorch、TensorRT、ONNX、FlashVSR、BasicVSR++ 和 RTX VSR 超分后端。
 - 支持为 Windows 图片文件注册“超分辨率 → 模型”当前用户级联右键菜单，结果固定输出为 PNG。
 - 支持按视频保存“分段超分”配置；分段必须连续覆盖全部帧，第一段会锁定后端类别和放大倍率，每段可选择不同的同类单帧模型。
@@ -18,6 +18,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 支持 `upscale-first` 与 `interp-first` 两种组合顺序；跨后端阶段使用临时无损中间文件。
 - TensorRT Engine 按 GPU、运行时版本、输入尺寸、倍率、分块、精度和转换配置隔离缓存，并在失效时重建。
 - 模型列表支持从 ModelScope 镜像读取、下载、校验和解压。
+- RTX 任务支持暂停与恢复，输出容器按输出扩展名直连（mkv/mp4/webm 等全部 FFmpeg 封装器），3FUI 编码参数（预设、调优、码率、CQ）直接传入 RTX 编码器。
 - 插件更新使用 GitHub Release 首选、ModelScope 兜底的双源机制，更新包带逐文件 SHA-256 校验和失败回滚。
 
 ## 下载
@@ -40,7 +41,7 @@ stable.json
 - Windows 10 1809 或更高版本，64 位系统。`videoenhancer.exe` 是自包含单文件，不要求另外安装 .NET。
 - 安装 [Microsoft Visual C++ 2015–2022 x64 运行库](https://aka.ms/vc14/vc_redist.x64.exe)。便携 Python 及部分推理扩展仍依赖该运行库。
 - CUDA/PyTorch、TensorRT、FlashVSR 和 BasicVSR++ 需要 NVIDIA GPU。当前后端包含 CUDA 13.0，建议使用 580 或更高版本的 NVIDIA 驱动。
-- RTX VSR / RTX Video HDR 需要兼容的 NVIDIA RTX GPU、驱动和 RTX Video sidecar 运行组件。RTX 组件来自 `Zennmn/RTXHDR-RTXVSR`；其 NVIDIA SDK 文件受 NVIDIA 许可约束，公开再分发前必须单独核对许可。
+- RTX VSR / RTX Video HDR 需要 NVIDIA RTX 20 系及以上显卡、555 或更高版本的驱动和 RTX Video sidecar 运行组件。运行组件包发布在模型仓库 `Bin/rtx-video/RTXVideoRuntime_20260912.7z`，解压到 `Plugin\videoenhancer\bin\` 并重启 3FUI 即可。sidecar 基于 [`Zennmn/RTXHDR-RTXVSR`](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）定制；包内 NVIDIA SDK 运行库为 NVIDIA 专有组件，按其许可随显卡环境使用。
 - NCNN 使用显卡驱动提供的 Vulkan 运行时，不要求安装 Vulkan SDK；显卡和驱动至少需要支持 Vulkan 1.0。
 
 插件的环境检查会针对当前选择的后端实际导入关键模块并检查 GPU/执行提供程序，不会加载模型或 TensorRT Engine。若新机器不能运行，请先按检查结果处理 VC++ 运行库或显卡驱动问题。
@@ -73,6 +74,7 @@ Plugin\
 └─ videoenhancer\
    ├─ videoenhancer.exe
    ├─ bin\ffmpeg\ffmpeg.exe
+   ├─ bin\rtx-video\runtime\vsr_backend.exe（RTX 运行组件，可选）
    ├─ python\python\python.exe
    ├─ python\backend\rve-backend.py
    └─ models\...
@@ -89,6 +91,8 @@ Plugin\
 | TensorRT | 支持 | 支持 | 超分使用 PTH 源模型；RIFE 补帧首次使用自动构建 Engine |
 | ONNX | 支持 | 不作为通用补帧后端 | 使用 ONNX 模型 |
 | FlashVSR | 支持 | 不作为通用补帧后端 | 使用完整 FlashVSR 模型目录 |
+| BasicVSR++ | 支持（时序） | 不支持组合 | 使用 BasicVSR++ REDS4 时序模型，与运动补帧互斥 |
+| RTX VSR (NVIDIA RTX Video) | 支持 | 不作为补帧后端 | NVIDIA NGX 硬件超分，输出按扩展名直连最终容器，需 RTX 20 系及以上 |
 
 TensorRT 不依赖远端预置 Engine。任务启动时会根据当前视频和设备配置生成或复用本地 Engine。没有 NVIDIA/TensorRT 环境时，应选择 NCNN 或其他可用后端。
 
@@ -126,8 +130,11 @@ models\Frame-Interpolation\RIFE\rife4.26.heavy.pkl
 ## HDR 和处理顺序
 
 - HDR（PQ/HLG）处理使用 16-bit 中间格式。
-- HDR 目前要求 CUDA/PyTorch 或 TensorRT；NCNN、ONNX、FlashVSR 会明确拒绝不兼容配置。
+- HDR 目前要求 CUDA/PyTorch、TensorRT、BasicVSR++ 或 RTX VSR/HDR；NCNN、ONNX、FlashVSR 会明确拒绝不兼容配置。
 - 同一后端的组合处理在单进程内完成，跨后端时使用临时 FFV1 无损中间视频。
+- RTX VSR 与补帧组合时固定先补帧、再 RTX；RTX HDR 始终最后执行。
+- RTX 输出直接写入最终容器（按输出扩展名选择 FFmpeg 封装器）。容器装不下的流（如 TrueHD 进 MP4）会报 FFmpeg 原生错误；TrueHD/全景声源建议输出 mkv。
+- 源视频已是 PQ/HLG 时，RTX HDR 会拒绝重复映射。
 - 临时中间文件在任务结束后清理；任务停止时会尽量保留已经生成的有效输出。
 
 ## 模型下载和远端资源
@@ -216,6 +223,20 @@ dotnet build .\cli\VideoEnhancer.csproj -c Release --no-restore
 
 VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责模型发现、下载、格式适配和调用；模型名称中的 PTH、ONNX、NCNN、TensorRT 等格式可能是原作者文件，也可能是社区转换文件。相同模型的格式转换不会改变其原作者与原始授权条件。
 
+### 使用的程序与组件
+
+本项目在下列程序与组件之上构建，感谢各自作者与社区：
+
+- **3FUI（FFmpegFreeUI）**：视频处理宿主与插件框架，由本项目原作者 user-wing 开发。
+- **LakeUI**：3FUI 插件使用的原生界面控件库。
+- [FFmpeg](https://ffmpeg.org/)：解码、编码、滤镜与封装核心。
+- [Zennmn/RTXHDR-RTXVSR](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）：RTX Video sidecar 的基础实现；本项目在其上定制了编码参数透传、容器直连与任务暂停/恢复。
+- [NVIDIA RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk)：RTX VSR 与 RTX Video HDR 的专有运行组件。
+- [NCNN](https://github.com/Tencent/ncnn)、[PyTorch](https://pytorch.org/)、[TensorRT](https://developer.nvidia.com/tensorrt)、[ONNX Runtime](https://onnxruntime.ai/)：推理运行时。
+- [REAL-Video-Enhancer](https://github.com/TNTwise/REAL-Video-Enhancer) 与 [RVE 模型仓库](https://github.com/TNTwise/real-video-enhancer-models)：后端架构参考与模型镜像来源。
+- [mkvtoolnix](https://mkvtoolnix.download/)：随包提供的字幕提取与封装工具。
+- [ModelScope](https://www.modelscope.cn/)：模型与发布镜像托管。
+
 下表覆盖当前模型镜像中可被程序选择的全部模型家族。带“待核实”的条目表示目前只能追溯到 RVE 的公开模型仓库或社区发布记录，尚未找到可确认的原作者正式发布页；这不是对模型所有权或再分发授权的主张。若作者、链接或授权信息有误，欢迎提交 Issue，本项目会及时更正或下架。
 
 | 当前模型家族（包含的格式/变体） | 原作者或项目 | 原始出处 / 可追溯来源 | 授权备注 |
@@ -249,6 +270,8 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 ## 许可证和第三方资源
 
 本项目代码、3FUI 宿主、RVE 后端、预训练权重、FFmpeg、Python 依赖和其他运行资源可能具有不同的许可证和再分发条件。使用或再分发前，请分别查看对应项目和资源的许可证、NOTICE 或来源说明；项目版本号或仓库标签不代表第三方模型权重获得了统一授权。
+
+RTX 运行组件包（模型仓库 `Bin/rtx-video`）包含基于 MIT 许可 sidecar 的定制构建、LGPL 动态链接的 FFmpeg 共享库，以及 NVIDIA 专有的 `nvngx_*.dll` 运行库；后者按 NVIDIA RTX Video SDK 许可随显卡环境使用，公开再分发前请自行完成许可复核。
 
 本仓库不分发 `PotPlayer.7z`。模型资源的来源和授权状态应以发布记录及远端资源说明为准。
 

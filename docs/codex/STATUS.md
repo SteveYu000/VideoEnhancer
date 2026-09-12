@@ -1890,3 +1890,9 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - RTX 运行组件包: `Bin/rtx-video/RTXVideoRuntime_20260912.7z`（22,759,743 bytes，sha256 `2b668aaa…`，回读一致），含定制 sidecar（fork rve-patches @ ea16ce4）、nvngx 运行库、FFmpeg 共享库、许可文件与安装说明；nvngx 为 NVIDIA 专有组件，按“风险接受”发布，许可复核建议完成。
 - 版本迭代记录已更新。GPU 矩阵未按 1.1.0 规模重跑（本轮以 RTX/新路径实机验证替代，已在记录中注明）。
 - 收尾提交: 版本迭代记录 + 状态文件直接提交并推送 fork/main。
+
+### 2026-09-12 22:35 - ZCode
+
+- User direction: 按项目实际更新 README 的介绍、引用程序与致谢。
+- Implementation: 版本状态改为 1.3.0 已发布；功能概览补图片超分独立页、RTX 暂停/容器直连/编码参数透传；系统要求更新 RTX 运行组件包获取方式与许可口径；推理后端表补 BasicVSR++ 与 RTX VSR 两行；HDR 和处理顺序补 RTX 顺序/容器/门禁规则；模型来源与致谢新增「使用的程序与组件」小节（3FUI、LakeUI、FFmpeg、Zennmn/RTXHDR-RTXVSR、NVIDIA RTX Video SDK、NCNN/PyTorch/TensorRT/ONNX Runtime、RVE、mkvtoolnix、ModelScope）；许可证章节补 RTX 运行组件包许可说明；核心目录树补 bin\rtx-video。
+- Git: 直接提交并推送 fork/main。
