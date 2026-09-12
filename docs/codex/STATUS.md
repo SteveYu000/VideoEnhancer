@@ -1844,3 +1844,8 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 
 - User direction: 提交本地改动；sidecar 不向上游提 PR（用户确认已脱离其框架），fork 分支 `rve-patches`（ea16ce4）保持本地。
 - Commit plan: ① `fix: restore value box background and single-line RTX HDR status label`（PluginPanel.vb）；② `feat: mux RTX output directly into the target container`（cli/Program.cs、cli/RtxVideoBackendClient.cs、两份记录）。仅本地提交，不推送、不合并 PR #1。
+
+### 2026-09-12 20:40 - ZCode
+
+- Merge record: PR #1（9551296+00946ce，merge commit 198842b）与 PR #2（ddc3325+607e0b1，merge commit e154af1）均已合并进 maxzrb/main；其中 PR #1 的 head 分支在 user-Wing 仓库（早期会话所推），合并过程对 user-Wing 仅读取未写入；PR #2 起全部在 maxzrb 仓库内完成。
+- User preference: maxzrb 是用户自有仓库，后续改动**直接推 main，不再走 PR 流程**；本地分支与 fork/main 的对齐已在本次完成（rebase 后仅文档提交新增）。
