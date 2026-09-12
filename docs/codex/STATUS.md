@@ -1875,3 +1875,9 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - User direction: ① 右键超分页「添加当前模型/清空模型列表」按钮宽度不足（6 字按钮按代码惯例 140→170px）；② 超分工作台三大模块重排为 超分 → 补帧 → HDR，模块之间空一行（38px），组合处理顺序行紧跟补帧模块。
 - Implementation: `PluginPanel.vb` actionRow 列宽 140→170；工作台 Y 重映射（interpHeader 459→371、interp 字段 497→409、573→485、orderRow 643→555、hdrHeader 345→649、hdrModeField 383→687、分隔线 699→763、根高 730→795）。
 - Verification: 构建 0 错误；DLL SHA-256 `f0a8d6de…` 构建与安装目录一致，已部署（3FUI 未运行）。提交 `cafa68a` 已直接推送 fork/main。待用户目视验收。
+
+### 2026-09-12 21:55 - ZCode
+
+- User direction: 模块间空行由整行（38px）改半行（19px），「视频处理」标题与超分模块之间也空半行。
+- Layout: 视频处理标题 113-149 → 超分模块整体下移 19（upscaleHeader 149→168、字段 187→206、263→282）；超分尾 352+19=371 补帧原位不动（371/409/485）；组合处理顺序 555 不变；611+19=630 HDR（hdrHeader 630、hdrModeField 668）；分隔线 769；根高 795→776。
+- Verification: 构建 0 错误；DLL SHA-256 `f898f361…` 构建=安装目录，已部署（3FUI 未运行）。提交推送后待用户目视验收。

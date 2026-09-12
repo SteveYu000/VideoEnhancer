@@ -2749,8 +2749,8 @@ Namespace videoenhancer
                     ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
             End If
             Dim width = Math.Max(0, availableWidth - _pageUpscale.ScrollBarWidth - 2)
-            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 795 Then
-                root.SetBounds(0, 0, width, 795)
+            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 776 Then
+                root.SetBounds(0, 0, width, 776)
             End If
         End Sub
 
@@ -2800,8 +2800,8 @@ Namespace videoenhancer
                 .Dock = DockStyle.None,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
                 .AutoSize = False,
-                .MinimumSize = New Size(0, 795),
-                .Height = 795,
+                .MinimumSize = New Size(0, 776),
+                .Height = 776,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
@@ -2965,17 +2965,17 @@ Namespace videoenhancer
             Dim interpThresholdField = CreateOfficialField("转场阈值", _cmbSceneThreshold)
             Dim interpFlowField = CreateOfficialField("动态光流尺度", _cmbDynamicOpticalFlow)
 
-            AddWorkbenchRow(root, upscaleHeader, 149, 38)
+            AddWorkbenchRow(root, upscaleHeader, 168, 38)
             ' 放大模型名称较长（例如 AnimeJaNai...-430K），给模型列保留更多文本区，
             ' 避免箭头区域遮住名称末尾；后端列仍足以完整显示 TensorRT (NVIDIA)。
-            AddWorkbenchControl(root, upscaleBackendField, 187, 76, 0.0F, 0.38F, 0, -12)
-            AddWorkbenchControl(root, _upscaleModelField, 187, 76, 0.38F, 1.0F)
-            AddWorkbenchControl(root, _rtxTargetField, 187, 76, 0.38F, 1.0F)
-            AddWorkbenchControl(root, _upscaleTileField, 263, 70, 0.0F, 0.46F, 0, -12)
-            AddWorkbenchControl(root, _rtxQualityField, 263, 70, 0.0F, 0.46F, 0, -12)
-            AddWorkbenchControl(root, _upscaleTileHint, 263, 70, 0.46F, 1.0F)
-            AddWorkbenchRow(root, hdrHeader, 649, 38)
-            AddWorkbenchControl(root, hdrModeField, 687, 76, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchControl(root, upscaleBackendField, 206, 76, 0.0F, 0.38F, 0, -12)
+            AddWorkbenchControl(root, _upscaleModelField, 206, 76, 0.38F, 1.0F)
+            AddWorkbenchControl(root, _rtxTargetField, 206, 76, 0.38F, 1.0F)
+            AddWorkbenchControl(root, _upscaleTileField, 282, 70, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchControl(root, _rtxQualityField, 282, 70, 0.0F, 0.46F, 0, -12)
+            AddWorkbenchControl(root, _upscaleTileHint, 282, 70, 0.46F, 1.0F)
+            AddWorkbenchRow(root, hdrHeader, 630, 38)
+            AddWorkbenchControl(root, hdrModeField, 668, 76, 0.0F, 0.46F, 0, -12)
             AddWorkbenchRow(root, interpHeader, 371, 38)
             ' 补帧后端的固定选项（尤其是 TensorRT (NVIDIA)）需要在箭头区域前保留
             ' 足够文本宽度；将窄列从 29% 调整到 34%，模型列仍保留主要空间。
@@ -3011,7 +3011,7 @@ Namespace videoenhancer
             orderRow.AddColumn(_cmbProcessOrder, 1)
             orderRow.AddColumn(_lblProcessOrder, 2)
             AddWorkbenchRow(root, orderRow, 555, 56)
-            AddWorkbenchRow(root, CreateOfficialSeparator(), 763, 25)
+            AddWorkbenchRow(root, CreateOfficialSeparator(), 769, 25)
 
 
             _pageUpscale.Controls.Add(root)
