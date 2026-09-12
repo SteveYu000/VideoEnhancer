@@ -1881,3 +1881,12 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - User direction: 模块间空行由整行（38px）改半行（19px），「视频处理」标题与超分模块之间也空半行。
 - Layout: 视频处理标题 113-149 → 超分模块整体下移 19（upscaleHeader 149→168、字段 187→206、263→282）；超分尾 352+19=371 补帧原位不动（371/409/485）；组合处理顺序 555 不变；611+19=630 HDR（hdrHeader 630、hdrModeField 668）；分隔线 769；根高 795→776。
 - Verification: 构建 0 错误；DLL SHA-256 `f898f361…` 构建=安装目录，已部署（3FUI 未运行）。提交推送后待用户目视验收。
+
+### 2026-09-12 22:20 - ZCode
+
+- Release 1.3.0 已按 `release/发布流程.md` 完成并双源核验通过。
+- Backend: 基线取自 ModelScope 渠道 `python_20260826.7z`（sha256 af3ef9fd… 校验一致）；候选取自用户提供的 python-20260912.7z 并剔除 `backend/cache`（TRT/triton）、`__pycache__`、`*.pyc` 后重建干净完整包 `python_20260912.7z`（2,790,833,001 bytes，sha256 `e607456f…`）。审计 +1/~3/-0（新增分段后端，更新图片桥与 inspect 工具），哨兵 `backend/rve-backend.py`。完整包、增量包（10,839 bytes）、channel.json 按“完整包→增量包→channel”顺序上传 ModelScope 并回读核对（latestVersion=2026.09.12.1）。
+- 本体: GitHub `v1.3.0` 已创建（EXE 16,921,057 bytes，sha256 `1c608322…`，stable.json），Release Notes 14 行逐行校验格式合规且与本地一致；ModelScope Releases 镜像与 Models 备用 EXE 已同步；双源 package path/size/sha256 一致，两处 EXE HEAD 200。安装器/更新器隔离测试在流水线中通过。
+- RTX 运行组件包: `Bin/rtx-video/RTXVideoRuntime_20260912.7z`（22,759,743 bytes，sha256 `2b668aaa…`，回读一致），含定制 sidecar（fork rve-patches @ ea16ce4）、nvngx 运行库、FFmpeg 共享库、许可文件与安装说明；nvngx 为 NVIDIA 专有组件，按“风险接受”发布，许可复核建议完成。
+- 版本迭代记录已更新。GPU 矩阵未按 1.1.0 规模重跑（本轮以 RTX/新路径实机验证替代，已在记录中注明）。
+- 收尾提交: 版本迭代记录 + 状态文件直接提交并推送 fork/main。
