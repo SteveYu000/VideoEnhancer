@@ -76,7 +76,8 @@ Namespace videoenhancer
         Private ReadOnly _cmbProcessOrder As New WheelLockedComboBox()
         Private ReadOnly _lblProcessOrder As New HtmlColorLabel()
         Private ReadOnly _switchRtxHdr As New LakeUI.BooleanSwitch()
-        Private ReadOnly _lblSwitchRtxHdr As New HtmlColorLabel()
+        ' RTX HDR 状态使用无换行的 LakeUI 文本按钮，避免 HtmlColorLabel 按空格拆成两行。
+        Private ReadOnly _lblSwitchRtxHdr As New ModernButton()
         Private ReadOnly _cmbRtxHdrMode As New WheelLockedComboBox()
         Private ReadOnly _cmbRtxTarget As New WheelLockedComboBox()
         Private ReadOnly _cmbRtxQuality As New WheelLockedComboBox()
@@ -2549,6 +2550,11 @@ Namespace videoenhancer
             valueControl.Dock = DockStyle.Fill
             valueControl.Margin = Padding.Empty
             box.Controls.Add(valueControl)
+            ' 文字应采样文件框的半透明底色，不能直接采样宿主背景而挖空框内区域。
+            Dim label = TryCast(valueControl, HtmlColorLabel)
+            If label IsNot Nothing Then
+                label.BackgroundSource = box
+            End If
             Return box
         End Function
 
@@ -2595,8 +2601,9 @@ Namespace videoenhancer
 
         Private Shared Function BuildOfficialModeHeader(title As String, description As String,
                                                         switchControl As LakeUI.BooleanSwitch,
-                                                        stateLabel As HtmlColorLabel,
-                                                        Optional halfSwitch As LakeUI.BooleanSwitch = Nothing) As Control
+                                                        stateControl As Control,
+                                                        Optional halfSwitch As LakeUI.BooleanSwitch = Nothing,
+                                                        Optional stateWidth As Single = 112.0F) As Control
             Dim titleLabel = CreateTextLabel(title, 12.0F, FontStyle.Regular, UiText)
             titleLabel.Margin = Padding.Empty
             titleLabel.TextAlign = ContentAlignment.MiddleLeft
@@ -2605,7 +2612,7 @@ Namespace videoenhancer
             Dim halfLabel As LakeTextLabel = Nothing
             If halfSwitch Is Nothing Then
                 row = New ModernHorizontalPanel(
-                    CSng(titleWidth), 10.0F, 42.0F, -1.0F, 112.0F)
+                    CSng(titleWidth), 10.0F, 42.0F, -1.0F, CSng(stateWidth))
             Else
                 halfLabel = CreateTextLabel("半精度推理", 11.0F, FontStyle.Regular, UiTextSecondary)
                 halfLabel.AutoSize = False
@@ -2615,29 +2622,60 @@ Namespace videoenhancer
                 Dim halfLabelWidth = Math.Max(108,
                     TextRenderer.MeasureText(halfLabel.Text, halfLabel.Font).Width + 14)
                 row = New ModernHorizontalPanel(
-                    CSng(titleWidth), 10.0F, 42.0F, 18.0F, CSng(halfLabelWidth), 8.0F, 42.0F, -1.0F, 112.0F)
+                    CSng(titleWidth), 10.0F, 42.0F, 18.0F, CSng(halfLabelWidth), 8.0F, 42.0F, -1.0F,
+                    CSng(stateWidth))
             End If
             switchControl.Anchor = AnchorStyles.None
             switchControl.Margin = Padding.Empty
             Dim descriptionLabel = CreateOfficialCaption(description)
             descriptionLabel.TextAlign = ContentAlignment.MiddleLeft
             descriptionLabel.Margin = New Padding(14, 0, 0, 0)
-            stateLabel.Dock = DockStyle.Fill
-            stateLabel.Margin = Padding.Empty
-            stateLabel.AutoSize = False
-            stateLabel.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleRight
+            Dim stateLabel = TryCast(stateControl, HtmlColorLabel)
+            If stateLabel IsNot Nothing Then
+                stateLabel.Dock = DockStyle.Fill
+                stateLabel.Margin = Padding.Empty
+                stateLabel.Padding = Padding.Empty
+                stateLabel.AutoSize = False
+                stateLabel.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleRight
+            Else
+                Dim stateButton = TryCast(stateControl, ModernButton)
+                If stateButton IsNot Nothing Then
+                    ' ModernButton 的单行绘制路径默认不启用 wordWrap；透明化后只作为右侧状态文本使用。
+                    stateButton.Dock = DockStyle.Fill
+                    stateButton.Margin = Padding.Empty
+                    stateButton.Padding = Padding.Empty
+                    stateButton.AutoSize = False
+                    stateButton.Font = New Font("Microsoft YaHei UI", 10.0F, FontStyle.Bold)
+                    stateButton.TextAlign = ModernButton.TextAlignEnum.Right
+                    stateButton.BackColor = Color.Transparent
+                    stateButton.BackColor1 = Color.Transparent
+                    stateButton.BackColor2 = Color.Transparent
+                    stateButton.HoverBackColor1 = Color.Transparent
+                    stateButton.HoverBackColor2 = Color.Transparent
+                    stateButton.PressedBackColor1 = Color.Transparent
+                    stateButton.PressedBackColor2 = Color.Transparent
+                    stateButton.BorderColor = Color.Transparent
+                    stateButton.HoverBorderColor = Color.Transparent
+                    stateButton.PressedBorderColor = Color.Transparent
+                    stateButton.BorderSize = 0
+                    stateButton.BorderRadius = 0
+                    stateButton.RippleEnabled = False
+                    stateButton.HoldClickEnabled = False
+                    stateButton.TabStop = False
+                End If
+            End If
             row.AddColumn(titleLabel, 0)
             row.AddColumn(switchControl, 2)
             If halfSwitch Is Nothing Then
                 row.AddColumn(descriptionLabel, 3)
-                row.AddColumn(stateLabel, 4)
+                row.AddColumn(stateControl, 4)
             Else
                 halfSwitch.Anchor = AnchorStyles.None
                 halfSwitch.Margin = Padding.Empty
                 row.AddColumn(halfLabel, 4)
                 row.AddColumn(halfSwitch, 6)
                 row.AddColumn(descriptionLabel, 7)
-                row.AddColumn(stateLabel, 8)
+                row.AddColumn(stateControl, 8)
             End If
             Return row
         End Function
@@ -2864,7 +2902,8 @@ Namespace videoenhancer
             _syncingRtxHdrSwitch = False
             _switchRtxHdr.Enabled = _config.Enabled
             AddHandler _switchRtxHdr.CheckedChanged, AddressOf OnRtxHdrSwitchChanged
-            Dim hdrHeader = BuildOfficialModeHeader("HDR 映射", "", _switchRtxHdr, _lblSwitchRtxHdr)
+            Dim hdrHeader = BuildOfficialModeHeader(
+                "HDR 映射", "", _switchRtxHdr, _lblSwitchRtxHdr, stateWidth:=180.0F)
             _cmbRtxHdrMode.Items.Add("RTX Video HDR")
             _cmbRtxHdrMode.SelectedIndex = 0
             ConfigureCombo(_cmbRtxHdrMode)
@@ -5894,9 +5933,10 @@ Namespace videoenhancer
             _lblSwitchInterp.Text = If(_config.InterpEnabled,
                 "<font color=#3FCD87><b>已开启</b></font>",
                 "<font color=#888888>关闭</font>")
-            _lblSwitchRtxHdr.Text = If(_config.RtxHdrEnabled,
-                "<font color=#D4A9FF><b>RTX Video HDR</b></font>",
-                "<font color=#888888>关闭</font>")
+            _lblSwitchRtxHdr.Text = If(_config.RtxHdrEnabled, "RTX Video HDR", "关闭")
+            _lblSwitchRtxHdr.ForeColor = If(_config.RtxHdrEnabled,
+                Color.FromArgb(212, 169, 255),
+                Color.FromArgb(136, 136, 136))
         End Sub
 
         ''' <summary>后端切换后同步补帧开关的可用状态；只有 BasicVSR++ 不支持组合补帧。</summary>
