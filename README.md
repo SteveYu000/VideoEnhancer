@@ -227,7 +227,7 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 
 本项目在下列程序与组件之上构建，感谢各自作者与社区：
 
-- **3FUI（FFmpegFreeUI）**：视频处理宿主与插件框架，由本项目原作者 user-wing 开发。
+- **3FUI（FFmpegFreeUI）**：视频处理宿主与插件框架。
 - **LakeUI**：3FUI 插件使用的原生界面控件库。
 - [FFmpeg](https://ffmpeg.org/)：解码、编码、滤镜与封装核心。
 - [Zennmn/RTXHDR-RTXVSR](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）：RTX Video sidecar 的基础实现；本项目在其上定制了编码参数透传、容器直连与任务暂停/恢复。
