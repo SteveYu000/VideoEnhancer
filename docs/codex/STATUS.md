@@ -6,7 +6,7 @@ Updated by: Codex
 ## Current Snapshot
 
 - Latest objective/state (2026-09-14 11:35): 1.3.1 已正式发布并完成 GitHub、ModelScope Releases、Models 备用 EXE、RTX runtime 与新增模型的远端回读。RTX Video 使用 sidecar 处理 + 3FUI FFmpeg 编码架构；低分辨率软件解码上传 D3D11 回退已纳入发布版。
-- Latest files/Git: 主仓库发布提交 `4f7b97b` 已推送 `fork/main`，GitHub 标签 `v1.3.1` 指向该提交；sidecar `c83df0f` 和标签 `videoenhancer-runtime-2026.09.14.1` 已推个人 fork。发布后记录待提交。实机已部署 1.3.1 EXE（SHA-256 `4B1A2DFD…`）、DLL（`8A712E26…`）和 sidecar（`F66B15E0…`）。
+- Latest files/Git: 主仓库发布提交 `4f7b97b` 与记录提交 `44d7669` 已推送 `fork/main`，GitHub 标签 `v1.3.1` 指向发布提交；sidecar `c83df0f` 和标签 `videoenhancer-runtime-2026.09.14.1` 已推个人 fork。实机已部署 1.3.1 EXE（SHA-256 `4B1A2DFD…`）、DLL（`8A712E26…`）和 sidecar（`F66B15E0…`）。
 - Latest remaining issue/research: Python Backend 保持 2026.09.12.1（仅 LF/CRLF 差异，无语义变化）。完整《缎带英雄》长任务需用户重新启动；全量 1262 项矩阵本轮未整体重跑，但受影响的 RTX VSR 18 项、HDR 15 项、编码、选流及低分辨率专项均通过。
 
 - Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
@@ -1968,4 +1968,4 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: sidecar 89/89；Python 23/23；发布门禁 5/5；Backend 更新器 6/6；已安装 1.3.1 专项通过 HQ/UHQ×MKV/MP4、libx264/libx265/libsvtav1、精确 map、H.264/P010 门禁及 192×128 libx264/libx265。GitHub/ModelScope 五个公开下载 URL 均 HTTP 200。
 - Release: GitHub `v1.3.1` 正式发布，标签指向 `4f7b97b`；EXE 16,967,002 bytes / `4b1a2dfd…`，手动 ZIP 13,975,563 bytes / `715d2eca…`，stable.json 1,259 bytes / `9f3ff72e…`。ModelScope Releases 清单和两个资产、Models 备用 EXE均回读一致。
 - Deployment: 实机 3FUI 已部署 1.3.1；部署前备份在 `%TEMP%\videoenhancer-1.3.1-before-deploy-20260914-1132`。完整电影未代为启动，用户需按原参数重新开始任务。
-- Git: 主仓库功能/发布提交 `4f7b97b` 与 sidecar `c83df0f` 均已推送；发布后记录将另做收尾提交。全量 1262 项矩阵未整体重跑，作为已记录的剩余风险。
+- Git: 主仓库功能/发布提交 `4f7b97b`、发布记录提交 `44d7669` 与 sidecar `c83df0f` 均已推送；两个仓库收尾时工作树干净。全量 1262 项矩阵未整体重跑，作为已记录的剩余风险。
