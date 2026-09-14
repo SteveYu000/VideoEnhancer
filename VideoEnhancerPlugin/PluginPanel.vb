@@ -222,6 +222,8 @@ Namespace videoenhancer
         Private ReadOnly _activeDownloadGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
         Private ReadOnly _downloadItemsByPath As New Dictionary(Of String, UltraDetailListView.ListItem)(StringComparer.OrdinalIgnoreCase)
         Private ReadOnly _downloadGroupItems As New Dictionary(Of String, UltraDetailListView.ListItem)(StringComparer.OrdinalIgnoreCase)
+        Private _downloadModelContextMenu As ModernContextMenu
+        Private _contextDownloadModel As DownloadModelEntry
         Private NotInheritable Class DownloadModelEntry
             Public Property Name As String
             Public Property RelativePath As String
@@ -3822,6 +3824,7 @@ Namespace videoenhancer
                 New UltraDetailListView.ListColumn("操作", 138)
             })
             AddHandler _downloadList.ItemClick, AddressOf OnDownloadListItemClick
+            AddHandler _downloadList.MouseDown, AddressOf OnDownloadListMouseDown
             AddHandler _downloadList.ClientSizeChanged,
                 Sub(sender, e)
                     If _downloadList.Columns.Count = 0 Then Return
@@ -4213,6 +4216,118 @@ Namespace videoenhancer
                 Await DownloadGroupItemsAsync(row.Category, row.BatchPaths)
             End If
         End Sub
+
+        Private Shared Function CanDeleteDownloadedModel(entry As DownloadModelEntry) As Boolean
+            If entry Is Nothing OrElse Not entry.Installed OrElse IsDownloadArchive(entry.RelativePath) Then Return False
+            Dim category = DownloadCategory(entry.RelativePath)
+            Return Not category.Equals("Backend", StringComparison.OrdinalIgnoreCase) AndAlso
+                Not category.Equals("Bin", StringComparison.OrdinalIgnoreCase) AndAlso
+                Not category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        Private Sub OnDownloadListMouseDown(sender As Object, e As MouseEventArgs)
+            If e.Button <> MouseButtons.Right OrElse _downloadsLoading OrElse _archiveCleanupBusy OrElse
+                _downloadActiveCount > 0 Then Return
+            Dim item = _downloadList.GetItemAt(e.X, e.Y)
+            Dim row = TryCast(If(item Is Nothing, Nothing, item.Tag), DownloadListRowTag)
+            Dim entry = If(row Is Nothing, Nothing, row.Entry)
+            If Not CanDeleteDownloadedModel(entry) Then
+                CloseDownloadModelContextMenu()
+                Return
+            End If
+            Dim index = _downloadList.Items.IndexOf(item)
+            If index >= 0 Then _downloadList.SelectedIndex = index
+            ShowDownloadModelContextMenu(entry, e.Location)
+        End Sub
+
+        Private Sub CloseDownloadModelContextMenu()
+            Dim menu = _downloadModelContextMenu
+            _downloadModelContextMenu = Nothing
+            _contextDownloadModel = Nothing
+            If menu Is Nothing Then Return
+            Try
+                menu.Close()
+            Catch
+            End Try
+        End Sub
+
+        Private Sub ShowDownloadModelContextMenu(entry As DownloadModelEntry, location As Point)
+            CloseDownloadModelContextMenu()
+            Dim menu As New ModernContextMenu()
+            ConfigureModelMenu(menu, reserveIconColumn:=False)
+            Dim deleteItem As New ModernContextMenu.ModernMenuItem("删除本地模型") With {
+                .CloseOnClick = True,
+                .ForeColor = UiDanger
+            }
+            AddHandler deleteItem.Click,
+                Sub(sender As Object, args As EventArgs)
+                    Dim target = _contextDownloadModel
+                    CloseDownloadModelContextMenu()
+                    DeleteDownloadedModelWithConfirmation(target)
+                End Sub
+            menu.Items.Add(deleteItem)
+            _contextDownloadModel = entry
+            _downloadModelContextMenu = menu
+            menu.Show(_downloadList, location)
+        End Sub
+
+        Private Async Sub DeleteDownloadedModelWithConfirmation(entry As DownloadModelEntry)
+            If Not CanDeleteDownloadedModel(entry) Then Return
+            Dim question = "确定删除本地模型“" & entry.Name & "”？" & Environment.NewLine &
+                "只删除本机 models 目录中的这个模型文件，不影响 ModelScope 远端资源。" &
+                Environment.NewLine & Environment.NewLine & "路径：" & entry.RelativePath
+            If Not ShowLakeConfirm(Me, question, "删除本地模型", defaultYes:=False) Then Return
+
+            Dim exePath = DownloadExecutablePath()
+            If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
+                ShowStatus("删除失败：找不到 videoenhancer.exe", True)
+                Return
+            End If
+            SetDownloadActionsEnabled(False)
+            Try
+                Dim errorText = Await Task.Run(Function() RunDownloadedModelDelete(exePath, entry.RelativePath))
+                If errorText.Length > 0 Then
+                    ShowStatus("本地模型删除失败：" & errorText, True)
+                    Return
+                End If
+                entry.Installed = IsDownloadInstalled(entry.RelativePath)
+                SetDownloadRowState(entry.RelativePath, "未安装", "下载", UiTextMuted, UiAccent)
+                RefreshDownloadGroupSummary(DownloadCategory(entry.RelativePath))
+                RefreshModels()
+                ShowStatus("已删除本地模型：" & entry.Name, False)
+            Finally
+                SetDownloadActionsEnabled(True)
+            End Try
+        End Sub
+
+        Private Shared Function RunDownloadedModelDelete(exePath As String, relativePath As String) As String
+            Try
+                Dim psi As New ProcessStartInfo With {
+                    .FileName = exePath, .WorkingDirectory = Path.GetDirectoryName(exePath),
+                    .UseShellExecute = False, .RedirectStandardOutput = True,
+                    .RedirectStandardError = True, .CreateNoWindow = True,
+                    .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                }
+                psi.ArgumentList.Add("--delete-download-model")
+                psi.ArgumentList.Add(relativePath)
+                Using child = Diagnostics.Process.Start(psi)
+                    If child Is Nothing Then Return "无法启动模型删除进程"
+                    Dim stdout = child.StandardOutput.ReadToEnd()
+                    Dim stderr = child.StandardError.ReadToEnd()
+                    If Not child.WaitForExit(45000) Then
+                        Try
+                            child.Kill(entireProcessTree:=True)
+                        Catch
+                        End Try
+                        Return "模型删除进程超时"
+                    End If
+                    If child.ExitCode <> 0 Then Return LastNonEmptyLine(If(String.IsNullOrWhiteSpace(stderr), stdout, stderr))
+                End Using
+                Return ""
+            Catch ex As Exception
+                Return ex.Message
+            End Try
+        End Function
 
         Private Async Sub OnDownloadAllClick(sender As Object, e As EventArgs)
             If Not _downloadActionsEnabled OrElse Not _downloadOnline OrElse _downloadsLoading OrElse
@@ -5935,6 +6050,7 @@ Namespace videoenhancer
             If disposing Then
                 CloseModelMenuToolTip()
                 CloseUserModelContextMenu()
+                CloseDownloadModelContextMenu()
                 StopEnvironmentCheck(5000)
                 ' LakeUI 5.x 在 TabControl 隐藏时会重新显示当前绑定页。
                 ' 先解除绑定，避免父窗体销毁期间访问已经 Dispose 的 ModernPanel。

@@ -80,6 +80,18 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("!user.Backends.Contains(backend", program)
         self.assertIn('case "--list-user-models"', program)
 
+    def test_download_catalog_keeps_latest_runtime_and_supports_safe_local_delete(self):
+        program = (ROOT / "cli" / "Program.cs").read_text(encoding="utf-8")
+        panel = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
+        self.assertIn("KeepLatestVersionedArchive", program)
+        self.assertIn("RTXVideoRuntime_(?<version>", program)
+        self.assertIn('case "--delete-download-model"', program)
+        self.assertIn("DeleteDownloadedModel", program)
+        self.assertIn("_downloadList.MouseDown", panel)
+        self.assertIn('ModernContextMenu.ModernMenuItem("删除本地模型")', panel)
+        self.assertIn("CanDeleteDownloadedModel", panel)
+        self.assertIn("RunDownloadedModelDelete", panel)
+
     def test_builtin_catalog_remains_valid_json(self):
         document = json.loads((ROOT / "cli" / "model-capabilities.json").read_text(encoding="utf-8"))
         self.assertEqual(document["schemaVersion"], 1)

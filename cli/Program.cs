@@ -872,6 +872,7 @@ internal static class Program
         public bool ListDownloadModels;
         public bool CleanDownloadArchives;
         public string DownloadModel = "";
+        public string DeleteDownloadModel = "";
         public bool BackendStatus;
         public bool UpdateBackend;
         public bool ForceBackendFull;
@@ -1088,6 +1089,11 @@ internal static class Program
         if (!string.IsNullOrWhiteSpace(o.DownloadModel))
         {
             return DownloadRepositoryModel(o.DownloadModel);
+        }
+
+        if (!string.IsNullOrWhiteSpace(o.DeleteDownloadModel))
+        {
+            return DeleteDownloadedModel(o.DeleteDownloadModel);
         }
 
         if (!string.IsNullOrWhiteSpace(o.DownloadUrl))
@@ -1515,6 +1521,9 @@ internal static class Program
                     break;
                 case "--download-model":
                     o.DownloadModel = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "--delete-download-model":
+                    o.DeleteDownloadModel = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--backend-status":
                     o.BackendStatus = true;
@@ -2244,6 +2253,29 @@ internal static class Program
 
     private sealed record RemoteModel(string Name, string Path, long Size, string Sha256);
 
+    private static void KeepLatestVersionedArchive(
+        List<RemoteModel> models,
+        string versionedPathPattern,
+        params string[] legacyPaths)
+    {
+        var options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+        var latest = models
+            .Select(model => (Model: model, Match: Regex.Match(model.Path, versionedPathPattern, options)))
+            .Where(candidate => candidate.Match.Success)
+            .OrderByDescending(
+                candidate => candidate.Match.Groups["version"].Value,
+                StringComparer.OrdinalIgnoreCase)
+            .ThenByDescending(candidate => candidate.Model.Path, StringComparer.OrdinalIgnoreCase)
+            .Select(candidate => candidate.Model)
+            .FirstOrDefault();
+        if (latest is null) return;
+
+        models.RemoveAll(model =>
+            legacyPaths.Contains(model.Path, StringComparer.OrdinalIgnoreCase)
+            || (Regex.IsMatch(model.Path, versionedPathPattern, options)
+                && !model.Path.Equals(latest.Path, StringComparison.OrdinalIgnoreCase)));
+    }
+
     private static List<RemoteModel> FetchRemoteModels()
     {
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
@@ -2291,22 +2323,15 @@ internal static class Program
                 break;
             }
         }
-        // Backend 曾同时保留无日期包和日期包；界面只展示最新日期包，避免用户下载两套
-        // 内容几乎相同的便携 Python。旧文件继续留在镜像中供历史版本使用。
-        var preferredPythonArchive = result
-            .Where(model => Regex.IsMatch(
-                model.Path, @"^Backend/python_\d{8}\.7z$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
-            .OrderByDescending(model => model.Path, StringComparer.OrdinalIgnoreCase)
-            .FirstOrDefault();
-        if (preferredPythonArchive is not null)
-        {
-            result.RemoveAll(model =>
-                model.Path.Equals("Backend/python.7z", StringComparison.OrdinalIgnoreCase)
-                || (Regex.IsMatch(
-                        model.Path, @"^Backend/python_\d{8}\.7z$",
-                        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
-                    && !model.Path.Equals(preferredPythonArchive.Path, StringComparison.OrdinalIgnoreCase)));
-        }
+        // 版本化运行包在仓库中保留历史文件用于旧客户端和回滚，但当前下载页只展示最新项。
+        // 模型权重继续使用稳定路径；更新同一权重时覆盖原路径，不产生带日期的重复条目。
+        KeepLatestVersionedArchive(
+            result,
+            @"^Backend/python_(?<version>\d{8})\.7z$",
+            "Backend/python.7z");
+        KeepLatestVersionedArchive(
+            result,
+            @"^Bin/rtx-video/RTXVideoRuntime_(?<version>\d{8})\.7z$");
 
         // 新版补帧包已迁移到 Frame-Interpolation；旧 RIFE/RIFE.7z 与其内容重复，
         // 但远端文件仍保留给旧客户端使用，因此只从当前下载列表隐藏旧路径。
@@ -2465,6 +2490,39 @@ internal static class Program
         }
         Console.WriteLine("DOWNLOAD_COMPLETE|" + destination);
         return 0;
+    }
+
+    private static int DeleteDownloadedModel(string requestedPath)
+    {
+        var normalized = requestedPath.Replace('\\', '/').TrimStart('/');
+        var slash = normalized.IndexOf('/');
+        if (slash <= 0) return Fail("模型路径无效：" + normalized, 1);
+        var category = normalized[..slash];
+        var allowedCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            { "BasicVSR++", "FlashVSR", "Frame-Interpolation", "ONNX", "Param-Bin", "RIFE", "PTH" };
+        if (!allowedCategories.Contains(category))
+            return Fail("只允许删除 models 目录中的模型文件", 1);
+
+        var suffix = normalized[(slash + 1)..].Replace('/', Path.DirectorySeparatorChar);
+        var destination = SafeCombine(Path.Combine(CoreRoot, "models", category), suffix);
+        if (IsArchiveFile(destination))
+            return Fail("压缩模型包可能包含共享目录，不能按单文件方式删除；请使用清理归档功能", 1);
+        if (!File.Exists(destination))
+            return Fail("本地模型文件不存在：" + normalized, 1);
+
+        try
+        {
+            var attributes = File.GetAttributes(destination);
+            if ((attributes & FileAttributes.ReparsePoint) != 0)
+                return Fail("本地模型文件是符号链接或联接点，已拒绝删除", 1);
+            File.Delete(destination);
+            Console.WriteLine("MODEL_DELETE_COMPLETE|" + normalized);
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            return Fail("删除本地模型失败：" + ex.Message, 1);
+        }
     }
 
     private static string FrameInterpolationArchiveMarkerPath(string relativePath)
@@ -6372,6 +6430,7 @@ internal static class Program
         writer.WriteLine("  videoenhancer.exe --import-model <模型文件、目录或压缩包> --json");
         writer.WriteLine("  videoenhancer.exe --clean-download-archives");
         writer.WriteLine("  videoenhancer.exe --download-model <镜像相对路径>");
+        writer.WriteLine("  videoenhancer.exe --delete-download-model <镜像相对路径>");
         writer.WriteLine("  videoenhancer.exe --backend-status --json");
         writer.WriteLine("  videoenhancer.exe --update-backend");
         writer.WriteLine("  videoenhancer.exe --apply-backend-patch <本地补丁包>");
@@ -6446,6 +6505,7 @@ internal static class Program
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN（不会写入配置文件）");
         writer.WriteLine("  --clean-download-archives  递归清理 models 与 python 中的下载压缩包");
         writer.WriteLine("  --download-model <路径>  用内置 aria2-next 下载镜像文件；压缩包自动用内置 7-Zip-zstd 解压");
+        writer.WriteLine("  --delete-download-model <路径>  删除模型下载页中的本地单文件模型；拒绝 Backend、运行组件、插件和压缩包");
         writer.WriteLine("  --backend-status [--json]  检查后端版本、可用增量补丁和预计下载大小");
         writer.WriteLine("  --update-backend  按最小补丁链事务更新后端；失败或中断时自动回滚");
         writer.WriteLine("  --force-backend-full  配合 --update-backend，跳过增量补丁并下载完整修复包");

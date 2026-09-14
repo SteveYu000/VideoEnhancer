@@ -1,9 +1,3 @@
-[更改]RTX Video 改为先由 sidecar 完成 VSR/HDR，再把原始帧交给 3FUI 的 FFmpeg 编码与封装
-[新增]RTX Video 支持 libx264、libx265、SVT-AV1 等软件编码器，并继续支持 NVENC
-[更改]修复 HEVC NVENC p7/uhq 首帧初始化失败、10-bit P010、精确选流及尾帧计数问题
-[更改]低于 D3D11VA 常规硬解尺寸的输入改用软件解码并上传 D3D11，RTX VSR 可处理低分辨率视频
-[更改]修复 DAT2 与 AniToon-RPLKSRL 在 CUDA FP16 下产生 NaN 导致 GIMM R-LPIPS 失败
-[更改]修复新增图片页后模型下载、导入、分段、右键和教程页懒加载索引错位
-[新增]GitHub Release 增加可直接覆盖到 3FUI 根目录的版本化手动安装 ZIP
-[新增]模型仓库补充 RealESRGAN x2/x4、动漫 x4、去噪权重及 Nomos8k strong 权重
-[更改]RTX Video 运行组件更新至 2026.09.14.1，并提供可追溯的定制 sidecar 源码
+[更改]模型下载页对 Backend 与 RTX runtime 的版本化归档只展示最新版本，远端历史包继续保留供旧客户端和回滚使用
+[新增]模型下载页为已安装的本地单文件模型增加右键删除功能，删除前确认且不影响 ModelScope 远端资源
+[更改]本地删除拒绝 Backend、插件、运行组件及共享压缩包，并支持断网后删除已列出的本地模型

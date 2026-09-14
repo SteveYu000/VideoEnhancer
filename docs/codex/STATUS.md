@@ -1,13 +1,13 @@
 # Project Status
 
-Last updated: 2026-09-14 11:35
+Last updated: 2026-09-14 12:05
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-14 11:35): 1.3.1 已正式发布并完成 GitHub、ModelScope Releases、Models 备用 EXE、RTX runtime 与新增模型的远端回读。RTX Video 使用 sidecar 处理 + 3FUI FFmpeg 编码架构；低分辨率软件解码上传 D3D11 回退已纳入发布版。
-- Latest files/Git: 主仓库发布提交 `4f7b97b` 与记录提交 `44d7669` 已推送 `fork/main`，GitHub 标签 `v1.3.1` 指向发布提交；sidecar `c83df0f` 和标签 `videoenhancer-runtime-2026.09.14.1` 已推个人 fork。实机已部署 1.3.1 EXE（SHA-256 `4B1A2DFD…`）、DLL（`8A712E26…`）和 sidecar（`F66B15E0…`）。
-- Latest remaining issue/research: Python Backend 保持 2026.09.12.1（仅 LF/CRLF 差异，无语义变化）。完整《缎带英雄》长任务需用户重新启动；全量 1262 项矩阵本轮未整体重跑，但受影响的 RTX VSR 18 项、HDR 15 项、编码、选流及低分辨率专项均通过。
+- Latest objective/state (2026-09-14 12:05): 1.3.2 发布候选已完成：模型下载页只展示最新 Backend/RTX runtime 版本化归档，已安装的本地单文件模型支持右键确认删除；远端历史包不删除，Backend/插件/运行组件/共享压缩包禁止右键删除。
+- Latest files/Git: 1.3.2 源码、版本与发布说明尚待提交；正式候选产物已生成。远端实时列表为 RTX runtime 1 项（20260914）和 Backend 完整包 1 项（20260912）。仓库内有策略未允许自动清理的隔离测试夹具 `.tmp-delete-model-1-3-2/`，不纳入提交。
+- Latest remaining issue/research: 发布门禁已通过，下一步提交推送、发布 GitHub/ModelScope、远端回读并部署 1.3.2。Python Backend 保持 2026.09.12.1，RTX runtime 保持 2026.09.14.1；完整《缎带英雄》长任务仍由用户重新启动。
 
 - Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
@@ -1969,3 +1969,11 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Release: GitHub `v1.3.1` 正式发布，标签指向 `4f7b97b`；EXE 16,967,002 bytes / `4b1a2dfd…`，手动 ZIP 13,975,563 bytes / `715d2eca…`，stable.json 1,259 bytes / `9f3ff72e…`。ModelScope Releases 清单和两个资产、Models 备用 EXE均回读一致。
 - Deployment: 实机 3FUI 已部署 1.3.1；部署前备份在 `%TEMP%\videoenhancer-1.3.1-before-deploy-20260914-1132`。完整电影未代为启动，用户需按原参数重新开始任务。
 - Git: 主仓库功能/发布提交 `4f7b97b`、发布记录提交 `44d7669` 与 sidecar `c83df0f` 均已推送；两个仓库收尾时工作树干净。全量 1262 项矩阵未整体重跑，作为已记录的剩余风险。
+
+### 2026-09-14 12:05 - Codex
+
+- Request: 用户担心 ModelScope 同时显示 RTXVideoRuntime_20260912/20260914 导致重复下载，并要求模型列表增加右键删除，随后发布修正版。
+- Implementation: 将 Backend Python 与 RTX runtime 统一为“远端保留历史、当前客户端只展示最新版本化归档”；模型权重继续使用稳定路径覆盖更新。模型下载页为已安装的本地单文件模型增加“删除本地模型”右键菜单、二次确认和状态刷新；CLI 新增 `--delete-download-model`，仅允许 `models` 下已知模型分类并经 `SafeCombine` 定位，拒绝压缩包、Backend、Bin、Plugin 与重解析点，且删除不依赖网络。
+- Verification: CLI 与 LakeUI 5.1 插件构建通过（仅 2 条既有 CA1416）；Python 24/24；实时 ModelScope 列表共 96 项，RTX 仅 `RTXVideoRuntime_20260914.7z`、Backend 仅 `python_20260912.7z`；隔离夹具中 PTH 删除成功、RTX runtime 删除返回退出码 1；正式 1.3.2 构建、安装器、更新器、发布门禁 5/5、Backend 更新器 6/6 均通过，Backend 审计 0/0/0。
+- Candidate assets: EXE 16,969,237 bytes / SHA-256 `6adeb303d46c45dd9d1e88c0fbce9b7afd61097de437c7386a00806e2aa383d9`；手动 ZIP 13,978,769 bytes / `b428b158305c8ef150b8da18a333400c48cde7b94c5de67ed35c9e6ab3555a9a`；stable.json 752 bytes / `bed2759333f2295066af9c5501705fb5dacd82afc1eabf2028d4b10a6b57a6a5`。
+- Git/next: 源码与记录尚未提交；下一步提交并推送 `fork/main`，创建 v1.3.2、同步 ModelScope 两个数据集、回读资产后部署。`.tmp-delete-model-1-3-2/` 为隔离夹具，递归清理命令被执行策略拒绝，必须排除提交。
