@@ -1,20 +1,20 @@
 # Project Status
 
-Last updated: 2026-09-14 11:25
+Last updated: 2026-09-14 11:35
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-14 11:25): 1.3.1 发布收口中。RTX Video 已改为 sidecar 只做 D3D11/RTX 处理，原始帧经命名管道交给 3FUI 宿主目录/PATH 中的 FFmpeg 编码；NVENC 与软件编码统一走宿主编码系统。低于 D3D11VA 常规硬解尺寸的输入新增软件解码、NV12/P010 打包并上传 D3D11 的回退路径。
-- Latest files/Git: sidecar 修改已提交 `c83df0f` 并推送 `maxzrb/RTXHDR-RTXVSR:rve-patches`，标签 `videoenhancer-runtime-2026.09.14.1` 已推送；runtime 包与 5 个 PTH 权重已上传 ModelScope Models 并回读大小/SHA-256一致。主仓库已升至 1.3.1，发布脚本正式纳入版本化手动安装 ZIP，待提交和发布。
-- Latest remaining issue/research: Python Backend 与已发布 2026.09.12.1 只有 4 个脚本 LF/CRLF 差异，归一化后内容完全一致，因此本次不发布伪更新。完整《缎带英雄》尚未跑完；全量 1262 项矩阵未整体重跑，但 RTX VSR 18 项、HDR 15 项、编码专项和低分辨率边界回归均通过。
+- Latest objective/state (2026-09-14 11:35): 1.3.1 已正式发布并完成 GitHub、ModelScope Releases、Models 备用 EXE、RTX runtime 与新增模型的远端回读。RTX Video 使用 sidecar 处理 + 3FUI FFmpeg 编码架构；低分辨率软件解码上传 D3D11 回退已纳入发布版。
+- Latest files/Git: 主仓库发布提交 `4f7b97b` 已推送 `fork/main`，GitHub 标签 `v1.3.1` 指向该提交；sidecar `c83df0f` 和标签 `videoenhancer-runtime-2026.09.14.1` 已推个人 fork。发布后记录待提交。实机已部署 1.3.1 EXE（SHA-256 `4B1A2DFD…`）、DLL（`8A712E26…`）和 sidecar（`F66B15E0…`）。
+- Latest remaining issue/research: Python Backend 保持 2026.09.12.1（仅 LF/CRLF 差异，无语义变化）。完整《缎带英雄》长任务需用户重新启动；全量 1262 项矩阵本轮未整体重跑，但受影响的 RTX VSR 18 项、HDR 15 项、编码、选流及低分辨率专项均通过。
 
 - Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
-- Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出。前序 UHQ/B 帧、PTS、MP4 尾帧和 P010 修复保持。模型补全、手动安装包等前序成果保持。
+- Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
 - Likely next agent: user / ZCode / Codex
-- Next recommended step: 用户重启 3FUI 后以原参数重新运行完整《缎带英雄》任务；后续处理低分辨率 D3D11VA 预检/回退，并视需要重跑完整 1262 项矩阵。发布类待办（模型镜像、manual-install.zip）保持；当前两个仓库改动多，应分别整理提交。
+- Next recommended step: 用户重启 3FUI 后以原参数重新运行完整《缎带英雄》任务；如需最高覆盖率再重跑完整 1262 项矩阵。发布后记录提交并推送后两个仓库应保持干净。
 
 ## Active TODO
 
@@ -22,7 +22,7 @@ Updated by: Codex
   - Owner: Codex
   - Status: sidecar 只执行 RTX VSR/HDR 与 D3D11 帧下载，通过命名管道输出 rawvideo；插件从宿主目录/PATH 解析 FFmpeg，并用原始 `ffmpeg-settings` 编码、映射和封装。历史 `bin\ffmpeg` 仅兼容回退。
   - Verification: sidecar 89/89；编码专项 8/8；RTX VSR 18/18；HDR 15/15；真实 1080p/72 帧样本按用户 UHQ/P010 参数输出 4K Main10 72/72。
-  - Blockers: 完整电影待用户实跑；低分辨率 D3D11VA 限制另行处理。
+  - Blockers: 仅完整电影待用户长时间实跑；低分辨率 D3D11VA 限制已处理。
   - Relevant files: `cli/Program.cs`, `cli/RtxVideoBackendClient.cs`, `cli/tests/rtx_nvenc_regression.py`, `cli/tests/gpu_matrix_runner.py`; sidecar `backend/src/jobs/job_types.h`, `backend/src/api/json_dto.cpp`, `backend/src/video/ffmpeg/ffmpeg_transcode_pipeline.cpp`, corresponding unit tests.
 
 - [x] Task: 验证 PR1 文件框与 RTX HDR UI 修复。
@@ -1957,3 +1957,15 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: CLI Release/publish 0 错误（2 个既有 CA1416）；sidecar 构建成功，单测 89/89；Python py_compile 与模型规则 5/5；`git diff --check` 对本轮相关文件通过。安装版环境检查在 sidecar 报告其 NVENC 路径不可用时仍正确通过 D3D11/SDK/VSR/HDR。编码专项 8/8：HQ/UHQ × MKV/MP4 均 4/4、无 DISCARD、DTS 单调；RTX + libx264、libx265 Main10、libsvtav1 10-bit 均 4/4；3 音轨选 1、3 字幕选 2；H.264/P010 门禁不留文件。RTX VSR 专项 18/18、HDR 相 15/15。最终安装版以《缎带英雄》1080p/72 帧真实短样本和用户 p7/uhq/vbr/cq28/P010 参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧；控制台确认使用 PATH 的 FFmpeg 8.1.2 full build。
 - Deployment: `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\videoenhancer.exe` SHA-256 `53B624BF86CD840A4256BB8113856ACDAFC7DFEFE25C17F0D8B58CF4B310B27A`；`bin\rtx-video\runtime\vsr_backend.exe` SHA-256 `2BDD5DDE81D40DD5BD7C0C37B15AD4CAAE91D908589AC1A250883E50F8705B8E`。最终备份：`%TEMP%\videoenhancer-before-framepipe-final-20260914-094237` 与 `%TEMP%\videoenhancer-before-framepipe-cli-final-20260914-101246.exe`。测试证据：`%TEMP%\rtx-framepipe-upscale-full-20260914-095844`、`%TEMP%\rtx-framepipe-hdr-full-20260914-095135`、`%TEMP%\rtx-nvenc-regression-4ftk02si`、`%TEMP%\ribbon-framepipe-final-20260914-102128.mkv`。
 - Remaining/Git: 完整电影尚未运行；低于约 240p 的 D3D11VA 限制未处理；全量 1262 项未整体重跑。主仓库 `main@30d5782` 与 sidecar `rve-patches@ea16ce4` 均已 pull、远端无新增，但工作树均非干净且包含前序改动；未提交、未推送、未发布，建议分仓库整理提交后再切换工具或设备。
+
+### 2026-09-14 11:35 - Codex
+
+- Request: 检查前序提交、Backend/模型更新和 RTX 后端推送方式，补做低分辨率 D3D11VA 修复，并发布 1.3.1；用户确认从本版起把手动安装 ZIP 纳入正式发布资产。
+- Low-resolution fix: sidecar 对宽度小于 320 或高度小于 240 的输入改用软件解码；yuv420p/yuv420p10le 在进程内手动打包为 NV12/P010 后上传 D3D11，避免引入缺少 `libgcc_s_seh-1.dll` 的 swscale 依赖。192×128 8/10-bit、320×180 和 320×240 边界均通过，内容哈希确认 4 帧互不相同。
+- RTX distribution: 定制源码提交 `c83df0f` 推送至 `maxzrb/RTXHDR-RTXVSR:rve-patches`，标签 `videoenhancer-runtime-2026.09.14.1`；运行包 `Bin/rtx-video/RTXVideoRuntime_20260914.7z` 为 22,480,820 bytes、SHA-256 `bccc9493…`，已上传 ModelScope Models 并回读一致。5 个新增 PTH 权重也已逐项上传并核对远端 SHA-256。
+- Backend audit: 下载并校验当前远端完整包 `python_20260912.7z`（2,790,833,001 bytes，SHA-256 `e607456f…`）；安装目录仅 4 个同步脚本存在 LF/CRLF 差异，归一化后逐字相同，因此 Backend 保持 2026.09.12.1，不发布空版本。
+- Release tooling: `cli/build.ps1` 严格生成手动安装 ZIP，缺插件 DLL 直接失败；`release/build-modelscope-release.ps1` 将版本化 ZIP 作为第三个 GitHub/ModelScope Release 资产；发布文档和门禁口径同步。历史工作树中将更新源改为 ModelScope 首选的未记录改动与既定 GitHub 权威策略冲突，已恢复 GitHub 首选/ModelScope 兜底且未进入提交。
+- Verification: sidecar 89/89；Python 23/23；发布门禁 5/5；Backend 更新器 6/6；已安装 1.3.1 专项通过 HQ/UHQ×MKV/MP4、libx264/libx265/libsvtav1、精确 map、H.264/P010 门禁及 192×128 libx264/libx265。GitHub/ModelScope 五个公开下载 URL 均 HTTP 200。
+- Release: GitHub `v1.3.1` 正式发布，标签指向 `4f7b97b`；EXE 16,967,002 bytes / `4b1a2dfd…`，手动 ZIP 13,975,563 bytes / `715d2eca…`，stable.json 1,259 bytes / `9f3ff72e…`。ModelScope Releases 清单和两个资产、Models 备用 EXE均回读一致。
+- Deployment: 实机 3FUI 已部署 1.3.1；部署前备份在 `%TEMP%\videoenhancer-1.3.1-before-deploy-20260914-1132`。完整电影未代为启动，用户需按原参数重新开始任务。
+- Git: 主仓库功能/发布提交 `4f7b97b` 与 sidecar `c83df0f` 均已推送；发布后记录将另做收尾提交。全量 1262 项矩阵未整体重跑，作为已记录的剩余风险。
