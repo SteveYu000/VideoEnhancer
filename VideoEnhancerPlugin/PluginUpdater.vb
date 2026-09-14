@@ -141,12 +141,27 @@ Namespace videoenhancer
             Return manifest
         End Function
 
-        Public Shared Function HasUpdate(manifest As UpdateManifest) As Boolean
+        Public Shared Function HasUpdate(manifest As UpdateManifest,
+                                         Optional installedExePath As String = "") As Boolean
             Dim currentVersion As Version = Nothing
             Dim remoteVersion As Version = Nothing
             If Not Version.TryParse(PluginVersion.Current, currentVersion) OrElse
                 Not Version.TryParse(manifest.Version, remoteVersion) Then Return False
-            Return remoteVersion > currentVersion
+            If remoteVersion > currentVersion Then Return True
+            If remoteVersion < currentVersion OrElse manifest.Package Is Nothing OrElse
+                String.IsNullOrWhiteSpace(installedExePath) OrElse Not File.Exists(installedExePath) Then Return False
+
+            ' 同版本覆盖发布时，旧构建也必须能收到更新；新构建安装后哈希一致，不会循环提示。
+            Try
+                Dim info As New FileInfo(installedExePath)
+                If info.Length <> manifest.Package.Size Then Return True
+                Using stream = File.OpenRead(installedExePath)
+                    Dim actual = Convert.ToHexString(SHA256.HashData(stream))
+                    Return Not actual.Equals(manifest.Package.Sha256, StringComparison.OrdinalIgnoreCase)
+                End Using
+            Catch
+                Return False
+            End Try
         End Function
 
         Public Shared Async Function DownloadPackageAsync(

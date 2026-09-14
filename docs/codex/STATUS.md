@@ -6,8 +6,8 @@ Updated by: Codex
 ## Current Snapshot
 
 - Latest objective/state (2026-09-14 12:36): 用户明确要求覆盖 1.3.2 增加 RTX runtime 删除。已实现专用右键卸载、安装后自动清理所有日期归档，以及“清理归档”覆盖 RTX 专用目录；正在准备同版本覆盖发布。
-- Latest files/Git: 本轮修改 `cli/Program.cs`、`VideoEnhancerPlugin/PluginPanel.vb`、契约测试和发布说明，尚待提交。既有 `v1.3.2` 当前仍指向 `efed38a`，覆盖发布时将显式移动标签并替换双源资产。
-- Latest remaining issue/research: 需完成 1.3.2 正式构建、提交推送、标签/资产覆盖、远端回读和本机部署。Backend 2026.09.12.1 与 RTX runtime 包内容 2026.09.14.1 均不变。
+- Latest files/Git: RTX 专用卸载提交 `cb489a6` 已推送；覆盖版双源资产曾更新到该提交，但随后发现同版本自动更新判断缺口，现又修改 `PluginUpdater.vb` 与发布说明，待最终提交并再次覆盖资产。
+- Latest remaining issue/research: 需把同版本哈希更新判断纳入最终构建，再次移动标签、覆盖双源资产并回读部署。Backend 2026.09.12.1 与 RTX runtime 包内容 2026.09.14.1 均不变。
 
 - Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
@@ -1989,5 +1989,5 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 
 - Request: 用户指出 RTX runtime 最容易积累多个版本，不接受 1.3.2 禁止删除运行组件的过度保守策略，并明确要求直接覆盖 1.3.2。
 - Decision/implementation: RTX 条目右键改为“卸载 RTX 运行组件”；CLI 对严格匹配的 `Bin/rtx-video/RTXVideoRuntime_YYYYMMDD.7z` 走专用卸载，删除整个专用 `bin/rtx-video`，但保留 `bin` 公共层的 README/许可证及其他工具。卸载前拒绝正在运行的 `vsr_backend` 和任意重解析点。成功下载安装 runtime 后自动删除该目录内所有日期归档；`--clean-download-archives` 也增加同一专用目录顶层扫描。
-- Verification: LakeUI 插件与 CLI 构建通过（仅 2 条既有 CA1416），Python 24/24、发布门禁 5/5。隔离测试确认清理命令删除 20260912/20260914 两个归档但保留 sidecar；专用卸载删除 RTX 根目录且不影响相邻 `bin/ffmpeg`；真实 ModelScope 22,480,820-byte runtime 完成下载、解压并自动删除归档，sidecar 950,272 bytes 存在。
+- Verification: LakeUI 插件与 CLI 构建通过（仅 2 条既有 CA1416），Python 24/24、发布门禁 5/5。隔离测试确认清理命令删除 20260912/20260914 两个归档但保留 sidecar；专用卸载删除 RTX 根目录且不影响相邻 `bin/ffmpeg`；真实 ModelScope 22,480,820-byte runtime 完成下载、解压并自动删除归档，sidecar 950,272 bytes 存在。反射行为测试确认同版本同哈希 `HasUpdate=False`、同版本大小变化 `HasUpdate=True`。
 - Git/next: 本轮改动未提交；下一步以 Backend 2026.09.12.1 同目录审计构建 1.3.2，提交后按用户授权移动同版本标签、clobber GitHub 资产并覆盖 ModelScope，再完成回读与部署。

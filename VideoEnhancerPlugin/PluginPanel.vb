@@ -596,7 +596,8 @@ Namespace videoenhancer
             If Not silent Then ShowStatus("正在从 GitHub 检查更新…", False)
             Try
                 Dim manifest = Await PluginUpdater.FetchLatestManifestAsync()
-                If Not PluginUpdater.HasUpdate(manifest) Then
+                If Not PluginUpdater.HasUpdate(manifest,
+                    PluginConfig.ResolveInstalledExePath(_config.ExePath)) Then
                     If Not silent Then ShowStatus("当前已是最新稳定版 v" & PluginVersion.Current, False)
                     Return
                 End If

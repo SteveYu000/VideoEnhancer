@@ -95,6 +95,10 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("DeleteRtxVideoRuntimeArchives", program)
         self.assertIn("RTX_RUNTIME_DELETE_COMPLETE", program)
         self.assertIn("IsRtxVideoRuntimeDownload", panel)
+        updater = (ROOT / "VideoEnhancerPlugin" / "PluginUpdater.vb").read_text(encoding="utf-8")
+        self.assertIn("Optional installedExePath As String", updater)
+        self.assertIn("info.Length <> manifest.Package.Size", updater)
+        self.assertIn("SHA256.HashData(stream)", updater)
 
     def test_builtin_catalog_remains_valid_json(self):
         document = json.loads((ROOT / "cli" / "model-capabilities.json").read_text(encoding="utf-8"))
