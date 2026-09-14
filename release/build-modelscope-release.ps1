@@ -1,7 +1,8 @@
 ﻿param(
     # 留空时自动读取 VideoEnhancerPlugin\PluginVersion.vb 的 Current（版本唯一人工维护点）。
     [string]$Version = '',
-    [string]$HostBin = 'C:\Users\maxzr\AppData\Local\Temp\FFmpegFreeUI.6.1.39.extracted',
+    # 留空时由 vbproj 读取 VIDEOENHANCER_HOST_BIN 或自动发现相邻 FFmpegFreeUI 输出。
+    [string]$HostBin = '',
     [string]$Notes = '',
     [string]$NotesFile = '',
     [string]$BackendBaseRoot = '',
@@ -98,10 +99,12 @@ if ($projectText -notmatch ('<Version>' + [regex]::Escape($Version) + '</Version
     throw "VideoEnhancer.csproj 与发布版本 $Version 不一致；CLI 版本唯一来源是 csproj 的 <Version>"
 }
 
-& (Join-Path $root 'VideoEnhancerPlugin\build.ps1') -HostBin $HostBin -SkipInstall
-if ($LASTEXITCODE -ne 0) { throw '插件构建失败' }
-& (Join-Path $root 'cli\build.ps1')
-if ($LASTEXITCODE -ne 0) { throw 'CLI 发布失败' }
+$publishArguments = @('publish', $cliProject, '-c', 'Release')
+if (-not [string]::IsNullOrWhiteSpace($HostBin)) {
+    $publishArguments += "-p:HostBin=$HostBin"
+}
+& dotnet @publishArguments
+if ($LASTEXITCODE -ne 0) { throw '插件与 CLI 发布失败' }
 
 # 端到端校验：CLI 版本号运行时读自 csproj 程序集元数据，必须与发布版本一致。
 $cliExe = Join-Path $root 'videoenhancer.exe'

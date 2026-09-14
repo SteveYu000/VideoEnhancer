@@ -20,18 +20,18 @@ New-Item -ItemType Directory -Force -Path (Join-Path $archive 'VideoEnhancerPlug
 # 1) 主程序产物（CLI 单文件 + 3FUI 插件 DLL）
 Copy-Item -LiteralPath (Join-Path $base 'videoenhancer.exe') -Destination (Join-Path $archive 'videoenhancer.exe') -Force
 Copy-Item -LiteralPath (Join-Path $base 'videoenhancer.3fui.dll') -Destination (Join-Path $archive 'videoenhancer.3fui.dll') -Force
-$layoutJson = Join-Path $base 'PluginDesigner\bin\Release\net10.0-windows\videoenhancer-layout.json'
+Copy-Item -LiteralPath (Join-Path $base 'VideoEnhancer.slnx') -Destination (Join-Path $archive 'VideoEnhancer.slnx') -Force
+$layoutJson = Join-Path $base 'videoenhancer-layout.json'
 if (Test-Path -LiteralPath $layoutJson) {
     Copy-Item -LiteralPath $layoutJson -Destination (Join-Path $archive 'videoenhancer-layout.json') -Force
 }
 
-# 2) CLI 源码（Program.cs / README / build.ps1 / csproj）
+# 2) CLI 源码（Program.cs / README / csproj）
 Copy-Item -LiteralPath (Join-Path $base 'cli\Program.cs') -Destination (Join-Path $archive 'cli\Program.cs') -Force
 Copy-Item -LiteralPath (Join-Path $base 'cli\README.md') -Destination (Join-Path $archive 'cli\README.md') -Force
-Copy-Item -LiteralPath (Join-Path $base 'cli\build.ps1') -Destination (Join-Path $archive 'cli\build.ps1') -Force
 Copy-Item -LiteralPath (Join-Path $base 'cli\VideoEnhancer.csproj') -Destination (Join-Path $archive 'cli\VideoEnhancer.csproj') -Force
 
-# 3) 插件源码 + 构建脚本 + 说明
+# 3) 插件源码、项目文件与说明
 $pluginSrc = Join-Path $base 'VideoEnhancerPlugin'
 $pluginDst = Join-Path $archive 'VideoEnhancerPlugin'
 Get-ChildItem -LiteralPath $pluginSrc -File | ForEach-Object {
