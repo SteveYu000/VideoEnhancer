@@ -4109,6 +4109,9 @@ Namespace videoenhancer
                 End If
                 If category.Equals("Bin", StringComparison.OrdinalIgnoreCase) Then
                     Dim archiveName = Path.GetFileNameWithoutExtension(suffix)
+                    If archiveName.StartsWith("RTXVideoRuntime_", StringComparison.OrdinalIgnoreCase) Then
+                        Return File.Exists(Path.Combine(coreRoot, "bin", "rtx-video", "runtime", "vsr_backend.exe"))
+                    End If
                     If archiveName.Equals("ffmpeg", StringComparison.OrdinalIgnoreCase) Then
                         Return File.Exists(Path.Combine(coreRoot, "bin", "ffmpeg", "ffmpeg.exe"))
                     End If
@@ -4147,6 +4150,14 @@ Namespace videoenhancer
                 Case Else
                     Return False
             End Select
+        End Function
+
+        Private Shared Function IsRtxVideoRuntimeDownload(relativePath As String) As Boolean
+            If String.IsNullOrWhiteSpace(relativePath) Then Return False
+            Dim normalized = relativePath.Replace("\"c, "/"c).TrimStart("/"c)
+            Return Regex.IsMatch(normalized,
+                "^Bin/rtx-video/RTXVideoRuntime_\d{8}\.7z$",
+                RegexOptions.IgnoreCase Or RegexOptions.CultureInvariant)
         End Function
 
         Private Shared Function FrameInterpolationArchiveMarkerPath(coreRoot As String, relativePath As String) As String
@@ -4218,7 +4229,9 @@ Namespace videoenhancer
         End Sub
 
         Private Shared Function CanDeleteDownloadedModel(entry As DownloadModelEntry) As Boolean
-            If entry Is Nothing OrElse Not entry.Installed OrElse IsDownloadArchive(entry.RelativePath) Then Return False
+            If entry Is Nothing OrElse Not entry.Installed Then Return False
+            If IsRtxVideoRuntimeDownload(entry.RelativePath) Then Return True
+            If IsDownloadArchive(entry.RelativePath) Then Return False
             Dim category = DownloadCategory(entry.RelativePath)
             Return Not category.Equals("Backend", StringComparison.OrdinalIgnoreCase) AndAlso
                 Not category.Equals("Bin", StringComparison.OrdinalIgnoreCase) AndAlso
@@ -4255,7 +4268,9 @@ Namespace videoenhancer
             CloseDownloadModelContextMenu()
             Dim menu As New ModernContextMenu()
             ConfigureModelMenu(menu, reserveIconColumn:=False)
-            Dim deleteItem As New ModernContextMenu.ModernMenuItem("删除本地模型") With {
+            Dim actionText = If(IsRtxVideoRuntimeDownload(entry.RelativePath),
+                "卸载 RTX 运行组件", "删除本地模型")
+            Dim deleteItem As New ModernContextMenu.ModernMenuItem(actionText) With {
                 .CloseOnClick = True,
                 .ForeColor = UiDanger
             }
@@ -4273,10 +4288,16 @@ Namespace videoenhancer
 
         Private Async Sub DeleteDownloadedModelWithConfirmation(entry As DownloadModelEntry)
             If Not CanDeleteDownloadedModel(entry) Then Return
-            Dim question = "确定删除本地模型“" & entry.Name & "”？" & Environment.NewLine &
-                "只删除本机 models 目录中的这个模型文件，不影响 ModelScope 远端资源。" &
+            Dim isRtxRuntime = IsRtxVideoRuntimeDownload(entry.RelativePath)
+            Dim dialogTitle = If(isRtxRuntime, "卸载 RTX 运行组件", "删除本地模型")
+            Dim question = If(isRtxRuntime,
+                "确定卸载本机 RTX 运行组件？" & Environment.NewLine &
+                    "将删除 bin\rtx-video 中的 sidecar、运行库和所有历史日期归档；" &
+                    "不影响 ModelScope 远端资源，可随时重新下载。",
+                "确定删除本地模型“" & entry.Name & "”？" & Environment.NewLine &
+                    "只删除本机 models 目录中的这个模型文件，不影响 ModelScope 远端资源。") &
                 Environment.NewLine & Environment.NewLine & "路径：" & entry.RelativePath
-            If Not ShowLakeConfirm(Me, question, "删除本地模型", defaultYes:=False) Then Return
+            If Not ShowLakeConfirm(Me, question, dialogTitle, defaultYes:=False) Then Return
 
             Dim exePath = DownloadExecutablePath()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
@@ -4294,7 +4315,8 @@ Namespace videoenhancer
                 SetDownloadRowState(entry.RelativePath, "未安装", "下载", UiTextMuted, UiAccent)
                 RefreshDownloadGroupSummary(DownloadCategory(entry.RelativePath))
                 RefreshModels()
-                ShowStatus("已删除本地模型：" & entry.Name, False)
+                ShowStatus(If(isRtxRuntime,
+                    "已卸载 RTX 运行组件", "已删除本地模型：" & entry.Name), False)
             Finally
                 SetDownloadActionsEnabled(True)
             End Try

@@ -88,9 +88,13 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn('case "--delete-download-model"', program)
         self.assertIn("DeleteDownloadedModel", program)
         self.assertIn("_downloadList.MouseDown", panel)
-        self.assertIn('ModernContextMenu.ModernMenuItem("删除本地模型")', panel)
+        self.assertIn('"卸载 RTX 运行组件", "删除本地模型"', panel)
         self.assertIn("CanDeleteDownloadedModel", panel)
         self.assertIn("RunDownloadedModelDelete", panel)
+        self.assertIn("DeleteRtxVideoRuntime", program)
+        self.assertIn("DeleteRtxVideoRuntimeArchives", program)
+        self.assertIn("RTX_RUNTIME_DELETE_COMPLETE", program)
+        self.assertIn("IsRtxVideoRuntimeDownload", panel)
 
     def test_builtin_catalog_remains_valid_json(self):
         document = json.loads((ROOT / "cli" / "model-capabilities.json").read_text(encoding="utf-8"))

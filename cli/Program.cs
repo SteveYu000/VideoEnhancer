@@ -2487,6 +2487,12 @@ internal static class Program
                 Directory.CreateDirectory(Path.GetDirectoryName(marker)!);
                 File.WriteAllText(marker, model.Path, Encoding.UTF8);
             }
+            if (IsRtxVideoRuntimeArchivePath(model.Path))
+            {
+                // runtime 已完整解压并通过下载哈希校验，日期归档不再参与运行；
+                // 清掉所有历史归档，避免每次更新都在本地累积一份约 22MB 的包。
+                DeleteRtxVideoRuntimeArchives();
+            }
         }
         Console.WriteLine("DOWNLOAD_COMPLETE|" + destination);
         return 0;
@@ -2495,6 +2501,9 @@ internal static class Program
     private static int DeleteDownloadedModel(string requestedPath)
     {
         var normalized = requestedPath.Replace('\\', '/').TrimStart('/');
+        if (IsRtxVideoRuntimeArchivePath(normalized))
+            return DeleteRtxVideoRuntime();
+
         var slash = normalized.IndexOf('/');
         if (slash <= 0) return Fail("模型路径无效：" + normalized, 1);
         var category = normalized[..slash];
@@ -2522,6 +2531,46 @@ internal static class Program
         catch (Exception ex)
         {
             return Fail("删除本地模型失败：" + ex.Message, 1);
+        }
+    }
+
+    private static int DeleteRtxVideoRuntime()
+    {
+        var root = Path.GetFullPath(Path.Combine(CoreRoot, "bin", "rtx-video"));
+        if (!Directory.Exists(root))
+            return Fail("本地 RTX 运行组件不存在", 1);
+
+        var sidecars = Process.GetProcessesByName("vsr_backend");
+        try
+        {
+            if (sidecars.Length > 0)
+                return Fail("RTX 运行组件正在被视频任务使用，请先停止任务再卸载", 1);
+        }
+        finally
+        {
+            foreach (var process in sidecars) process.Dispose();
+        }
+
+        try
+        {
+            var entries = Directory.EnumerateFileSystemEntries(
+                    root,
+                    "*",
+                    SearchOption.AllDirectories)
+                .Prepend(root);
+            foreach (var entry in entries)
+            {
+                if ((File.GetAttributes(entry) & FileAttributes.ReparsePoint) != 0)
+                    return Fail("RTX 运行组件目录包含符号链接或联接点，已拒绝卸载", 1);
+            }
+
+            Directory.Delete(root, recursive: true);
+            Console.WriteLine("RTX_RUNTIME_DELETE_COMPLETE|Bin/rtx-video");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            return Fail("卸载 RTX 运行组件失败：" + ex.Message, 1);
         }
     }
 
@@ -2604,6 +2653,38 @@ internal static class Program
             || extension.Equals(".tar", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static bool IsRtxVideoRuntimeArchivePath(string path)
+    {
+        var normalized = path.Replace('\\', '/').TrimStart('/');
+        return Regex.IsMatch(
+            normalized,
+            @"^Bin/rtx-video/RTXVideoRuntime_\d{8}\.7z$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
+
+    private static void DeleteRtxVideoRuntimeArchives()
+    {
+        var root = Path.Combine(CoreRoot, "bin", "rtx-video");
+        if (!Directory.Exists(root)) return;
+        foreach (var archive in Directory.EnumerateFiles(
+                     root,
+                     "RTXVideoRuntime_*.7z",
+                     SearchOption.TopDirectoryOnly))
+        {
+            try
+            {
+                File.Delete(archive);
+                Console.WriteLine("CLEAN_DELETED|" + archive);
+            }
+            catch (Exception ex)
+            {
+                // 运行组件已经安装成功，杀毒软件短暂占用归档不应把整个下载任务判为失败；
+                // 用户仍可稍后使用“清理归档”重试。
+                Console.Error.WriteLine("[警告] RTX runtime 归档暂时无法清理：" + ex.Message);
+            }
+        }
+    }
+
     private static int CleanDownloadArchives()
     {
         var deleted = 0;
@@ -2619,6 +2700,14 @@ internal static class Program
         var pythonRoot = Path.Combine(CoreRoot, "python");
         if (Directory.Exists(pythonRoot))
             candidates.AddRange(Directory.EnumerateFiles(pythonRoot, "*", SearchOption.TopDirectoryOnly));
+        // RTX runtime 使用日期版本归档，解压后不再需要；只扫描专用目录顶层，
+        // 不触碰 bin 中 FFmpeg、mkvtoolnix 等其他运行组件。
+        var rtxVideoRoot = Path.Combine(CoreRoot, "bin", "rtx-video");
+        if (Directory.Exists(rtxVideoRoot))
+            candidates.AddRange(Directory.EnumerateFiles(
+                rtxVideoRoot,
+                "RTXVideoRuntime_*.7z",
+                SearchOption.TopDirectoryOnly));
 
         foreach (var file in candidates.Where(IsArchiveFile).Distinct(StringComparer.OrdinalIgnoreCase))
         {
@@ -6503,9 +6592,9 @@ internal static class Program
         writer.WriteLine("        默认仓库：" + DefaultModelScopeDataset);
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_DATASET 可覆盖仓库 ID；私有仓库需设置");
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN（不会写入配置文件）");
-        writer.WriteLine("  --clean-download-archives  递归清理 models 与 python 中的下载压缩包");
+        writer.WriteLine("  --clean-download-archives  清理 models、python 与 RTX runtime 专用目录中的下载压缩包");
         writer.WriteLine("  --download-model <路径>  用内置 aria2-next 下载镜像文件；压缩包自动用内置 7-Zip-zstd 解压");
-        writer.WriteLine("  --delete-download-model <路径>  删除模型下载页中的本地单文件模型；拒绝 Backend、运行组件、插件和压缩包");
+        writer.WriteLine("  --delete-download-model <路径>  删除本地单文件模型；RTX runtime 路径执行专用卸载，其他组件与压缩包拒绝删除");
         writer.WriteLine("  --backend-status [--json]  检查后端版本、可用增量补丁和预计下载大小");
         writer.WriteLine("  --update-backend  按最小补丁链事务更新后端；失败或中断时自动回滚");
         writer.WriteLine("  --force-backend-full  配合 --update-backend，跳过增量补丁并下载完整修复包");
