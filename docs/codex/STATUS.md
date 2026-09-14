@@ -1,13 +1,13 @@
 # Project Status
 
-Last updated: 2026-09-14 12:05
+Last updated: 2026-09-14 12:22
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-14 12:05): 1.3.2 发布候选已完成：模型下载页只展示最新 Backend/RTX runtime 版本化归档，已安装的本地单文件模型支持右键确认删除；远端历史包不删除，Backend/插件/运行组件/共享压缩包禁止右键删除。
-- Latest files/Git: 1.3.2 源码、版本与发布说明尚待提交；正式候选产物已生成。远端实时列表为 RTX runtime 1 项（20260914）和 Backend 完整包 1 项（20260912）。仓库内有策略未允许自动清理的隔离测试夹具 `.tmp-delete-model-1-3-2/`，不纳入提交。
-- Latest remaining issue/research: 发布门禁已通过，下一步提交推送、发布 GitHub/ModelScope、远端回读并部署 1.3.2。Python Backend 保持 2026.09.12.1，RTX runtime 保持 2026.09.14.1；完整《缎带英雄》长任务仍由用户重新启动。
+- Latest objective/state (2026-09-14 12:22): 1.3.2 已正式发布并部署：模型下载页只展示最新 Backend/RTX runtime 版本化归档，已安装的本地单文件模型支持右键确认删除；远端历史包不删除，Backend/插件/运行组件/共享压缩包禁止右键删除。
+- Latest files/Git: 发布提交 `efed38a` 已推送 `fork/main`，远端标签 `v1.3.2` 指向该提交；GitHub 与 ModelScope 三路 EXE 回读一致。本机已部署 EXE `b50694d3…`、DLL `60cd7495…`。仓库内仍有隔离测试夹具 `.tmp-delete-model-1-3-2/`，不纳入提交。
+- Latest remaining issue/research: Python Backend 保持 2026.09.12.1，RTX runtime 保持 2026.09.14.1，无需重复下载；完整《缎带英雄》长任务仍由用户重新启动。下一步仅提交发布记录并推送。
 
 - Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
@@ -1977,3 +1977,10 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: CLI 与 LakeUI 5.1 插件构建通过（仅 2 条既有 CA1416）；Python 24/24；实时 ModelScope 列表共 96 项，RTX 仅 `RTXVideoRuntime_20260914.7z`、Backend 仅 `python_20260912.7z`；隔离夹具中 PTH 删除成功、RTX runtime 删除返回退出码 1；正式 1.3.2 构建、安装器、更新器、发布门禁 5/5、Backend 更新器 6/6 均通过，Backend 审计 0/0/0。
 - Candidate assets: EXE 16,969,237 bytes / SHA-256 `6adeb303d46c45dd9d1e88c0fbce9b7afd61097de437c7386a00806e2aa383d9`；手动 ZIP 13,978,769 bytes / `b428b158305c8ef150b8da18a333400c48cde7b94c5de67ed35c9e6ab3555a9a`；stable.json 752 bytes / `bed2759333f2295066af9c5501705fb5dacd82afc1eabf2028d4b10a6b57a6a5`。
 - Git/next: 源码与记录尚未提交；下一步提交并推送 `fork/main`，创建 v1.3.2、同步 ModelScope 两个数据集、回读资产后部署。`.tmp-delete-model-1-3-2/` 为隔离夹具，递归清理命令被执行策略拒绝，必须排除提交。
+
+### 2026-09-14 12:22 - Codex
+
+- Release: `efed38a` 已推送 `fork/main`；GitHub `v1.3.2` 标签指向该提交并含 EXE、手动安装 ZIP、stable.json。ModelScope Releases 与 Models 备用 EXE 已同步；Backend/RTX runtime 无变化，未重复上传。
+- Remote verification: GitHub EXE、ModelScope Releases EXE、Models EXE 均为 16,969,234 bytes / SHA-256 `b50694d34811ae5846690e2e3977bb90c5157857ce9ed413cc44ebf429751191`；ModelScope ZIP 为 13,978,728 bytes / `82e0e74ef891e0e1f713c70b97312f3dbe6be1498b6852c5578785fba9c07487`，与 GitHub API digest 一致；双源 stable.json 为 752 bytes / `9c5c5b1a8e66994a4fd8989f331fe882265e774bad69e53bd43f4806b395cdab`。GitHub ZIP 直连一次因网络超时未完整下载，但 API digest 与 ModelScope 回读足以交叉确认。
+- Deployment: 确认 3FUI/videoenhancer/FFmpeg/sidecar 均未运行后部署 1.3.2；安装 EXE 与发布哈希一致，DLL 4,660,224 bytes / `60cd7495b41562e74f6f2144117d8e0b2e20a28bfa72b992269769e4dd7bb272`。旧文件备份在 `%TEMP%\videoenhancer-1.3.2-before-deploy-20260914-1222`。
+- Git: 发布记录待收尾提交；`.tmp-delete-model-1-3-2/` 是已完成验证的测试夹具，清理被执行策略拒绝，因此工作树会保留该未跟踪目录，不能误提交。
