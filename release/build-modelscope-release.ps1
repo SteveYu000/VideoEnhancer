@@ -27,8 +27,10 @@
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
+$artifactsRoot = Join-Path $root 'Artifacts'
 $pluginVersionFile = Join-Path $root 'VideoEnhancerPlugin\PluginVersion.vb'
 $cliProject = Join-Path $root 'cli\VideoEnhancer.csproj'
+$solution = Join-Path $root 'VideoEnhancer.slnx'
 
 if (-not [string]::IsNullOrWhiteSpace($NotesFile)) {
     if (-not (Test-Path -LiteralPath $NotesFile -PathType Leaf)) {
@@ -99,7 +101,7 @@ if ($projectText -notmatch ('<Version>' + [regex]::Escape($Version) + '</Version
     throw "VideoEnhancer.csproj 与发布版本 $Version 不一致；CLI 版本唯一来源是 csproj 的 <Version>"
 }
 
-$publishArguments = @('publish', $cliProject, '-c', 'Release')
+$publishArguments = @('publish', $solution, '-c', 'Release')
 if (-not [string]::IsNullOrWhiteSpace($HostBin)) {
     $publishArguments += "-p:HostBin=$HostBin"
 }
@@ -107,10 +109,10 @@ if (-not [string]::IsNullOrWhiteSpace($HostBin)) {
 if ($LASTEXITCODE -ne 0) { throw '插件与 CLI 发布失败' }
 
 # 端到端校验：CLI 版本号运行时读自 csproj 程序集元数据，必须与发布版本一致。
-$cliExe = Join-Path $root 'videoenhancer.exe'
+$cliExe = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
 $cliVersion = (& $cliExe --version) | Select-Object -First 1
 if (("$cliVersion").Trim() -ne $Version) {
-    throw "videoenhancer.exe 报告版本 '$cliVersion'，与发布版本 $Version 不一致"
+    throw "VideoEnhancerInstaller.exe 报告版本 '$cliVersion'，与发布版本 $Version 不一致"
 }
 
 $distRoot = Join-Path $PSScriptRoot 'dist\modelscope'
@@ -118,12 +120,12 @@ $versionRoot = Join-Path $distRoot (Join-Path 'releases' $Version)
 if (Test-Path -LiteralPath $versionRoot) { Remove-Item -LiteralPath $versionRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $versionRoot | Out-Null
 
-$exeSource = Join-Path $root 'videoenhancer.exe'
+$exeSource = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
 if (-not (Test-Path -LiteralPath $exeSource)) { throw "缺少发布文件：$exeSource" }
 $packageName = "VideoEnhancer-$Version-win-x64.exe"
 $packagePath = Join-Path $versionRoot $packageName
 Copy-Item -LiteralPath $exeSource -Destination $packagePath -Force
-$manualSource = Join-Path $root 'videoenhancer-manual-install.zip'
+$manualSource = Join-Path $artifactsRoot 'VideoEnhancer.zip'
 if (-not (Test-Path -LiteralPath $manualSource -PathType Leaf)) {
     throw "缺少手动安装包：$manualSource"
 }

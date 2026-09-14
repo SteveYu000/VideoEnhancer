@@ -13,24 +13,26 @@
 ## 构建（单文件）
 
 要求：.NET 10 SDK，以及用于编译插件的 3FUI `FFmpegFreeUI.dll`、LakeUI 5.1+。
-CLI 通过项目引用自动先构建插件，再把插件 DLL 嵌入单文件 EXE：
+只发布未改名的 CLI 单文件时，CLI 会通过项目引用自动先构建并嵌入插件：
 
 ```powershell
 dotnet publish .\VideoEnhancer.csproj -c Release `
   "-p:HostBin=C:\path\to\3FUI\bin"
 ```
 
-也可以从仓库根目录构建整个解决方案：
+产物仅为标准发布目录中的
+`bin\Release\net10.0-windows\win-x64\publish\videoenhancer.exe`，不会生成
+`Artifacts`。需要安装程序和手动安装包时，在仓库根目录发布整个解决方案：
 
 ```powershell
-dotnet build .\VideoEnhancer.slnx -c Release `
+dotnet publish .\VideoEnhancer.slnx -c Release `
   "-p:HostBin=C:\path\to\3FUI\bin"
 ```
 
 `HostBin` 可改用环境变量 `VIDEOENHANCER_HOST_BIN`；相邻 FFmpegFreeUI
-Release/Debug 输出也会被自动发现。发布产物是自包含单文件，并自动复制为仓库根目录
-`videoenhancer.exe`，同时生成包含 DLL、EXE 和安装说明的
-`videoenhancer-manual-install.zip`。作为 3FUI 插件使用时放在
+Release/Debug 输出也会被自动发现。解决方案发布后在仓库根目录的 `Artifacts` 中生成
+`VideoEnhancerInstaller.exe`，以及包含 DLL、EXE 和安装说明的
+`VideoEnhancer.zip`。作为 3FUI 插件使用时，ZIP 内的程序放在
 `Plugin\videoenhancer` 中运行，并与 `bin\`、`python\`、`models\` 同级。
 
 ## 用法

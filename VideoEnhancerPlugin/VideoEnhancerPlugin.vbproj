@@ -3,6 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
+    <IsPublishable>false</IsPublishable>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
     <AssemblyName>videoenhancer</AssemblyName>
@@ -15,7 +16,8 @@
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
     <Deterministic>true</Deterministic>
     <VideoEnhancerRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VideoEnhancerRepositoryRoot>
-    <PluginArtifactPath>$(VideoEnhancerRepositoryRoot)videoenhancer.3fui.dll</PluginArtifactPath>
+    <PluginArtifactDirectory>$(MSBuildThisFileDirectory)obj\plugin-artifact\</PluginArtifactDirectory>
+    <PluginArtifactPath>$(PluginArtifactDirectory)videoenhancer.3fui.dll</PluginArtifactPath>
   </PropertyGroup>
 
   <PropertyGroup>
@@ -61,11 +63,12 @@
              Text="3FUI HostBin: $(HostBin)；LakeUI: %(_LakeUIIdentity.Version)" />
   </Target>
 
-  <Target Name="CopyPluginArtifact" AfterTargets="Build">
+  <Target Name="StagePluginArtifact" AfterTargets="Build">
+    <MakeDir Directories="$(PluginArtifactDirectory)" />
     <Copy SourceFiles="$(TargetPath)"
           DestinationFiles="$(PluginArtifactPath)"
           SkipUnchangedFiles="true" />
-    <Message Importance="high" Text="插件产物：$(PluginArtifactPath)" />
+    <Message Importance="high" Text="插件暂存产物：$(PluginArtifactPath)" />
 
     <MakeDir Directories="$(PluginInstallDir)"
              Condition="'$(PluginInstallDir)' != ''" />
@@ -78,9 +81,9 @@
              Condition="'$(PluginInstallDir)' != ''" />
   </Target>
 
-  <Target Name="CleanPluginArtifact" AfterTargets="Clean"
-          Condition="Exists('$(PluginArtifactPath)')">
-    <Delete Files="$(PluginArtifactPath)" />
+  <Target Name="CleanPluginArtifact" AfterTargets="Clean">
+    <RemoveDir Directories="$(PluginArtifactDirectory)"
+               Condition="Exists('$(PluginArtifactDirectory)')" />
   </Target>
 
 </Project>

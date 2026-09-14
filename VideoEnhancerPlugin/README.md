@@ -185,8 +185,10 @@ dotnet build .\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj -c Release `
 
 项目会生成
 `VideoEnhancerPlugin\bin\Release\net10.0-windows\videoenhancer.dll`，
-并自动复制为仓库根目录的 `videoenhancer.3fui.dll`。附加
-`"-p:PluginInstallDir=C:\path\to\3FUI\Plugin"` 可直接复制到测试宿主。
+CLI 发布时会将其作为 `videoenhancer.3fui.dll` 放入
+`Artifacts\VideoEnhancer.zip`。附加
+`"-p:PluginInstallDir=C:\path\to\3FUI\Plugin"` 可直接复制到测试宿主，
+不需要从 ZIP 中手动提取。
 
 `HostBin` 目录必须包含 `FFmpegFreeUI.dll` 和 `LakeUI.dll`。它也可以通过
 `VIDEOENHANCER_HOST_BIN` 环境变量提供；仓库与 FFmpegFreeUI 并列时会自动查找

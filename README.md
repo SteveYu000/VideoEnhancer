@@ -207,17 +207,28 @@ dotnet build .\VideoEnhancer.slnx -c Release `
   "-p:HostBin=C:\path\to\FFmpegFreeUI\bin\Release\net10.0-windows10.0.26100.0"
 ```
 
-发布自包含单文件 EXE：
+生成安装程序和手动安装包：
 
 ```powershell
-dotnet publish .\cli\VideoEnhancer.csproj -c Release `
+dotnet publish .\VideoEnhancer.slnx -c Release `
   "-p:HostBin=C:\path\to\FFmpegFreeUI\bin\Release\net10.0-windows10.0.26100.0"
 ```
 
 `HostBin` 也可以通过环境变量 `VIDEOENHANCER_HOST_BIN` 设置。若仓库与
 `FFmpegFreeUI` 并列放置，项目会优先自动发现相邻的 Release、其次 Debug 输出。
-插件构建后复制为根目录 `videoenhancer.3fui.dll`；CLI 发布后复制为根目录
-`videoenhancer.exe`，并生成 `videoenhancer-manual-install.zip`。只构建插件时可直接运行：
+CLI 发布完成后会在仓库根目录的 `Artifacts` 中生成：
+
+```text
+Artifacts\
+  VideoEnhancerInstaller.exe
+  VideoEnhancer.zip
+```
+
+`VideoEnhancer.zip` 已包含手动安装所需的插件 DLL、CLI EXE 和安装说明。
+如果只需要未改名的 CLI 单文件，可执行
+`dotnet publish .\cli\VideoEnhancer.csproj -c Release`，产物位于 CLI 的标准
+`bin\Release\net10.0-windows\win-x64\publish` 目录，不会生成 `Artifacts`。
+只构建插件时可直接运行：
 
 ```powershell
 dotnet build .\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj -c Release `
