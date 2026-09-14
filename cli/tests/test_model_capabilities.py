@@ -17,7 +17,7 @@ class ModelCapabilityManifestTests(unittest.TestCase):
 
     def test_manifest_is_unique_and_valid(self):
         self.assertEqual(1, self.document["schemaVersion"])
-        self.assertEqual(93, len(self.models))
+        self.assertEqual(98, len(self.models))
         names = [item["model"].casefold() for item in self.models]
         self.assertEqual(len(names), len(set(names)))
         for item in self.models:
@@ -29,8 +29,8 @@ class ModelCapabilityManifestTests(unittest.TestCase):
     def test_backend_coverage_matches_release_matrix(self):
         expected = {
             "ncnn": 21,
-            "cuda": 42,
-            "tensorrt": 36,
+            "cuda": 47,
+            "tensorrt": 41,
             "onnx": 28,
             "flashvsr": 1,
             "basicvsrpp": 1,
@@ -56,6 +56,7 @@ class ModelCapabilityManifestTests(unittest.TestCase):
             "PTH/AniScale2-ESRGAN-i16-110K-2x": 2,
             "PTH/AniScale2-ESRGAN-Lite-i16-165K-2x": 2,
             "PTH/APISR-RRDB-GAN-generator-2x": 2,
+            "PTH/RealESRGAN_x2plus": 4,
         }
         self.assertEqual(expected, constrained)
 
@@ -68,6 +69,10 @@ class ModelCapabilityManifestTests(unittest.TestCase):
         self.assertIn('String.Equals(_config.Backend, "onnx", StringComparison.OrdinalIgnoreCase)', plugin)
         self.assertIn('String.Equals(backend, "onnx", StringComparison.OrdinalIgnoreCase)', queue_hook)
         self.assertIn('sb.Append(" -tile-size ")', queue_hook)
+
+    def test_known_cuda_fp16_unstable_models_force_fp32(self):
+        program = PROGRAM_SOURCE.read_text(encoding="utf-8-sig")
+        self.assertIn('@"SwinIR|GRL|DAT2|AniToon-RPLKSRL"', program)
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、RTX VSR / RTX Video HDR、图片推理和批处理能力。
 原作者：[user-wing](https://github.com/user-Wing/VideoEnhancer)
 
-当前版本：**1.3.0（2026-09-12 已发布）**
+当前版本：**1.3.1（待发布）**
 
 ## 功能概览
 
@@ -27,7 +27,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 本体镜像：[VideoEnhancer-Releases](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases)
 - 模型镜像：[VideoEnhancer-Models](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Models)
 
-每个 Release 只发布一个版本化 EXE 和更新清单：
+每个 Release 发布版本化 EXE、手动安装 ZIP 和更新清单：
 
 ```text
 VideoEnhancer-<version>-win-x64.exe
@@ -41,7 +41,7 @@ stable.json
 - Windows 10 1809 或更高版本，64 位系统。`videoenhancer.exe` 是自包含单文件，不要求另外安装 .NET。
 - 安装 [Microsoft Visual C++ 2015–2022 x64 运行库](https://aka.ms/vc14/vc_redist.x64.exe)。便携 Python 及部分推理扩展仍依赖该运行库。
 - CUDA/PyTorch、TensorRT、FlashVSR 和 BasicVSR++ 需要 NVIDIA GPU。当前后端包含 CUDA 13.0，建议使用 580 或更高版本的 NVIDIA 驱动。
-- RTX VSR / RTX Video HDR 需要 NVIDIA RTX 20 系及以上显卡、555 或更高版本的驱动和 RTX Video sidecar 运行组件。运行组件包发布在模型仓库 `Bin/rtx-video/RTXVideoRuntime_20260912.7z`，解压到 `Plugin\videoenhancer\bin\` 并重启 3FUI 即可。sidecar 基于 [`Zennmn/RTXHDR-RTXVSR`](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）定制；包内 NVIDIA SDK 运行库为 NVIDIA 专有组件，按其许可随显卡环境使用。
+- RTX VSR / RTX Video HDR 需要 NVIDIA RTX 20 系及以上显卡、555 或更高版本的驱动和 RTX Video sidecar 运行组件。运行组件包发布在模型仓库 `Bin/rtx-video/RTXVideoRuntime_20260914.7z`，解压到 `Plugin\videoenhancer\bin\` 并重启 3FUI 即可。sidecar 基于 [`Zennmn/RTXHDR-RTXVSR`](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）定制；本项目修改源码发布在 [`maxzrb/RTXHDR-RTXVSR`](https://github.com/maxzrb/RTXHDR-RTXVSR)，包内 NVIDIA SDK 运行库为 NVIDIA 专有组件，按其许可随显卡环境使用。
 - NCNN 使用显卡驱动提供的 Vulkan 运行时，不要求安装 Vulkan SDK；显卡和驱动至少需要支持 Vulkan 1.0。
 
 插件的环境检查会针对当前选择的后端实际导入关键模块并检查 GPU/执行提供程序，不会加载模型或 TensorRT Engine。若新机器不能运行，请先按检查结果处理 VC++ 运行库或显卡驱动问题。

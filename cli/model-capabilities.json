@@ -89,10 +89,15 @@
     { "model": "PTH/ModernSpanimation-V2-2x", "scale": 2, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/ModernSpanimation-V3-2x", "scale": 2, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/Nomos8k-span-otf-4x-medium-NoUpdateParams", "scale": 4, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] },
+    { "model": "PTH/Nomos8k-span-otf-4x-strong", "scale": 4, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/Nomos8k-span-otf-4x-weak-NoUpdateParams", "scale": 4, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/OpenProteus-Compact-i2-2x-70K", "scale": 2, "architecture": "Compact", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/realesr-animevideov3", "scale": 4, "architecture": "RealESRGAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/RealESRGAN-General-x4v3", "scale": 4, "architecture": "RealESRGAN", "backends": ["cuda", "tensorrt"] },
+    { "model": "PTH/RealESRGAN_x2plus", "scale": 2, "architecture": "RealESRGAN", "inputMultiple": 4, "backends": ["cuda", "tensorrt"] },
+    { "model": "PTH/RealESRGAN_x4plus", "scale": 4, "architecture": "RealESRGAN", "backends": ["cuda", "tensorrt"] },
+    { "model": "PTH/RealESRGAN_x4plus_anime_6B", "scale": 4, "architecture": "RealESRGAN", "backends": ["cuda", "tensorrt"] },
+    { "model": "PTH/realesr-general-wdn-x4v3", "scale": 4, "architecture": "RealESRGAN", "backends": ["cuda", "tensorrt"] },
     { "model": "PTH/Sudo-Shuffle-Span-2x-NoUpdateParams", "scale": 2, "architecture": "SPAN", "backends": ["cuda", "tensorrt"] }
   ]
 }

@@ -138,12 +138,16 @@ internal sealed class RtxVideoBackendClient : IDisposable
         string codec,
         string container,
         string audioMode,
+        string pixelFormat,
         IReadOnlyDictionary<string, string> encoderOptions,
+        IReadOnlyList<int>? audioStreamIndices,
+        IReadOnlyList<int>? subtitleStreamIndices,
+        string? framePipePath,
         Func<bool> stopRequested,
         Func<bool>? isPaused,
         CancellationToken token)
     {
-        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, codec, container, audioMode, encoderOptions));
+        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, codec, container, audioMode, pixelFormat, encoderOptions, audioStreamIndices, subtitleStreamIndices, framePipePath));
         using var create = await _http.PostAsync("/api/jobs", createContent, token);
         var createText = await create.Content.ReadAsStringAsync(token);
         if (!create.IsSuccessStatusCode) return new JobResult(false, false, ApiError(createText, create.StatusCode), Array.Empty<string>());
@@ -246,7 +250,9 @@ internal sealed class RtxVideoBackendClient : IDisposable
 
     private static string CreateJobJson(string inputPath, string outputPath, bool vsrEnabled,
         int quality, double scale, bool hdrEnabled, string codec, string container, string audioMode,
-        IReadOnlyDictionary<string, string> encoderOptions)
+        string pixelFormat, IReadOnlyDictionary<string, string> encoderOptions,
+        IReadOnlyList<int>? audioStreamIndices, IReadOnlyList<int>? subtitleStreamIndices,
+        string? framePipePath)
     {
         using var stream = new MemoryStream();
         using (var writer = new Utf8JsonWriter(stream))
@@ -275,8 +281,12 @@ internal sealed class RtxVideoBackendClient : IDisposable
             writer.WriteStartObject();
             writer.WriteString("container", container);
             writer.WriteString("videoCodec", codec);
-            writer.WriteString("audioMode", audioMode);
-            writer.WriteString("subtitleMode", "copy-compatible");
+            writer.WriteString("audioMode", string.IsNullOrWhiteSpace(framePipePath) ? audioMode : "none");
+            writer.WriteString("pixelFormat", pixelFormat);
+            writer.WriteString("subtitleMode", string.IsNullOrWhiteSpace(framePipePath) ? "copy-compatible" : "none");
+            if (!string.IsNullOrWhiteSpace(framePipePath)) writer.WriteString("framePipePath", framePipePath);
+            WriteOptionalIndexArray(writer, "audioStreamIndices", audioStreamIndices);
+            WriteOptionalIndexArray(writer, "subtitleStreamIndices", subtitleStreamIndices);
             if (encoderOptions.Count > 0)
             {
                 writer.WritePropertyName("encoderOptions");
@@ -291,6 +301,15 @@ internal sealed class RtxVideoBackendClient : IDisposable
             writer.WriteEndObject();
         }
         return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static void WriteOptionalIndexArray(Utf8JsonWriter writer, string name, IReadOnlyList<int>? values)
+    {
+        if (values is null) return;
+        writer.WritePropertyName(name);
+        writer.WriteStartArray();
+        foreach (var value in values) writer.WriteNumberValue(value);
+        writer.WriteEndArray();
     }
 
     private static StringContent JsonContent(string json) => new(json, Encoding.UTF8, "application/json");

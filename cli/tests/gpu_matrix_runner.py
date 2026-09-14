@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""在真实 RVE 环境中运行可断点恢复的代表模型 GPU 兼容矩阵。"""
+"""在真实 RVE 环境中运行可断点恢复的 GPU 兼容矩阵（1.3.0 三相结构）。
+
+相结构：
+- upscale 超分相：全部已安装超分模型单测 + RTX VSR（目标/质量/容器/补帧组合）。
+- interp 补帧相：全部已安装补帧模型单测 + 超分×补帧代表全网格 + 后端类代表层 + 抽样交叉层。
+- hdr HDR 相：RTX HDR 组合（纯 HDR / VSR+HDR / 三步骤 / 传统超分+HDR）+ 门禁预期失败用例。
+"""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import json
@@ -14,12 +21,22 @@ import sys
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
+# 终态：PASS / 显存不足跳过 / RTX 环境缺失跳过。其余状态视为失败，可被 --rerun-failed 重跑。
+TERMINAL_STATUSES = {"PASS", "SKIP_OOM", "SKIP_ENV"}
 
-TERMINAL_STATUSES = {"PASS", "SKIP_OOM"}
+FLOWS = ("upscale-first", "interp-first")
+
+# RTX/HDR 相共用的夹具尺寸：大于 GIMM 的 320x240 下限，且对 NGX VSR/NVENC 是常规尺寸。
+RTX_WIDTH, RTX_HEIGHT = 640, 360
+RTX_TARGETS = ("1x", "1.5x", "2x", "3x", "4x", "1080p", "1440p", "2160p")
+RTX_BASE_QUALITY = 3
+RTX_QUALITY_SWEEP = (1, 2, 4)
+
+RTX_ORDER_BANNER = "先补帧，再 RTX 超分"
 
 
 if os.name == "nt":
@@ -50,8 +67,10 @@ class InterpModel:
 @dataclass(frozen=True)
 class MatrixCase:
     case_id: str
-    phase: str
+    phase: str  # upscale | interp | hdr
+    layer: str  # single | rtx | rep-grid | class-rep | sampled | hdr-combo | rule
     flow: str
+    kind: str  # traditional | rtx | rule
     upscale_backend: str
     upscale_category: str
     upscale_model: str
@@ -63,6 +82,13 @@ class MatrixCase:
     expected_width: int
     expected_height: int
     expected_frames: int
+    rtx_target: str = "-"
+    rtx_quality: int = 0
+    rtx_hdr: bool = False
+    container: str = "mkv"
+    no_upscale: bool = False
+    pq_input: bool = False
+    expected_error: str = ""
 
 
 # 每类架构选择一个代表；Base/Union 因加载结构不同，分别保留。
@@ -139,13 +165,35 @@ UPSCALE_MODELS: list[UpscaleModel] = [
 ]
 
 
+# HDR 相传统超分 + RTX HDR 的代表后端：每类取 UPSCALE_MODELS 首个模型。
+HDR_TRADITIONAL_REPS = ("ncnn", "cuda", "tensorrt", "onnx")
+
+
 def stable_case_id(parts: Iterable[str]) -> str:
     raw = "\0".join(parts).encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
+def rtx_output_dims(target: str, src_w: int, src_h: int) -> tuple[int, int]:
+    """复刻 CLI ResolveRtxScale：倍率档直接生效；分辨率档以短边为基准并 clamp 到 1~4。"""
+    if target.endswith("x"):
+        scale = float(target[:-1])
+    else:
+        requested = {"1080p": 1080, "1440p": 1440, "2160p": 2160, "4320p": 4320}[target]
+        scale = requested / min(src_w, src_h)
+    scale = max(1.0, min(4.0, scale))
+    out_w = max(2, round(src_w * scale))
+    out_h = max(2, round(src_h * scale))
+    if out_w % 2:
+        out_w += 1
+    if out_h % 2:
+        out_h += 1
+    return out_w, out_h
+
+
 def make_case(
     phase: str,
+    layer: str,
     flow: str,
     upscale: UpscaleModel | None,
     interp: InterpModel | None,
@@ -162,10 +210,8 @@ def make_case(
         # FlashVSR 以 320 宽输入拆成多个 tile 时的显存峰值。
         width, height = 256, 192
     scale = upscale.scale if upscale else 1
-    expected_frames = 7 if interp else 4
     parts = [
-        phase,
-        flow,
+        phase, layer, flow,
         upscale.backend if upscale else "none",
         upscale.name if upscale else "none",
         interp.backend if interp else "none",
@@ -175,7 +221,9 @@ def make_case(
     return MatrixCase(
         case_id=stable_case_id(parts),
         phase=phase,
+        layer=layer,
         flow=flow,
+        kind="traditional",
         upscale_backend=upscale.backend if upscale else "-",
         upscale_category=upscale.category if upscale else "-",
         upscale_model=upscale.name if upscale else "-",
@@ -186,7 +234,116 @@ def make_case(
         height=height,
         expected_width=width * scale,
         expected_height=height * scale,
-        expected_frames=expected_frames,
+        expected_frames=7 if interp else 4,
+    )
+
+
+def make_rtx_case(
+    phase: str,
+    layer: str,
+    flow: str,
+    *,
+    target: str = "-",
+    quality: int = 0,
+    hdr: bool = False,
+    interp: InterpModel | None = None,
+    container: str = "mkv",
+    no_upscale: bool = False,
+) -> MatrixCase:
+    """RTX VSR / 纯 RTX HDR 用例：upscale_backend 固定 rtxvsr，模型固定 "-"。"""
+    width = max(RTX_WIDTH, interp.width if interp else 0)
+    height = max(RTX_HEIGHT, interp.height if interp else 0)
+    if target != "-" and not no_upscale:
+        expected_w, expected_h = rtx_output_dims(target, width, height)
+    else:
+        expected_w, expected_h = width, height
+    parts = [
+        phase, layer, flow,
+        "rtxvsr", target, str(quality), "hdr" if hdr else "sdr",
+        container, "noup" if no_upscale else "up",
+        interp.backend if interp else "none",
+        interp.name if interp else "none",
+        f"{width}x{height}",
+    ]
+    return MatrixCase(
+        case_id=stable_case_id(parts),
+        phase=phase,
+        layer=layer,
+        flow=flow,
+        kind="rtx",
+        upscale_backend="rtxvsr",
+        upscale_category="RTX VSR" if not no_upscale else "-",
+        upscale_model="-",
+        interp_backend=interp.backend if interp else "-",
+        interp_category=interp.category if interp else "-",
+        interp_model=interp.name if interp else "-",
+        width=width,
+        height=height,
+        expected_width=expected_w,
+        expected_height=expected_h,
+        expected_frames=7 if interp else 4,
+        rtx_target=target,
+        rtx_quality=quality,
+        rtx_hdr=hdr,
+        container=container,
+        no_upscale=no_upscale,
+    )
+
+
+def make_hdr_traditional_case(
+    upscale: UpscaleModel,
+    interp: InterpModel | None,
+) -> MatrixCase:
+    """传统后端超分（可选补帧）+ RTX HDR：RVE 出无损 HEVC 中间文件，sidecar 做 TrueHDR 编码。
+
+    夹具强制 RTX 尺寸（640x360）：sidecar 的 D3D11VA 硬解在过小分辨率上建解码器失败
+    （实测 192x128 失败、320x240 起正常），传统相默认的 96x64 夹具不适用于 RTX 类用例。
+    """
+    base = make_case(
+        "hdr", "hdr-combo", "rtx-hdr",
+        replace(upscale, width=RTX_WIDTH, height=RTX_HEIGHT),
+        replace(interp, width=RTX_WIDTH, height=RTX_HEIGHT) if interp else None,
+    )
+    parts = [
+        base.phase, base.layer, base.flow,
+        base.upscale_backend, base.upscale_model,
+        base.interp_backend, base.interp_model,
+        f"{base.width}x{base.height}", "rtx-hdr",
+    ]
+    return replace(base, case_id=stable_case_id(parts), kind="rtx", rtx_hdr=True)
+
+
+def make_rule_case(
+    flow: str,
+    *,
+    expected_error: str,
+    pq: bool = False,
+    container: str = "mkv",
+    width: int = 96,
+    height: int = 64,
+) -> MatrixCase:
+    """门禁用例：命令应当被 CLI 拒绝，错误信息需命中 expected_error。"""
+    parts = ["hdr", "rule", flow, f"{width}x{height}", container, "pq" if pq else "sdr"]
+    return MatrixCase(
+        case_id=stable_case_id(parts),
+        phase="hdr",
+        layer="rule",
+        flow=flow,
+        kind="rule",
+        upscale_backend="-",
+        upscale_category="-",
+        upscale_model="-",
+        interp_backend="-",
+        interp_category="-",
+        interp_model="-",
+        width=width,
+        height=height,
+        expected_width=0,
+        expected_height=0,
+        expected_frames=0,
+        container=container,
+        pq_input=pq,
+        expected_error=expected_error,
     )
 
 
@@ -223,34 +380,149 @@ def single_upscale_model(backend: str, model_name: str) -> UpscaleModel:
 
 
 def single_interp_model(backend: str, model_name: str) -> InterpModel:
-    width, height = (320, 240) if model_name.startswith("GIMM-VFI/") else (96, 64)
-    return InterpModel(backend, "全部已安装模型", model_name, width, height)
+    is_gimm = model_name.startswith("GIMM-VFI/")
+    # GIMM 在 96x64 会产生 NaN，全部 GIMM 模型一律使用 320x240 夹具。
+    width, height = (320, 240) if is_gimm else (96, 64)
+    return InterpModel(backend, "GIMM" if is_gimm else "全部已安装模型", model_name, width, height)
+
+
+def rtx_cases() -> list[MatrixCase]:
+    """超分相的 RTX VSR 用例：目标/质量/容器扫描 + 与全部补帧代表的组合。"""
+    cases: list[MatrixCase] = []
+    for target in RTX_TARGETS:
+        cases.append(make_rtx_case("upscale", "rtx", "rtx", target=target, quality=RTX_BASE_QUALITY))
+    for quality in RTX_QUALITY_SWEEP:
+        cases.append(make_rtx_case("upscale", "rtx", "rtx", target="2x", quality=quality))
+    # mkv 是基线容器；mp4 验证直写；webm 与 NVENC h264 不兼容，放进门禁相验证原生报错。
+    cases.append(make_rtx_case(
+        "upscale", "rtx", "rtx", target="2x", quality=RTX_BASE_QUALITY, container="mp4"))
+    for interp in INTERP_MODELS:
+        cases.append(make_rtx_case(
+            "upscale", "rtx", "rtx-interp", target="2x", quality=RTX_BASE_QUALITY, interp=interp))
+    return cases
+
+
+def rule_cases() -> list[MatrixCase]:
+    """门禁用例：CLI 必须拒绝非法组合，且错误信息可被用户读懂。"""
+    return [
+        make_rule_case("rule-pq-ncnn", pq=True, expected_error=r"PQ/HLG|16-bit"),
+        make_rule_case("rule-pq-rtx-hdr", pq=True, expected_error=r"已经是 PQ/HLG"),
+        make_rule_case("rule-no-upscale-invalid", expected_error=r"未启用补帧或 RTX HDR"),
+        make_rule_case("rule-segment-interp", expected_error=r"不能同时启用运动补帧或 RTX HDR"),
+        make_rule_case("rule-pq-segment", pq=True, expected_error=r"PQ/HLG HDR 输入"),
+        make_rule_case(
+            "rule-webm-native", container="webm", width=RTX_WIDTH, height=RTX_HEIGHT,
+            expected_error=r"Only VP8 or VP9 or AV1|[Cc]ould not write (?:the webm )?header"),
+    ]
+
+
+def hdr_cases() -> list[MatrixCase]:
+    """HDR 相：RTX HDR 功能组合 + 门禁预期失败。"""
+    cases: list[MatrixCase] = [
+        # 纯 RTX HDR：超分关闭，输入直通 sidecar 做 SDR→HDR 映射（等效 1x）。
+        make_rtx_case("hdr", "hdr-combo", "rtx-hdr-only", hdr=True, no_upscale=True),
+        # RTX VSR + HDR 同步执行。
+        make_rtx_case("hdr", "hdr-combo", "rtx", target="2x", quality=RTX_BASE_QUALITY, hdr=True),
+        # RTX VSR + 补帧 + HDR 三步骤（CLI 强制先补帧后 RTX）。
+        make_rtx_case(
+            "hdr", "hdr-combo", "rtx-interp", target="2x", quality=RTX_BASE_QUALITY, hdr=True,
+            interp=INTERP_MODELS[1]),
+    ]
+    chosen: dict[str, UpscaleModel] = {}
+    for model in UPSCALE_MODELS:
+        if model.backend in HDR_TRADITIONAL_REPS and model.backend not in chosen:
+            chosen[model.backend] = model
+    for backend in HDR_TRADITIONAL_REPS:
+        cases.append(make_hdr_traditional_case(chosen[backend], None))
+    # 传统超分 + 补帧 + RTX HDR 多步骤：cuda/tensorrt 各一组。
+    for backend in ("cuda", "tensorrt"):
+        cases.append(make_hdr_traditional_case(chosen[backend], INTERP_MODELS[1]))
+    cases.extend(rule_cases())
+    return cases
 
 
 def generate_cases(
     available_upscale: dict[str, list[str]],
     available_interp: dict[str, list[str]],
+    sample_extra: int,
 ) -> list[MatrixCase]:
     cases: list[MatrixCase] = []
-    for backend, model_names in available_interp.items():
-        for model_name in model_names:
-            cases.append(make_case(
-                "single", "single-interp", None,
-                single_interp_model(backend, model_name),
-            ))
+
+    # ── upscale 超分相：全部已安装模型单测 + RTX 用例 ──
     for backend, model_names in available_upscale.items():
         for model_name in model_names:
             cases.append(make_case(
-                "single", "single-upscale",
+                "upscale", "single", "single-upscale",
                 single_upscale_model(backend, model_name), None,
             ))
+    cases.extend(rtx_cases())
 
+    # ── interp 补帧相：全部已安装模型单测 + 组合分层 ──
+    for backend, model_names in available_interp.items():
+        for model_name in model_names:
+            cases.append(make_case(
+                "interp", "single", "single-interp",
+                None, single_interp_model(backend, model_name),
+            ))
+
+    # 代表全网格：超分代表 × 补帧代表 × 两种顺序。
     for upscale in UPSCALE_MODELS:
         for interp in INTERP_MODELS:
-            phase = "same" if upscale.backend == interp.backend else "cross"
-            for flow in ("upscale-first", "interp-first"):
-                cases.append(make_case(phase, flow, upscale, interp))
-    return cases
+            for flow in FLOWS:
+                cases.append(make_case("interp", "rep-grid", flow, upscale, interp))
+
+    # 后端类代表层：全部已安装补帧模型 × 每类超分后端一个代表 × 两种顺序；
+    # 与代表网格重叠的组合跳过。
+    class_reps: list[UpscaleModel] = []
+    seen_backends: set[str] = set()
+    for model in UPSCALE_MODELS:
+        if model.backend not in seen_backends:
+            class_reps.append(model)
+            seen_backends.add(model.backend)
+    grid_pairs = {
+        (upscale.backend, upscale.name, interp.backend, interp.name)
+        for upscale in UPSCALE_MODELS
+        for interp in INTERP_MODELS
+    }
+    for backend, model_names in available_interp.items():
+        for model_name in model_names:
+            interp = single_interp_model(backend, model_name)
+            for rep in class_reps:
+                if (rep.backend, rep.name, interp.backend, interp.name) in grid_pairs:
+                    continue
+                for flow in FLOWS:
+                    cases.append(make_case("interp", "class-rep", flow, rep, interp))
+
+    # 抽样交叉层：非代表超分模型 × 确定性轮转的补帧代表 × 两种顺序。
+    rep_keys = {(model.backend, model.name) for model in UPSCALE_MODELS}
+    non_rep = sorted(
+        (single_upscale_model(backend, name)
+         for backend, names in available_upscale.items()
+         for name in names),
+        key=lambda model: (model.backend, model.name),
+    )
+    non_rep = [model for model in non_rep if (model.backend, model.name) not in rep_keys]
+    partner_count = max(1, sample_extra)
+    for model in non_rep:
+        # 配对用模型名哈希而不是列表索引：模型库增删时既有配对保持稳定，
+        # 新增模型只会产生自己的增量用例，不会让已跑用例的配对整体失效。
+        digest = hashlib.sha256(model.name.encode("utf-8")).digest()
+        partners = {
+            INTERP_MODELS[digest[offset] % len(INTERP_MODELS)]
+            for offset in range(min(partner_count, len(digest)))
+        }
+        for partner in sorted(partners, key=lambda item: (item.backend, item.name)):
+            for flow in FLOWS:
+                cases.append(make_case("interp", "sampled", flow, model, partner))
+
+    # ── hdr HDR 相 ──
+    cases.extend(hdr_cases())
+
+    # case_id 兜底去重（分层设计理论上已避免重叠）。
+    deduped: dict[str, MatrixCase] = {}
+    for case in cases:
+        deduped.setdefault(case.case_id, case)
+    return list(deduped.values())
 
 
 def run_capture(command: list[str], timeout: int) -> subprocess.CompletedProcess[str]:
@@ -321,21 +593,69 @@ def load_and_validate_catalog(
     return available_upscale, available_interp
 
 
-def ensure_fixture(ffmpeg: Path, fixture_dir: Path, width: int, height: int) -> Path:
+def ensure_fixture(
+    ffmpeg: Path, fixture_dir: Path, width: int, height: int, tag: str = "sdr",
+) -> Path:
+    """tag: sdr=FFV1（RVE 软解）、h264=libx264（sidecar 只能 D3D11VA 硬解）、pq=x265 PQ。"""
     fixture_dir.mkdir(parents=True, exist_ok=True)
-    path = fixture_dir / f"matrix-{width}x{height}-4f.mkv"
+    path = fixture_dir / f"matrix-{tag}-{width}x{height}-4f.mkv"
     if path.exists() and path.stat().st_size > 0:
         return path
-    command = [
-        str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y",
-        "-f", "lavfi", "-i", f"testsrc2=size={width}x{height}:rate=4",
-        "-frames:v", "4", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "yuv420p",
-        str(path),
+    if tag == "h264":
+        # sidecar 强制 D3D11VA 硬解，FFV1 无硬件解码器；RTX 用例输入一律用 h264。
+        command = [
+            str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={width}x{height}:rate=4",
+            "-frames:v", "4", "-c:v", "libx264", "-preset", "ultrafast",
+            "-pix_fmt", "yuv420p",
+            str(path),
+        ]
+        result = run_capture(command, 120)
+        if result.returncode != 0 or not path.exists():
+            raise RuntimeError(f"无法生成测试视频 {path}：{result.stderr.strip()}")
+        return path
+    if tag == "sdr":
+        command = [
+            str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={width}x{height}:rate=4",
+            "-frames:v", "4", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "yuv420p",
+            str(path),
+        ]
+        result = run_capture(command, 120)
+        if result.returncode != 0 or not path.exists():
+            raise RuntimeError(f"无法生成测试视频 {path}：{result.stderr.strip()}")
+        return path
+    # PQ 夹具：10bit + BT.2020/smpte2084 完整色彩标记，供 CLI 的 DetectHdrMode 识别。
+    # 实测本机 ffmpeg：-color_trc 选项会令 mkv 里 transfer 归为 unknown（ffv1 同样丢），
+    # 只有 x265 自带的 -x265-params 写 VUI 后 mkv 才保留 smpte2084；
+    # 因此 x265-params 参数必须独占，不能再叠加 -color_* 选项。生成后自校验 smpte2084。
+    attempts = [
+        ("x265", ["-c:v", "libx265", "-preset", "ultrafast", "-pix_fmt", "yuv420p10le",
+                  "-x265-params", "colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"]),
+        ("ffv1", ["-c:v", "ffv1", "-level", "3", "-pix_fmt", "yuv420p10le",
+                  "-color_primaries", "bt2020", "-color_trc", "smpte2084",
+                  "-colorspace", "bt2020nc"]),
     ]
-    result = run_capture(command, 120)
-    if result.returncode != 0 or not path.exists():
-        raise RuntimeError(f"无法生成测试视频 {path}：{result.stderr.strip()}")
-    return path
+    for label, encoder_args in attempts:
+        trial = fixture_dir / f"matrix-pq-{width}x{height}-4f-{label}.mkv"
+        command = [
+            str(ffmpeg), "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", f"testsrc2=size={width}x{height}:rate=4",
+            "-frames:v", "4", *encoder_args,
+            str(trial),
+        ]
+        result = run_capture(command, 120)
+        if result.returncode != 0 or not trial.exists():
+            trial.unlink(missing_ok=True)
+            continue
+        check = run_capture([str(ffmpeg), "-hide_banner", "-i", str(trial)], 60)
+        if re.search(r"smpte2084", check.stderr + check.stdout, re.I):
+            if path.exists():
+                path.unlink()
+            trial.replace(path)
+            return path
+        trial.unlink(missing_ok=True)
+    raise RuntimeError(f"无法生成带 smpte2084 标记的 PQ 测试视频 {path}")
 
 
 def ffmpeg_settings(output: Path) -> str:
@@ -346,9 +666,67 @@ def ffmpeg_settings(output: Path) -> str:
     )
 
 
-def build_command(exe: Path, case: MatrixCase, source: Path, output: Path) -> list[str]:
+def rtx_ffmpeg_settings(output: Path, *, hdr: bool = False) -> str:
+    """RTX 处理帧交回宿主 FFmpeg；矩阵显式选择与位深匹配的最终编码器。"""
+    escaped = str(output).replace('"', '\\"')
+    encoder = "-c:v hevc_nvenc -pix_fmt p010le" if hdr else "-c:v h264_nvenc"
+    return f"{encoder} \"{escaped}\" -y"
+
+
+def build_rule_command(
+    exe: Path, case: MatrixCase, source: Path, output: Path,
+) -> list[str]:
     command = [str(exe), "-i", str(source)]
-    if case.upscale_model == "-":
+    if case.flow == "rule-pq-ncnn":
+        command.extend(["-backend", "ncnn", "-modelpath", NCNN_UPSCALE[0][1]])
+    elif case.flow == "rule-pq-rtx-hdr":
+        command.extend(["-no-upscale", "-backend", "rtxvsr", "-rtx-hdr"])
+    elif case.flow == "rule-no-upscale-invalid":
+        command.extend(["-no-upscale", "-backend", "ncnn"])
+    elif case.flow == "rule-segment-interp":
+        command.extend([
+            "-backend", "ncnn",
+            "--segments-base64", base64.b64encode(b"[]").decode("ascii"),
+            "-interp-model", INTERP_MODELS[0].name,
+            "-interp-backend", "ncnn",
+        ])
+    elif case.flow == "rule-pq-segment":
+        # 用 cuda 超分后端，避开「ncnn 不支持 HDR 输入」的先触门禁，直击分段门禁本身。
+        command.extend([
+            "-backend", "cuda",
+            "--segments-base64", base64.b64encode(b"[]").decode("ascii"),
+        ])
+    elif case.flow == "rule-webm-native":
+        command.extend([
+            "-backend", "rtxvsr", "-rtx-target", "2x",
+            "-rtx-quality", str(RTX_BASE_QUALITY),
+        ])
+    else:
+        raise ValueError(f"未知门禁用例：{case.flow}")
+    command.extend(["-ffmpeg-settings", rtx_ffmpeg_settings(output, hdr=case.rtx_hdr)])
+    return command
+
+
+def build_command(exe: Path, case: MatrixCase, source: Path, output: Path) -> list[str]:
+    if case.kind == "rule":
+        return build_rule_command(exe, case, source, output)
+    command = [str(exe), "-i", str(source)]
+    if case.kind == "rtx":
+        if case.no_upscale:
+            # 纯 RTX HDR：插件在该场景不传 -backend，CLI 默认 ncnn，超分按 1x 直通 sidecar。
+            command.append("-no-upscale")
+        else:
+            command.extend(["-backend", case.upscale_backend])
+            if case.upscale_model != "-":
+                command.extend(["-modelpath", case.upscale_model])
+            if case.rtx_target != "-":
+                command.extend([
+                    "-rtx-target", case.rtx_target,
+                    "-rtx-quality", str(case.rtx_quality),
+                ])
+        if case.rtx_hdr:
+            command.append("-rtx-hdr")
+    elif case.upscale_model == "-":
         command.extend(["-no-upscale", "-backend", case.interp_backend])
     else:
         command.extend([
@@ -361,11 +739,19 @@ def build_command(exe: Path, case: MatrixCase, source: Path, output: Path) -> li
             "-interp-model", case.interp_model,
             "-interp-factor", "2",
         ])
-    if case.flow in ("upscale-first", "interp-first"):
+        command.extend(["-scene-threshold", "4"])
+        if case.kind == "rtx":
+            # 插件在该场景会传用户设置的顺序；CLI 强制“先补帧，再 RTX 超分”。
+            # 这里传默认 upscale-first，校验强制横幅确实出现。
+            command.extend(["-process-order", "upscale-first"])
+        elif case.upscale_model != "-":
+            command.extend(["-process-order", case.flow])
+    elif case.kind == "traditional" and case.flow in FLOWS:
         command.extend(["-process-order", case.flow])
     command.extend([
         "-scene-threshold", "4",
-        "-ffmpeg-settings", ffmpeg_settings(output),
+        "-ffmpeg-settings",
+        rtx_ffmpeg_settings(output, hdr=case.rtx_hdr) if case.kind in {"rtx", "rule"} else ffmpeg_settings(output),
     ])
     return command
 
@@ -373,7 +759,8 @@ def build_command(exe: Path, case: MatrixCase, source: Path, output: Path) -> li
 def probe_video(ffprobe: Path, output: Path) -> dict[str, int | str]:
     command = [
         str(ffprobe), "-v", "error", "-select_streams", "v:0", "-count_frames",
-        "-show_entries", "stream=width,height,nb_read_frames,nb_frames,avg_frame_rate",
+        "-show_entries",
+        "stream=width,height,nb_read_frames,nb_frames,avg_frame_rate,pix_fmt",
         "-of", "json", str(output),
     ]
     result = run_capture(command, 120)
@@ -390,7 +777,24 @@ def probe_video(ffprobe: Path, output: Path) -> dict[str, int | str]:
         "height": int(stream.get("height") or 0),
         "frames": int(frame_text) if str(frame_text).isdigit() else 0,
         "fps": str(stream.get("avg_frame_rate") or ""),
+        "pix_fmt": str(stream.get("pix_fmt") or ""),
     }
+
+
+def probe_luma_range(ffmpeg: Path, output: Path) -> float:
+    """检查首帧是否退化成纯色；NaN 转 uint8 会被静默写成整帧黑色。"""
+    command = [
+        str(ffmpeg), "-v", "error", "-i", str(output), "-frames:v", "1",
+        "-vf", "signalstats,metadata=print:file=-", "-f", "null", "-",
+    ]
+    result = run_capture(command, 120)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "FFmpeg 内容探测失败")
+    minimum = re.search(r"lavfi\.signalstats\.YMIN=([\d.]+)", result.stdout)
+    maximum = re.search(r"lavfi\.signalstats\.YMAX=([\d.]+)", result.stdout)
+    if not minimum or not maximum:
+        raise RuntimeError("FFmpeg 未返回首帧亮度范围")
+    return float(maximum.group(1)) - float(minimum.group(1))
 
 
 def error_summary(stdout: str, stderr: str) -> str:
@@ -404,11 +808,19 @@ def error_summary(stdout: str, stderr: str) -> str:
 
 
 def timeout_for(case: MatrixCase, default_timeout: int, trt_timeout: int) -> int:
+    if case.kind == "rule":
+        return 180
     if "tensorrt" in (case.upscale_backend, case.interp_backend):
         return trt_timeout
+    if case.kind == "rtx":
+        return max(default_timeout, 600)
     if case.upscale_backend in ("flashvsr", "basicvsrpp"):
         return max(default_timeout, 1200)
     return default_timeout
+
+
+def case_needs_sidecar(case: MatrixCase) -> bool:
+    return case.kind == "rtx" or case.flow == "rule-webm-native"
 
 
 def execute_case(
@@ -420,52 +832,85 @@ def execute_case(
     default_timeout: int,
     trt_timeout: int,
     keep_failed_output: bool,
+    rtx_env_ok: bool,
 ) -> dict[str, object]:
-    fixture = ensure_fixture(ffmpeg, result_dir / "fixtures", case.width, case.height)
+    fixture_tag = "pq" if case.pq_input else ("h264" if case_needs_sidecar(case) else "sdr")
+    fixture = ensure_fixture(
+        ffmpeg, result_dir / "fixtures", case.width, case.height, fixture_tag)
     output_dir = result_dir / "outputs"
     output_dir.mkdir(parents=True, exist_ok=True)
-    output = output_dir / f"{case.case_id}.mkv"
+    output = output_dir / f"{case.case_id}.{case.container}"
     if output.exists():
         output.unlink()
-    command = build_command(exe, case, fixture, output)
+
     started = time.monotonic()
+    command: list[str] = []
     stdout = ""
     stderr = ""
     status = "FAIL_EXIT"
     probe: dict[str, int | str] = {}
     exit_code: int | None = None
-    try:
-        result = run_capture(command, timeout_for(case, default_timeout, trt_timeout))
-        stdout, stderr, exit_code = result.stdout, result.stderr, result.returncode
-        if result.returncode != 0:
+    if case_needs_sidecar(case) and not rtx_env_ok:
+        status = "SKIP_ENV"
+        stderr = "RTX 环境检查未通过，用例跳过"
+    else:
+        command = build_command(exe, case, fixture, output)
+        try:
+            result = run_capture(command, timeout_for(case, default_timeout, trt_timeout))
+            stdout, stderr, exit_code = result.stdout, result.stderr, result.returncode
             combined_output = stderr + "\n" + stdout
-            status = "SKIP_OOM" if re.search(
-                r"CUDA out of memory|torch\.OutOfMemoryError|检测到内存不足",
-                combined_output,
-                re.I,
-            ) else "FAIL_EXIT"
-        elif not output.exists() or output.stat().st_size == 0:
-            status = "FAIL_OUTPUT"
-        else:
-            try:
-                probe = probe_video(ffprobe, output)
-                if probe["width"] != case.expected_width or probe["height"] != case.expected_height:
-                    status = "FAIL_DIMENSIONS"
-                elif probe["frames"] != case.expected_frames:
-                    status = "FAIL_FRAMES"
-                else:
+            if case.kind == "rule":
+                # 门禁用例：预期失败。退出码非零且错误命中期望模式才算通过。
+                if result.returncode == 0:
+                    status = "FAIL_GATE"
+                elif re.search(case.expected_error, combined_output, re.I):
                     status = "PASS"
-            except Exception as exc:  # noqa: BLE001 - 需要把探测失败写入矩阵
-                status = "FAIL_PROBE"
-                stderr += f"\nPROBE ERROR: {exc}"
-    except subprocess.TimeoutExpired as exc:
-        status = "TIMEOUT"
-        stdout = exc.stdout or ""
-        stderr = exc.stderr or ""
-        if isinstance(stdout, bytes):
-            stdout = stdout.decode("utf-8", "replace")
-        if isinstance(stderr, bytes):
-            stderr = stderr.decode("utf-8", "replace")
+                else:
+                    status = "FAIL_GATE_MISMATCH"
+            elif result.returncode != 0:
+                status = "SKIP_OOM" if re.search(
+                    r"CUDA out of memory|torch\.OutOfMemoryError|检测到内存不足",
+                    combined_output,
+                    re.I,
+                ) else "FAIL_EXIT"
+            elif not output.exists() or output.stat().st_size == 0:
+                status = "FAIL_OUTPUT"
+            else:
+                expected_width, expected_height = case.expected_width, case.expected_height
+                if case.kind == "rtx" and case.rtx_target != "-":
+                    # CLI 打印的输出映射是权威基准（含 clamp 后的实际倍率）。
+                    mapping = re.search(
+                        r"\[RTX VSR\] 输出映射：\d+x\d+ × [\d.]+ → (\d+)x(\d+)", stdout)
+                    if mapping:
+                        expected_width, expected_height = (
+                            int(mapping.group(1)), int(mapping.group(2)))
+                try:
+                    probe = probe_video(ffprobe, output)
+                    probe["luma_range"] = probe_luma_range(ffmpeg, output)
+                    if (case.kind == "rtx" and case.upscale_backend == "rtxvsr"
+                            and case.interp_model != "-" and RTX_ORDER_BANNER not in stdout):
+                        status = "FAIL_ORDER"
+                    elif probe["width"] != expected_width or probe["height"] != expected_height:
+                        status = "FAIL_DIMENSIONS"
+                    elif probe["frames"] != case.expected_frames:
+                        status = "FAIL_FRAMES"
+                    elif case.rtx_hdr and "10" not in str(probe.get("pix_fmt", "")):
+                        status = "FAIL_BITDEPTH"
+                    elif float(probe["luma_range"]) < 1.0:
+                        status = "FAIL_CONTENT"
+                    else:
+                        status = "PASS"
+                except Exception as exc:  # noqa: BLE001 - 需要把探测失败写入矩阵
+                    status = "FAIL_PROBE"
+                    stderr += f"\nPROBE ERROR: {exc}"
+        except subprocess.TimeoutExpired as exc:
+            status = "TIMEOUT"
+            stdout = exc.stdout or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", "replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", "replace")
 
     elapsed = round(time.monotonic() - started, 3)
     record: dict[str, object] = {
@@ -477,12 +922,14 @@ def execute_case(
         "actual_height": probe.get("height", 0),
         "actual_frames": probe.get("frames", 0),
         "actual_fps": probe.get("fps", ""),
+        "actual_pix_fmt": probe.get("pix_fmt", ""),
+        "luma_range": probe.get("luma_range", 0),
         "output_bytes": output.stat().st_size if output.exists() else 0,
         "error": error_summary(stdout, stderr) if status != "PASS" else "",
         "command": command,
         "finished_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
-    if status != "PASS":
+    if status != "PASS" and status != "SKIP_ENV":
         log_dir = result_dir / "logs"
         log_dir.mkdir(parents=True, exist_ok=True)
         (log_dir / f"{case.case_id}.log").write_text(
@@ -524,15 +971,18 @@ def markdown_cell(value: object) -> str:
 def write_reports(result_dir: Path, records: dict[str, dict[str, object]], total_cases: int) -> None:
     ordered = sorted(
         records.values(),
-        key=lambda row: (str(row["phase"]), str(row["flow"]), str(row["upscale_backend"]),
-                         str(row["interp_backend"]), str(row["upscale_category"]), str(row["interp_category"])),
+        key=lambda row: (str(row["phase"]), str(row["layer"]), str(row["upscale_backend"]),
+                         str(row["interp_backend"]), str(row["upscale_category"]),
+                         str(row["interp_category"])),
     )
     csv_path = result_dir / "matrix.csv"
     fields = [
-        "case_id", "phase", "flow", "upscale_backend", "upscale_category", "upscale_model",
-        "interp_backend", "interp_category", "interp_model", "status", "exit_code",
+        "case_id", "phase", "layer", "flow", "kind", "upscale_backend", "upscale_category",
+        "upscale_model", "interp_backend", "interp_category", "interp_model",
+        "rtx_target", "rtx_quality", "rtx_hdr", "container", "status", "exit_code",
         "elapsed_seconds", "expected_width", "expected_height", "expected_frames",
-        "actual_width", "actual_height", "actual_frames", "actual_fps", "output_bytes", "error",
+        "actual_width", "actual_height", "actual_frames", "actual_fps", "actual_pix_fmt", "luma_range",
+        "output_bytes", "error",
     ]
     with csv_path.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
@@ -543,29 +993,31 @@ def write_reports(result_dir: Path, records: dict[str, dict[str, object]], total
     groups: dict[tuple[str, str, str, str], Counter[str]] = defaultdict(Counter)
     for row in ordered:
         key = (
-            str(row["phase"]), str(row["flow"]),
+            str(row["phase"]), str(row["layer"]),
             str(row["upscale_backend"]), str(row["interp_backend"]),
         )
         groups[key][str(row["status"])] += 1
 
     summary_lines = [
-        "# GPU 模型兼容性矩阵",
+        "# GPU 模型兼容性矩阵（1.3.0 三相）",
         "",
         f"- 计划用例：{total_cases}",
         f"- 已有结果：{len(ordered)}",
         f"- 通过：{status_counts.get('PASS', 0)}",
         f"- 资源不足跳过：{status_counts.get('SKIP_OOM', 0)}",
+        f"- 环境跳过：{status_counts.get('SKIP_ENV', 0)}",
         f"- 失败/超时：{sum(count for status, count in status_counts.items() if status not in TERMINAL_STATUSES)}",
-        "- 输入：默认 96×64、4 帧；固定输入 ONNX 模型及 GIMM 使用较大低分辨率夹具，均为 4 帧。",
+        "- 输入：传统相默认 96×64、4 帧；固定输入 ONNX 模型及 GIMM 使用较大低分辨率夹具；"
+        f"RTX/HDR 相使用 {RTX_WIDTH}×{RTX_HEIGHT}、4 帧。",
         "",
-        "## 流程通过性",
+        "## 分层通过性",
         "",
-        "| 阶段 | 流程 | 超分后端 | 补帧后端 | 通过 | 跳过 | 失败 | 总数 |",
+        "| 相 | 层级 | 超分后端 | 补帧后端 | 通过 | 跳过 | 失败 | 总数 |",
         "|---|---|---|---|---:|---:|---:|---:|",
     ]
     for key, counts in sorted(groups.items()):
         passed = counts.get("PASS", 0)
-        skipped = counts.get("SKIP_OOM", 0)
+        skipped = counts.get("SKIP_OOM", 0) + counts.get("SKIP_ENV", 0)
         total = sum(counts.values())
         summary_lines.append(
             f"| {key[0]} | {key[1]} | {key[2]} | {key[3]} | {passed} | {skipped} | "
@@ -581,33 +1033,33 @@ def write_reports(result_dir: Path, records: dict[str, dict[str, object]], total
     for status, count in sorted(status_counts.items()):
         summary_lines.append(f"| {status} | {count} |")
     failures = [row for row in ordered if row["status"] not in TERMINAL_STATUSES]
-    skipped = [row for row in ordered if row["status"] == "SKIP_OOM"]
+    skipped = [row for row in ordered if row["status"] in ("SKIP_OOM", "SKIP_ENV")]
     summary_lines.extend([
         "",
-        "## 资源不足跳过项",
+        "## 资源/环境跳过项",
         "",
-        "| ID | 流程 | 超分 | 补帧 | 原因 |",
-        "|---|---|---|---|---|",
+        "| ID | 相/层级 | 超分 | 补帧 | 状态 | 原因 |",
+        "|---|---|---|---|---|---|",
     ])
     for row in skipped:
         summary_lines.append(
-            "| {case_id} | {flow} | {upscale_backend}/{upscale_category} | "
-            "{interp_backend}/{interp_category} | {error} |".format(
+            "| {case_id} | {phase}/{layer} | {upscale_backend}/{upscale_category} | "
+            "{interp_backend}/{interp_category} | {status} | {error} |".format(
                 **{key: markdown_cell(value) for key, value in row.items()}
             )
         )
     if not skipped:
-        summary_lines.append("| - | - | - | - | 暂无 |")
+        summary_lines.append("| - | - | - | - | - | 暂无 |")
     summary_lines.extend([
         "",
         "## 失败项",
         "",
-        "| ID | 流程 | 超分 | 补帧 | 状态 | 错误摘要 |",
+        "| ID | 相/层级 | 超分 | 补帧 | 状态 | 错误摘要 |",
         "|---|---|---|---|---|---|",
     ])
     for row in failures:
         summary_lines.append(
-            "| {case_id} | {flow} | {upscale_backend}/{upscale_category} | "
+            "| {case_id} | {phase}/{layer} | {upscale_backend}/{upscale_category} | "
             "{interp_backend}/{interp_category} | {status} | {error} |".format(
                 **{key: markdown_cell(value) for key, value in row.items()}
             )
@@ -619,12 +1071,12 @@ def write_reports(result_dir: Path, records: dict[str, dict[str, object]], total
     detail_lines = [
         "# GPU 矩阵逐项结果",
         "",
-        "| ID | 阶段 | 流程 | 超分后端/类别 | 补帧后端/类别 | 结果 | 秒 | 输出 | 帧数 |",
-        "|---|---|---|---|---|---|---:|---|---:|",
+        "| ID | 相 | 层级 | 流程 | 超分后端/类别 | 补帧后端/类别 | 结果 | 秒 | 输出 | 帧数 |",
+        "|---|---|---|---|---|---|---|---:|---|---:|",
     ]
     for row in ordered:
         detail_lines.append(
-            f"| {row['case_id']} | {row['phase']} | {row['flow']} | "
+            f"| {row['case_id']} | {row['phase']} | {row['layer']} | {row['flow']} | "
             f"{row['upscale_backend']}/{row['upscale_category']} | "
             f"{row['interp_backend']}/{row['interp_category']} | {row['status']} | "
             f"{row['elapsed_seconds']} | {row['actual_width']}×{row['actual_height']} | "
@@ -656,14 +1108,14 @@ def main() -> int:
     parser.add_argument(
         "--exe",
         type=Path,
-        default=Path(r"C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.exe"),
+        default=Path(r"C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\videoenhancer.exe"),
     )
     parser.add_argument(
         "--result-dir",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "test-results" / "gpu-matrix",
+        default=Path(__file__).resolve().parents[2] / "test-results" / "gpu-matrix-1.3.0",
     )
-    parser.add_argument("--phase", choices=("all", "single", "same", "cross"), default="all")
+    parser.add_argument("--phase", choices=("all", "upscale", "interp", "hdr"), default="all")
     parser.add_argument("--backend-pair", help="只运行超分:补帧后端，例如 cuda:tensorrt")
     parser.add_argument("--case-id")
     parser.add_argument("--match", help="按用例 JSON 正则筛选")
@@ -671,6 +1123,8 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=420)
     parser.add_argument("--trt-timeout", type=int, default=2400)
     parser.add_argument("--jobs", type=int, default=1, help="并行运行的 GPU 用例数")
+    parser.add_argument("--sample-extra", type=int, default=2,
+                        help="抽样交叉层每个非代表超分模型配对的补帧代表数量")
     parser.add_argument("--rerun-failed", action="store_true")
     parser.add_argument("--keep-failed-output", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -678,6 +1132,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs 必须大于等于 1")
+    if args.sample_extra < 1:
+        parser.error("--sample-extra 必须大于等于 1")
 
     exe = args.exe.resolve()
     core_root = exe.parent
@@ -689,7 +1145,7 @@ def main() -> int:
 
     args.result_dir.mkdir(parents=True, exist_ok=True)
     available_upscale, available_interp = load_and_validate_catalog(exe)
-    all_cases = generate_cases(available_upscale, available_interp)
+    all_cases = generate_cases(available_upscale, available_interp, args.sample_extra)
     selected = filtered_cases(all_cases, args)
     result_path = args.result_dir / "results.jsonl"
     records = read_records(result_path)
@@ -702,16 +1158,30 @@ def main() -> int:
         print(args.result_dir / "summary.md")
         return 0
 
-    counts = Counter(case.phase for case in all_cases)
+    phase_counts = Counter(case.phase for case in all_cases)
+    layer_counts = Counter((case.phase, case.layer) for case in all_cases)
     print(
-        "矩阵计划："
-        + ", ".join(f"{phase}={count}" for phase, count in sorted(counts.items()))
+        "矩阵计划（按相）："
+        + ", ".join(f"{phase}={count}" for phase, count in sorted(phase_counts.items()))
         + f", total={len(all_cases)}, selected={len(selected)}"
     )
+    print("矩阵计划（按相/层）："
+          + ", ".join(f"{phase}/{layer}={count}"
+                      for (phase, layer), count in sorted(layer_counts.items())))
+
     if args.dry_run:
         for case in selected:
             print(json.dumps(asdict(case), ensure_ascii=False))
         return 0
+
+    # RTX 用例依赖 sidecar；环境检查失败时整批记 SKIP_ENV，不逐个启动失败。
+    rtx_env_ok = True
+    if any(case_needs_sidecar(case) for case in selected):
+        check = run_capture([str(exe), "--check", "-backend", "rtxvsr"], 120)
+        rtx_env_ok = check.returncode == 0
+        if not rtx_env_ok:
+            print("[警告] RTX 环境检查未通过，RTX 用例将记 SKIP_ENV："
+                  + ((check.stdout.strip().splitlines() or [""])[-1]))
 
     pending = []
     for case in selected:
@@ -725,7 +1195,7 @@ def main() -> int:
 
     def announce(index: int, case: MatrixCase) -> None:
         print(
-            f"[{index}/{len(pending)}] {case.case_id} {case.phase}/{case.flow} "
+            f"[{index}/{len(pending)}] {case.case_id} {case.phase}/{case.layer}/{case.flow} "
             f"up={case.upscale_backend}:{case.upscale_category} "
             f"interp={case.interp_backend}:{case.interp_category}",
             flush=True,
@@ -741,13 +1211,17 @@ def main() -> int:
         )
         write_reports(args.result_dir, records, len(all_cases))
 
+    def is_special(case: MatrixCase) -> bool:
+        # RTX/门禁用例共享 sidecar 与 NVENC，GIMM 对显存峰值敏感，均独占 GPU 运行。
+        return case.kind != "traditional" or case.interp_category == "GIMM"
+
     with result_path.open("a", encoding="utf-8", buffering=1) as result_file:
         if args.jobs == 1:
             for index, case in enumerate(pending, 1):
                 announce(index, case)
                 record = execute_case(
                     case, exe, ffmpeg, ffprobe, args.result_dir,
-                    args.timeout, args.trt_timeout, args.keep_failed_output,
+                    args.timeout, args.trt_timeout, args.keep_failed_output, rtx_env_ok,
                 )
                 persist(result_file, case, record)
         else:
@@ -757,25 +1231,26 @@ def main() -> int:
                 active = {}
 
                 def submit_next() -> bool:
-                    active_has_gimm = any(
-                        active_case.interp_category == "GIMM"
-                        for active_case in active.values()
-                    )
-                    eligible_position = next(
+                    if any(is_special(active_case) for active_case in active.values()):
+                        return False
+                    # 优先提交传统用例；队列只剩特殊用例且 GPU 空闲时才独占提交一个。
+                    position = next(
                         (
                             position for position, (_, queued_case) in enumerate(queued)
-                            if queued_case.interp_category != "GIMM" or not active_has_gimm
+                            if not is_special(queued_case)
                         ),
                         None,
                     )
-                    if eligible_position is None:
-                        return False
-                    index, case = queued.pop(eligible_position)
+                    if position is None:
+                        if active or not queued:
+                            return False
+                        position = 0
+                    index, case = queued.pop(position)
                     announce(index, case)
                     future = executor.submit(
                         execute_case,
                         case, exe, ffmpeg, ffprobe, args.result_dir,
-                        args.timeout, args.trt_timeout, args.keep_failed_output,
+                        args.timeout, args.trt_timeout, args.keep_failed_output, rtx_env_ok,
                     )
                     active[future] = case
                     return True

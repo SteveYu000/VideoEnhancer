@@ -1,18 +1,29 @@
 # Project Status
 
-Last updated: 2026-09-12 17:42
-Updated by: ZCode
+Last updated: 2026-09-14 11:25
+Updated by: Codex
 
 ## Current Snapshot
 
-- Current objective: RTX 路径接入 3FUI 编码参数控制（码率/画质）并彻底移除 MP4 中间容器；本地 fork sidecar 补丁已完成、部署并经真实素材验证，供用户实测。
-- Current state: sidecar fork `C:\Codex Program\RTXHDR-RTXVSR`（分支 `rve-patches`，提交 `a9e63d9`）补丁：`output.encoderOptions` NVENC 参数透传、mkv/matroska 容器支持、TrueHD/MLP 实验性门禁仅作用于 mov/mp4、m2ts 音轨元数据修复（TrueHD 补 48kHz、参数不完整流跳过并告警）。CLI：ffmpeg-settings → encoderOptions 映射、.mkv 目标 sidecar 直写最终文件（其内部临时+原子改名）、其余后缀 mkv 兜底无损重封装、sidecar 警告透传。两者已部署到 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer`。
-- Current verification: 上游单测 85/85（新增 2 用例）；真实 F1 m2ts 剪辑直写 mkv = hevc 3840×2160 10bit PQ + TrueHD 原音轨保留；cq 20/28/45 输出大小呈数量级差异证明码率控制生效；mp4 目标走 mkv 兜底 + AAC 256k 转码；仓库 Python 测试 `22/22`、CLI 0 错误。部署备份于 `C:\Users\maxzr\AppData\Local\Temp\rtx-patch-deploy-20260912-170117`。
-- Last active agent: ZCode
+- Latest objective/state (2026-09-14 11:25): 1.3.1 发布收口中。RTX Video 已改为 sidecar 只做 D3D11/RTX 处理，原始帧经命名管道交给 3FUI 宿主目录/PATH 中的 FFmpeg 编码；NVENC 与软件编码统一走宿主编码系统。低于 D3D11VA 常规硬解尺寸的输入新增软件解码、NV12/P010 打包并上传 D3D11 的回退路径。
+- Latest files/Git: sidecar 修改已提交 `c83df0f` 并推送 `maxzrb/RTXHDR-RTXVSR:rve-patches`，标签 `videoenhancer-runtime-2026.09.14.1` 已推送；runtime 包与 5 个 PTH 权重已上传 ModelScope Models 并回读大小/SHA-256一致。主仓库已升至 1.3.1，发布脚本正式纳入版本化手动安装 ZIP，待提交和发布。
+- Latest remaining issue/research: Python Backend 与已发布 2026.09.12.1 只有 4 个脚本 LF/CRLF 差异，归一化后内容完全一致，因此本次不发布伪更新。完整《缎带英雄》尚未跑完；全量 1262 项矩阵未整体重跑，但 RTX VSR 18 项、HDR 15 项、编码专项和低分辨率边界回归均通过。
+
+- Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
+- Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出。前序 UHQ/B 帧、PTS、MP4 尾帧和 P010 修复保持。模型补全、手动安装包等前序成果保持。
+- Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
+- Last active agent: Codex
 - Likely next agent: user / ZCode / Codex
-- Next recommended step: 用户在真实 3FUI 用完整 F1 文件等素材实测（m2ts 的 ac3 副轨因元数据不完整会被跳过，主 TrueHD 轨正常）；建议把 sidecar 补丁整理后向上游 Zennmn/RTXHDR-RTXVSR 提 PR；当前工作树 5 个未提交文件建议尽快提交。
+- Next recommended step: 用户重启 3FUI 后以原参数重新运行完整《缎带英雄》任务；后续处理低分辨率 D3D11VA 预检/回退，并视需要重跑完整 1262 项矩阵。发布类待办（模型镜像、manual-install.zip）保持；当前两个仓库改动多，应分别整理提交。
 
 ## Active TODO
+
+- [x] Task: RTX 处理帧交回 3FUI FFmpeg，并支持硬件/软件编码。
+  - Owner: Codex
+  - Status: sidecar 只执行 RTX VSR/HDR 与 D3D11 帧下载，通过命名管道输出 rawvideo；插件从宿主目录/PATH 解析 FFmpeg，并用原始 `ffmpeg-settings` 编码、映射和封装。历史 `bin\ffmpeg` 仅兼容回退。
+  - Verification: sidecar 89/89；编码专项 8/8；RTX VSR 18/18；HDR 15/15；真实 1080p/72 帧样本按用户 UHQ/P010 参数输出 4K Main10 72/72。
+  - Blockers: 完整电影待用户实跑；低分辨率 D3D11VA 限制另行处理。
+  - Relevant files: `cli/Program.cs`, `cli/RtxVideoBackendClient.cs`, `cli/tests/rtx_nvenc_regression.py`, `cli/tests/gpu_matrix_runner.py`; sidecar `backend/src/jobs/job_types.h`, `backend/src/api/json_dto.cpp`, `backend/src/video/ffmpeg/ffmpeg_transcode_pipeline.cpp`, corresponding unit tests.
 
 - [x] Task: 验证 PR1 文件框与 RTX HDR UI 修复。
   - Owner: user / Codex
@@ -1896,3 +1907,53 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - User direction: 按项目实际更新 README 的介绍、引用程序与致谢。
 - Implementation: 版本状态改为 1.3.0 已发布；功能概览补图片超分独立页、RTX 暂停/容器直连/编码参数透传；系统要求更新 RTX 运行组件包获取方式与许可口径；推理后端表补 BasicVSR++ 与 RTX VSR 两行；HDR 和处理顺序补 RTX 顺序/容器/门禁规则；模型来源与致谢新增「使用的程序与组件」小节（3FUI、LakeUI、FFmpeg、Zennmn/RTXHDR-RTXVSR、NVIDIA RTX Video SDK、NCNN/PyTorch/TensorRT/ONNX Runtime、RVE、mkvtoolnix、ModelScope）；许可证章节补 RTX 运行组件包许可说明；核心目录树补 bin\rtx-video。
 - Git: 直接提交并推送 fork/main。
+
+### 2026-09-13 19:45 - ZCode
+
+- User direction: 因 1.3.0 架构改动大，重测 GPU 模型兼容矩阵并引入 RTX/HDR 多模型多步骤；过程中先后要求 RTX 作为新增相、全量单测+抽样交叉扩到约 1200 项、Stop 矩阵先补全模型、手动安装包改为完整目录树模式、矩阵增量并降为 3 路并行。
+- Matrix design: `cli/tests/gpu_matrix_runner.py` 重构为三相结构（--phase upscale|interp|hdr）：upscale=已装模型全量单测+RTX 用例（目标/质量/容器扫描+全部补帧代表组合），interp=补帧单测+代表全网格(44×6×2)+后端类代表层(192)+哈希稳定抽样层(348，模型名 sha256 轮转配对，增删模型不失效既有用例)，hdr=RTX HDR 组合（纯 HDR/VSR+HDR/三步骤/4 后端+HDR/多步骤）+6 个门禁期望失败用例。新增判定：RTX 输出映射行为权威基准、GIMM 强制顺序横幅校验、HDR 10bit 校验、SKIP_ENV、FAIL_GATE/FAIL_GATE_MISMATCH；RTX/GIMM 用例 GPU 独占串行。
+- Execution: 全量 1262 用例（upscale 157 + interp 1090 + hdr 15）终态 1252 PASS + 8 SKIP_OOM（FlashVSR×4 GIMM 变体×2 顺序，6GB 已知 OOM）+ 2 FAIL_EXIT（GIMM-VFI-R-LPIPS NaN，DAT2/AniToon-RPLKSRL 两组合 upscale-first 可复现）。RTX 33 项按最终 sidecar 全部重跑通过。5 路并行出现 4 个 rife4.25 TRT 挂起与显存满载（用户要求降 3 路），串行复测全部通过，属争用非回归；SwinIR-480x320×GMFSS 重组合 420s 超时复测 24s 通过。
+- Product fix 1 (CLI): 矩阵发现 sidecar 只支持 D3D11VA 硬解（choose_d3d11_format 无回退），FFV1 无硬件解码器导致 1.3.0 的 RTX+补帧、传统超分/补帧+RTX HDR 全部在生产环境损坏（解码首包失败）。修复：RunVideoWithRtx 的 RTX 前置中间文件从 FFV1 gbrp10le/16le 改为无损 HEVC Main10（x265 lossless=1, yuv420p10le，HDR 输入时经 x265 VUI 写 BT.2020/PQ 标记）；重建部署 videoenhancer.exe（备份 Temp/rve-cli-matrixfix-backup）。
+- Product fix 2/3 (sidecar fork rve-patches 新修订): ① NVENC max_b_frames=0（新版 ffmpeg 自动开 B 帧导致编码重排）；② drain_encoder 对 duration=0 的编码包补 1（D3D11VA 解码帧无 duration → movenc 轨道时长短一帧 → mp4 demux edit list 把末帧标 DISCARD 真丢帧，mp4 容器用例 4 帧只解出 3 帧）。重建部署 vsr_backend.exe（备份 Temp/rtx-sidecar-bf0-backup）。已知边界记录：D3D11VA 解码 192x128 失败、320x240 起 OK，矩阵 RTX 夹具因此统一 640x360；生产小分辨率视频+RTX 会失败，CLI 预检待做。
+- Models: 用户下载 5 个官方权重入库（PTH：RealESRGAN_x4plus 67MB、x2plus 67MB、x4plus_anime_6B 18MB、realesr-general-wdn-x4v3 4.9MB、Nomos8k-span-otf-4x-strong 9MB）；能力探针识别 ESRGAN×3/Compact(wdn)/SPAN；cuda+tensorrt 试跑 12/12 PASS（TRT 引擎入缓存）；model-capabilities.json 93→98（cuda 42→47、trt 36→41；x2plus inputMultiple=4），架构分组按用户反馈从探针名(ESRGAN/Compact)统一修正为 RealESRGAN 家族；单测计数断言同步，22/22。证据审计结论：登记层面无缺口（磁盘=登记）；官方有而未收录=RealESRGAN x4plus/x2plus/wdn（已补）+Nomos8k strong（已补）；CUGAN PTH、AnimeJaNai V3.1 PTH、RealHatGAN PTH 待人工获取；Waifu2x/DnCNN 官方无 PTH 不补。
+- Manual install: 应用户朋友需求，build.ps1 新增产出 videoenhancer-manual-install.zip（plugin/videoenhancer.3fui.dll + plugin/videoenhancer/videoenhancer.exe + 手动安装说明.txt，目录树与实机一致，整体复制即装）；先实验过 SFX 方案（zip 追加 exe 尾部，--version/--check/zipfile/bsdtar 全通过）但按用户反馈该形态不合需求，已撤销。发布流程.md 1.3 节补录第三个资产。PS 坑记录：中文 ps1 需 UTF-8 BOM；扩展方法在 PS5.1 不能实例调用。
+- Deployment: 实机 CLI exe 已更新（目录修正版，无 SFX 负载）；models/PTH 已含 5 新权重；插件 DLL 未改动。
+- Git: 工作树未提交（runner、Program.cs、model-capabilities.json、test_model_capabilities.py、build.ps1、发布流程.md、STATUS.md、工作进度.md）；sidecar fork rve-patches 本地新修订未推送。建议尽快提交。
+- TODO: ① GIMM R-LPIPS NaN 回归调查（1.1.0 同组合通过，疑似 20260912.1 后端 torch 2.9 引入）；② ModelScope 模型镜像上传 5 新权重；③ manual-install.zip 纳入下版发布资产；④ 小分辨率+RTX 的 CLI 预检；⑤ Nomos8k ncnn weak 转换（需转换工具链）；⑥ DPI 矩阵/500 帧预览压力仍挂账。
+
+### 2026-09-13 20:00 - ZCode
+
+- User report: 重启 3FUI 后首次进入模型下载页不自动拉取列表；使用教程页空白。
+- Root cause: `OnTabChanged` 硬编码页签索引（2=下载、4=导入、5=分段、6=右键、7=教程）；1.3.0 在实时预览后插入图片超分页使后续页签整体 +1，全部懒加载钩子错位（下载钩子实际落在图片超分页上，教程懒渲染永不触发）。
+- Fix: PluginPanel.vb 构建页签时按 Add 顺序捕获各页签索引入字段（_tabIndexDownloader 等 5 个），OnTabChanged 改用字段比较；插入新页后钩子不再错位。
+- Verification: 插件构建成功（LakeUI 5.9.0.0）；新 DLL SHA-256 `9bd4ed7e…` 已覆盖安装 `C:\Program portableFUIFUI\Pluginideoenhancer.3fui.dll`（原 f898f361…）；待用户重启 3FUI 验收自动拉取、教程内容、清理按钮可见性与各页懒加载。
+- Answer: 纯 RTX VSR 不需要下载 python 后端——插件环境检查按当前后端传参（--check -backend rtxvsr 仅查 sidecar/D3D11/SDK/NVENC），CLI RTX 路径也不调用 python；RTX 叠加补帧或传统超分引擎时才需要对应推理后端。
+
+### 2026-09-13 21:18 - Codex
+
+- Request: 接手修复用户《缎带英雄》1080p→4K RTX VSR 质量 4，HEVC p7/uhq/vbr/cq28 在首帧前 NVENC Invalid argument。
+- Evidence: 旧安装版对原片短样本可复现；HQ 成功，UHQ 失败。原生 FFmpeg UHQ 成功，但添加 -bf 0 后同样 InitializeEncoder invalid param (8)。确认直接原因是前序 sidecar max_b_frames=0 补丁与 UHQ 冲突；早期转义/显卡选择推测不作为结论。
+- Implementation: sidecar 删除强制零 B 帧，保留 packet duration=1 补齐；非零起始时间的 PTS 归零提前到 avcodec_send_frame 前，删除 drain_encoder 的事后偏移/截断，保留负 DTS。边界测试曾抓出 pts(0)<dts(9875)，提前归零后解决。MSVC 增加 /utf-8，修复中文注释被 CP936 误读造成的编译失败。保留前序 NVIDIA 适配器选择等改动。
+- Verification: cmake --build build/backend-hw --config Release --target vsr_backend --parallel 4 成功（仅既有适配器名称 wchar_t→char 警告）；python cli/tests/rtx_nvenc_regression.py --core <实机插件目录> 四项通过：带 10 秒起始偏移的 4 帧，HQ/UHQ × MKV/MP4，实际解码 4/4，无 DISCARD、包 duration>0、DTS 单调。原片短样本实际输入 72 帧、输出 4K HEVC 72 帧，CLI 的 Total Output Frames=73 为估算，不能作为实际帧数。未处理完整电影。
+- Deployment: 最终 vsr_backend.exe SHA-256 C633253E998A02D6BDB0E72DCF34827AAA42F5B41565FADE23DE1C5438E6166D；构建与 C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\bin\rtx-video\runtime\vsr_backend.exe 一致。旧安装版备份 C:\Users\maxzr\AppData\Local\Temp\rve-nvenc-debug-20260913-203505\vsr_backend-before-fix.exe；样本和回归产物保留 Temp 下便于复核。未改原片。
+- Git/checks: 主仓库 pull 快进到 30d5782（README 一行），sidecar pull 已同步。sidecar diff --check 通过；主仓库全局检查报既有 cli/build.ps1 行尾空白，未改无关文件。主仓库和 sidecar 均非干净，建议分别提交；未创建发布或上传远端组件。
+- Next: 用户用原预设重新开始完整任务；后续独立处理 SDR p010le 透传、估算帧数包含起始偏移的问题。已有模型/发布/UI 待办保持。
+
+### 2026-09-13 22:24 - Codex
+
+- Request: 继续调查 GIMM R-LPIPS，明确撤销“NaN 时复制前帧”的违背补帧语义方案；同时系统检查 RTX VSR，并研究 RTX 处理能否和软件编码配合。
+- GIMM root cause: 在安装后端临时加入数值探针后确认，失败组合送入 GIMM 的 frame0/frame1 已经是 NaN；源头是 DAT2 与 AniToon-RPLKSRL 在当前 PyTorch/CUDA FP16 路径的超分输出，不是 GIMM 推理本身。Program.cs 删除两段复制 frame0 的兼容补丁，安装版 InterpolateGIMM.py 恢复 `raise ValueError("Nans in output")`，且已通过 py_compile。
+- GIMM fix/verification: CUDA auto 精度规则把 DAT2、AniToon-RPLKSRL 与既有 SwinIR/GRL 一样固定到 FP32；原先两个 FAIL_EXIT 组合（各自 + GIMM-VFI-R-LPIPS，upscale-first）均成功，输出 640x480、7 帧，framemd5 均为 7 个不同哈希。矩阵新增 signalstats 首帧亮度范围校验与 FAIL_CONTENT，避免 NaN 经 clamp/cast 变黑仍按尺寸/帧数误报 PASS；模型规则单测 5/5。
+- RTX fixes: CLI 将 `-pix_fmt[:v:n]` 解析为 auto/nv12/p010le 并传给 sidecar；sidecar 为 SDR P010 建立 D3D11 P010 编码表面，HEVC 设置 Main10，H.264+P010 明确返回 h264_10bit_unsupported。HDR 原 X2BGR10 直送路径不变。保留 UHQ B 帧、编码前 PTS 归零、packet duration 补齐方案。
+- RTX verification/deployment: sidecar 85/85 单测；CLI Release publish 成功（仅 2 个既有 CA1416）；HQ/UHQ × MKV/MP4 实机回归全部解码 4/4，无 DISCARD、DTS 单调，HQ 为 yuv420p，UHQ 为 yuv420p10le/Main10；用户原参数在 1080p 样本上输出 3840x2160 Main10、72/72 帧。安装版 CLI/sidecar 哈希分别为 `DBA1EF73FE26B8BE72DA448D516748F787F2C78E22CA16A87C68E49EE1E62DD3`、`272B926D7A13AEC919C3D98EC7B5B93CB77FE7BE2B509C932D9C110472ABAE47`；部署前备份在 `%TEMP%\videoenhancer-p010-backup-20260913-221435`。
+- Software encoding research: NVIDIA/FFmpeg 官方资料与本机能力均表明可行：RTX SDK 保持 D3D11 处理，随后下载硬件帧至 CPU；NV12/P010 再转换成软件编码器支持的 yuv420p/yuv420p10le，送 libx264/libx265/SVT-AV1/libaom。实测 RTX P010 结果经 libx265 ultrafast 输出 HEVC Main10 4/4 帧。当前 sidecar 仍硬编码 NVENC；推荐后续直接在同一 libav 管道实现下载+swscale+软件编码，避免巨大或有损中间文件。参考：https://docs.nvidia.com/video-technologies/video-codec-sdk/13.1/ffmpeg-with-nvidia-gpu/index.html 、https://ffmpeg.org/ffmpeg-filters.html 。
+- Remaining risks: sidecar 目前按模式复制全部音轨/字幕，未严格兑现 ffmpeg-settings 的 `-map`；D3D11VA 对低于约 240p 输入有限制；Total Output Frames 是时长估算，72 帧样本显示 73。完整电影仍待用户运行。主仓库与 sidecar 仓库均非干净、未提交，建议分仓库整理提交后再切换工具/设备。
+
+### 2026-09-14 10:22 - Codex
+
+- Request/clarification: 用户明确正确架构应为“RTX VSR 先处理，随后走 3FUI 的编码系统”；3FUI FFmpeg 来自宿主 EXE 目录或 PATH，不应把插件历史遗留的 `bin\ffmpeg` 当作主路径。确认本轮修改对象是 VideoEnhancer 插件与 sidecar，未修改 3FUI 本体。
+- Architecture: `videoenhancer.exe` 现在按显式 `VIDEOENHANCER_FFMPEG`、当前/宿主目录、PATH、旧 `bin\ffmpeg` 回退的顺序解析 ffmpeg/ffprobe。RTX sidecar 新增受限本机命名管道字段，只允许 `\\.\pipe\videoenhancer-rtx-*` 且必须禁用音频/字幕复制；D3D11 RTX 输出经 `av_hwframe_transfer_data` 下载为 NV12/P010/X2BGR10，并以 rawvideo 写入管道。CLI 将管道帧作为输入 0、原始源文件作为输入 1，宿主 FFmpeg 执行用户编码参数、音轨/字幕映射与最终封装。sidecar 不再接收最终编码参数，也不要求其自身 NVENC 可用。
+- Correctness fixes: `libx265`/`libx264`/AV1 编码族不再被 NVENC 能力误判；H.264 NVENC + P010 在 CLI 启动输出前明确拒绝；sidecar/FFmpeg 失败会删除零字节或部分输出。`-map` 从原始 3FUI 设置解析为类型内序号，最终编码从原视频复制选中的音轨/字幕。帧总数在解码完成后由估算值纠正为实际处理帧数。HDR 矩阵正向用例改为显式 HEVC/P010，不再依赖旧 sidecar 静默覆盖 H.264；WebM 门禁接受宿主 FFmpeg 的原生容器错误。
+- Verification: CLI Release/publish 0 错误（2 个既有 CA1416）；sidecar 构建成功，单测 89/89；Python py_compile 与模型规则 5/5；`git diff --check` 对本轮相关文件通过。安装版环境检查在 sidecar 报告其 NVENC 路径不可用时仍正确通过 D3D11/SDK/VSR/HDR。编码专项 8/8：HQ/UHQ × MKV/MP4 均 4/4、无 DISCARD、DTS 单调；RTX + libx264、libx265 Main10、libsvtav1 10-bit 均 4/4；3 音轨选 1、3 字幕选 2；H.264/P010 门禁不留文件。RTX VSR 专项 18/18、HDR 相 15/15。最终安装版以《缎带英雄》1080p/72 帧真实短样本和用户 p7/uhq/vbr/cq28/P010 参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧；控制台确认使用 PATH 的 FFmpeg 8.1.2 full build。
+- Deployment: `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer\videoenhancer.exe` SHA-256 `53B624BF86CD840A4256BB8113856ACDAFC7DFEFE25C17F0D8B58CF4B310B27A`；`bin\rtx-video\runtime\vsr_backend.exe` SHA-256 `2BDD5DDE81D40DD5BD7C0C37B15AD4CAAE91D908589AC1A250883E50F8705B8E`。最终备份：`%TEMP%\videoenhancer-before-framepipe-final-20260914-094237` 与 `%TEMP%\videoenhancer-before-framepipe-cli-final-20260914-101246.exe`。测试证据：`%TEMP%\rtx-framepipe-upscale-full-20260914-095844`、`%TEMP%\rtx-framepipe-hdr-full-20260914-095135`、`%TEMP%\rtx-nvenc-regression-4ftk02si`、`%TEMP%\ribbon-framepipe-final-20260914-102128.mkv`。
+- Remaining/Git: 完整电影尚未运行；低于约 240p 的 D3D11VA 限制未处理；全量 1262 项未整体重跑。主仓库 `main@30d5782` 与 sidecar `rve-patches@ea16ce4` 均已 pull、远端无新增，但工作树均非干净且包含前序改动；未提交、未推送、未发布，建议分仓库整理提交后再切换工具或设备。

@@ -128,6 +128,12 @@ Namespace videoenhancer
         Private ReadOnly _pageTutorial As New ModernPanel()
         Private ReadOnly _markdownSources As New Dictionary(Of ModernPanel, String)()
         Private ReadOnly _markdownReady As New HashSet(Of ModernPanel)()
+        ' 页签懒加载钩子索引：构建页签时按实际顺序捕获，插入新页后不再依赖固定数字。
+        Private _tabIndexDownloader As Integer = -1
+        Private _tabIndexImporter As Integer = -1
+        Private _tabIndexSegmented As Integer = -1
+        Private _tabIndexShell As Integer = -1
+        Private _tabIndexTutorial As Integer = -1
         ' ── 图片超分页（独立选项卡，沿用超分工作台的超分引擎与模型）──
         Private ReadOnly _pageImage As New ModernPanel()
         Private _imageRoot As ModernPanel
@@ -2530,11 +2536,16 @@ Namespace videoenhancer
             _tabs.Items.Add(tabPreview)
             _tabs.Items.Add(tabImage)
             _tabs.Items.Add(tabDownloader)
+            _tabIndexDownloader = _tabs.Items.Count - 1
             _tabs.Items.Add(tabConverter)
             _tabs.Items.Add(tabImporter)
+            _tabIndexImporter = _tabs.Items.Count - 1
             _tabs.Items.Add(tabSegmented)
+            _tabIndexSegmented = _tabs.Items.Count - 1
             _tabs.Items.Add(tabShell)
+            _tabIndexShell = _tabs.Items.Count - 1
             _tabs.Items.Add(tabTutorial)
+            _tabIndexTutorial = _tabs.Items.Count - 1
             ' 每次打开插件都从超分主界面开始，避免保留上次停留在实时预览/高级功能页的状态。
             _tabs.SelectedIndex = 0
         End Sub
@@ -5869,20 +5880,20 @@ Namespace videoenhancer
             If _engine IsNot Nothing Then
                 _engine.PreviewVisible = (_tabs.SelectedIndex = 1)
             End If
-            If _tabs.SelectedIndex = 7 Then
+            If _tabs.SelectedIndex = _tabIndexTutorial Then
                 EnsureMarkdownPage(_pageTutorial)
             End If
             ' 切换页面时清除底部状态提示
             ClearStatus()
-            _btnCleanArchives.Visible = (_tabs.SelectedIndex = 2)
-            If _tabs.SelectedIndex = 2 Then
+            _btnCleanArchives.Visible = (_tabs.SelectedIndex = _tabIndexDownloader)
+            If _tabs.SelectedIndex = _tabIndexDownloader Then
                 LoadDownloadModels(False)
             End If
-            If _tabs.SelectedIndex = 4 Then
+            If _tabs.SelectedIndex = _tabIndexImporter Then
                 LoadUserModels()
             End If
-            If _tabs.SelectedIndex = 5 Then ActivateSegmentedPage()
-            If _tabs.SelectedIndex = 6 Then LoadShellModels()
+            If _tabs.SelectedIndex = _tabIndexSegmented Then ActivateSegmentedPage()
+            If _tabs.SelectedIndex = _tabIndexShell Then LoadShellModels()
         End Sub
 
         Private Sub OnStatusClearTick(sender As Object, e As EventArgs)

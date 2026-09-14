@@ -120,6 +120,13 @@ if (-not (Test-Path -LiteralPath $exeSource)) { throw "缺少发布文件：$exe
 $packageName = "VideoEnhancer-$Version-win-x64.exe"
 $packagePath = Join-Path $versionRoot $packageName
 Copy-Item -LiteralPath $exeSource -Destination $packagePath -Force
+$manualSource = Join-Path $root 'videoenhancer-manual-install.zip'
+if (-not (Test-Path -LiteralPath $manualSource -PathType Leaf)) {
+    throw "缺少手动安装包：$manualSource"
+}
+$manualName = "VideoEnhancer-$Version-manual-install.zip"
+$manualPath = Join-Path $versionRoot $manualName
+Copy-Item -LiteralPath $manualSource -Destination $manualPath -Force
 $packageItem = Get-Item -LiteralPath $packagePath
 $stable = [ordered]@{
     schemaVersion = 1
@@ -143,6 +150,7 @@ $releaseNotesPath = Join-Path $distRoot 'release-notes.txt'
 [System.IO.File]::WriteAllLines($releaseNotesPath, $noteLines, $utf8NoBom)
 
 Write-Host "OK: $packagePath"
+Write-Host "OK: $manualPath"
 Write-Host "OK: $stablePath"
 
 # 目录结构升级属于安装门禁：正式资产必须通过全新安装、旧布局迁移、占用回退和中断恢复。
@@ -212,7 +220,7 @@ if ($PublishGithub) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         throw '未找到 gh CLI；请安装 GitHub CLI 并 gh auth login 后重试'
     }
-    $code = Invoke-Native { gh release create "v$Version" $packagePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
+    $code = Invoke-Native { gh release create "v$Version" $packagePath $manualPath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
     if ($code -ne 0) { throw "gh release create v$Version 失败（$GithubRepo）" }
     Write-Host "OK: GitHub Release v$Version 已创建（$GithubRepo）"
 }
@@ -232,7 +240,7 @@ if ($PublishModelScope) {
 if (-not $PublishGithub -and -not $PublishModelScope) {
     Write-Host "ModelScope 上传目录：$distRoot"
     Write-Host '手动发布命令：'
-    Write-Host "  gh release create v$Version `"$packagePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
+    Write-Host "  gh release create v$Version `"$packagePath`" `"$manualPath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
     Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$distRoot`" --repo_type dataset"
     Write-Host "  modelscope upload $ModelScopeModelsDataset `"$packagePath`" Plugin/videoenhancer.exe --repo_type dataset --no-cache"
 }

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO.Compression;
 using System.IO.MemoryMappedFiles;
+using System.IO.Pipes;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -68,7 +69,7 @@ internal static class Program
         Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     // 核心程序根目录：默认 exe 同目录；若 videoenhancer.ini 配置了 core-path="<核心程序路径>"，
-    // 则指向后端分离后的根目录（bin\ffmpeg / python / models 所在处）。
+    // 则指向后端分离后的 python / models 所在处。
     private static string CoreRoot = AppRoot;
 
     private static string PythonExe => Path.Combine(CoreRoot, "python", "python", "python.exe");
@@ -80,8 +81,9 @@ internal static class Program
     private static string InterpolationInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_interpolation_models.py");
     private static string UpscaleInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_upscale_models.py");
     private static string RifeTensorRTPrepareScript => Path.Combine(CoreRoot, "python", "backend", "prepare_rife_tensorrt.py");
-    private static string FfmpegExe => Path.Combine(CoreRoot, "bin", "ffmpeg", "ffmpeg.exe");
-    private static string FfprobeExe => Path.Combine(CoreRoot, "bin", "ffmpeg", "ffprobe.exe");
+    // 最终编码复用 3FUI 的 FFmpeg：先查宿主目录与 PATH，插件私带 bin\ffmpeg 仅作旧版回退。
+    private static string FfmpegExe => Resolve3FuiFfmpegTool("ffmpeg.exe");
+    private static string FfprobeExe => Resolve3FuiFfmpegTool("ffprobe.exe");
     private static string RtxVideoBackendExe => RtxVideoBackendClient.FindBackend(CoreRoot);
     private static string ModelsDir => Path.Combine(CoreRoot, "models");
     private static string FrameInterpolationDir => Path.Combine(ModelsDir, "Frame-Interpolation");
@@ -93,6 +95,49 @@ internal static class Program
         ?? Path.Combine(ModelsDir, "EfficientNet-SceneDetect");
     private static string DefaultModel => Path.Combine(ModelsDir, "RealESRGAN-AnimeVideoV3-2x");
     private static string PythonSitePackages => Path.Combine(CoreRoot, "python", "python", "Lib", "site-packages");
+
+    private static string Resolve3FuiFfmpegTool(string fileName)
+    {
+        var candidates = new List<string>();
+        var explicitFfmpeg = Environment.GetEnvironmentVariable("VIDEOENHANCER_FFMPEG")?.Trim().Trim('"');
+        if (!string.IsNullOrWhiteSpace(explicitFfmpeg))
+        {
+            candidates.Add(fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase)
+                ? explicitFfmpeg
+                : Path.Combine(Path.GetDirectoryName(explicitFfmpeg) ?? "", fileName));
+        }
+        candidates.Add(Path.Combine(Environment.CurrentDirectory, fileName));
+        try
+        {
+            // 标准安装：<3FUI>\Plugin\videoenhancer，因此向上两级就是宿主 EXE 目录。
+            candidates.Add(Path.Combine(Path.GetFullPath(Path.Combine(CoreRoot, "..", "..")), fileName));
+        }
+        catch
+        {
+            // 非标准 core-path 继续按 PATH 与旧版目录解析。
+        }
+        var pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
+        foreach (var rawDirectory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var directory = rawDirectory.Trim().Trim('"');
+            if (directory.Length > 0) candidates.Add(Path.Combine(directory, fileName));
+        }
+        var legacyFallback = Path.Combine(CoreRoot, "bin", "ffmpeg", fileName);
+        candidates.Add(legacyFallback);
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                var fullPath = Path.GetFullPath(candidate);
+                if (File.Exists(fullPath)) return fullPath;
+            }
+            catch
+            {
+                // PATH 可能包含无效目录；跳过该项并继续查找其余 3FUI 环境。
+            }
+        }
+        return legacyFallback;
+    }
     private static string InterpolationCapabilityCachePath
     {
         get
@@ -295,26 +340,28 @@ internal static class Program
         return Math.Clamp((double)requested / reference, 1.0, 4.0);
     }
 
-    private static string SelectRtxCodec(string customEncoder, bool hdr, RtxVideoBackendClient.Capabilities capabilities)
+    private static string SelectRtxCodec(string customEncoder, bool hdr)
     {
         var lower = customEncoder.ToLowerInvariant();
-        if (!hdr && lower.Contains("av1", StringComparison.Ordinal) && capabilities.NvencAv1Available) return "av1";
-        if ((lower.Contains("hevc", StringComparison.Ordinal) || lower.Contains("h265", StringComparison.Ordinal))
-            && capabilities.NvencHevcMain10Available) return "hevc";
-        if (hdr)
+        // sidecar 仅输出 RTX 处理后的原始帧，最终编码器由 3FUI FFmpeg 打开；
+        // 因此这里识别编码族只用于 10-bit/HDR 参数校验，不能再依赖 sidecar 的 NVENC 能力。
+        if (lower.Contains("av1", StringComparison.Ordinal)) return "av1";
+        if (lower.Contains("hevc", StringComparison.Ordinal)
+            || lower.Contains("h265", StringComparison.Ordinal)
+            || lower.Contains("x265", StringComparison.Ordinal)) return "hevc";
+        if (lower.Contains("h264", StringComparison.Ordinal)
+            || lower.Contains("avc", StringComparison.Ordinal)
+            || lower.Contains("x264", StringComparison.Ordinal))
         {
-            if (capabilities.NvencHevcMain10Available) return "hevc";
-            if (capabilities.NvencAv1Available) return "av1";
-            throw new InvalidOperationException("RTX HDR 需要 NVENC HEVC Main10 或 AV1 编码器");
+            if (hdr) throw new InvalidOperationException("RTX HDR 需要 10-bit HEVC 或 AV1 编码器，不能使用 H.264");
+            return "h264";
         }
-        if (capabilities.NvencH264Available) return "h264";
-        if (capabilities.NvencHevcMain10Available) return "hevc";
-        if (capabilities.NvencAv1Available) return "av1";
-        throw new InvalidOperationException("RTX Video sidecar 未检测到可用的 NVENC 编码器");
+        return hdr ? "hevc" : "h264";
     }
 
     private static int RunVideoWithRtx(
-        string input, string outputFile, string model, string customEncoder, bool overwrite, string? scale,
+        string input, string outputFile, string model, string customEncoder, string originalFfmpegSettings,
+        bool overwrite, string? scale,
         string pauseShm, StopWatcher? stopWatcher, string? interpModel, string? interpFactor,
         string upscaleBackend, string interpBackend, string processOrder, bool hdrMode, bool dynamicOpticalFlow,
         double sceneThreshold, int tileSize, string requestedUpscalePrecision, string requestedInterpPrecision,
@@ -327,14 +374,23 @@ internal static class Program
 
         var rveInput = input;
         string? intermediate = null;
+        var outputTouched = false;
+        var finalOutputCompleted = false;
         var useRegularUpscale = !rtxVsr && !string.IsNullOrEmpty(model);
         var useRve = useRegularUpscale || interpModel is not null;
         if (useRve)
         {
             intermediate = Path.Combine(outputDir,
                 "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-rtx-input-" + Guid.NewGuid().ToString("N") + ".mkv");
-            var pixelFormat = hdrMode ? "gbrp16le" : "gbrp10le";
-            var losslessEncoder = "-c:v ffv1 -level 3 -coder 1 -context 1 -g 1 -pix_fmt " + pixelFormat + " -c:a copy -c:s copy";
+            // sidecar 只支持 D3D11VA 硬解，FFV1 没有硬件解码器会在解码首包直接失败；
+            // 中间文件改用数学无损 HEVC Main10：RVE 输出的 RGB 中间帧落为 10-bit 4:2:0，
+            // 相对最终 NVENC Main10 编码没有额外精度损失，且任意 RTX 机器都能硬解。
+            // HDR 输入时通过 x265 VUI 写入 BT.2020/PQ 标记，sidecar 才能按 HDR 咬合色彩空间。
+            var x265Params = hdrMode
+                ? "lossless=1:colorprim=bt2020:transfer=smpte2084:colormatrix=bt2020nc"
+                : "lossless=1";
+            var losslessEncoder = "-c:v libx265 -preset ultrafast -x265-params " + x265Params
+                + " -pix_fmt yuv420p10le -c:a copy -c:s copy";
             var rveModel = useRegularUpscale ? model : "";
             var forcedOrder = rtxVsr ? "interp-first" : processOrder;
             if (rtxVsr && interpModel is not null)
@@ -360,41 +416,92 @@ internal static class Program
             if (rtxHdr && !capabilities.TruehdrAvailable) return Fail("当前 GPU/驱动不支持 RTX Video HDR", 1);
 
             var resolvedScale = rtxVsr ? ResolveRtxScale(rveInput, rtxTarget) : 1.0;
+            var (sourceWidth, sourceHeight) = GetInputResolution(rveInput);
+            var outputWidth = Math.Max(2, (int)Math.Round(sourceWidth * resolvedScale));
+            var outputHeight = Math.Max(2, (int)Math.Round(sourceHeight * resolvedScale));
+            if ((outputWidth & 1) != 0) outputWidth++;
+            if ((outputHeight & 1) != 0) outputHeight++;
             if (rtxVsr)
             {
-                var (sourceWidth, sourceHeight) = GetInputResolution(rveInput);
-                var outputWidth = Math.Max(2, (int)Math.Round(sourceWidth * resolvedScale));
-                var outputHeight = Math.Max(2, (int)Math.Round(sourceHeight * resolvedScale));
-                if ((outputWidth & 1) != 0) outputWidth++;
-                if ((outputHeight & 1) != 0) outputHeight++;
                 Console.WriteLine($"[RTX VSR] 输出映射：{sourceWidth}x{sourceHeight} × {resolvedScale.ToString("0.###", CultureInfo.InvariantCulture)} → {outputWidth}x{outputHeight}；质量 {rtxQuality}");
             }
-            var codec = SelectRtxCodec(customEncoder, rtxHdr, capabilities);
+            var codec = SelectRtxCodec(customEncoder, rtxHdr);
             var encoderOptions = ParseRtxEncoderOptions(customEncoder);
+            var pixelFormat = ParseRtxPixelFormat(customEncoder, rtxHdr);
+            if (pixelFormat == "p010le"
+                && customEncoder.Contains("h264_nvenc", StringComparison.OrdinalIgnoreCase))
+                return Fail("H.264 NVENC does not support the requested 10-bit output", 1);
+            // SplitFfmpegSettings 会剥掉 -map；RTX 的宿主 FFmpeg 映射必须从原始设置解析。
+            var (audioStreamIndices, subtitleStreamIndices) = ParseRtxStreamSelection(originalFfmpegSettings);
             if (encoderOptions.Count > 0)
             {
-                Console.WriteLine("[RTX Video] 编码参数覆盖：" + string.Join("，", encoderOptions.Select(o => o.Key + "=" + o.Value)));
+                Console.WriteLine("[RTX Video] 3FUI 编码参数：" + string.Join("，", encoderOptions.Select(o => o.Key + "=" + o.Value)));
             }
-            // sidecar 直接对接最终输出容器（按输出后缀选择 FFmpeg 封装器，mkv/
-            // mp4/webm/avi 等均可）；容器装不下的特性由 FFmpeg 原生报错。
-            // sidecar 内部自带临时文件与失败清理，失败不会碰最终文件。
+            // RTX SDK 只产出处理后的原始帧；最终编码、映射和封装统一交回 3FUI FFmpeg。
+            outputTouched = true;
             if (overwrite && File.Exists(outputFile)) File.Delete(outputFile);
-            var result = client.RunAsync(rveInput, outputFile, rtxVsr, rtxQuality, resolvedScale,
-                rtxHdr, codec, "auto", "copy", encoderOptions,
-                () => stopWatcher?.IsStopRequested() == true,
-                () => ReadShmByte(pauseShm) == 1,
-                cancellation.Token).GetAwaiter().GetResult();
+            var pipeName = "videoenhancer-rtx-" + Guid.NewGuid().ToString("N");
+            var pipePath = @"\\.\pipe\" + pipeName;
+            var rawPixelFormat = rtxHdr ? "x2bgr10le" : pixelFormat == "p010le" ? "p010le" : "nv12";
+            var frameRate = GetInputFrameRate(rveInput);
+            using var framePipe = new NamedPipeServerStream(
+                pipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous, 4 * 1024 * 1024, 4 * 1024 * 1024);
+            using var ffmpeg = StartRtxHostEncoder(
+                input, outputFile, customEncoder, overwrite, rawPixelFormat,
+                outputWidth, outputHeight, frameRate, rtxHdr,
+                audioStreamIndices, subtitleStreamIndices);
+            Console.WriteLine("[RTX Video] 最终编码：3FUI FFmpeg（" + ffmpeg.StartInfo.FileName + "）");
+            var ffmpegErrorTask = ffmpeg.StandardError.ReadToEndAsync();
+            using var relayCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
+            var relayTask = RelayRtxFramesAsync(framePipe, ffmpeg.StandardInput.BaseStream, relayCancellation.Token);
+            RtxVideoBackendClient.JobResult result;
+            try
+            {
+                result = client.RunAsync(rveInput, outputFile, rtxVsr, rtxQuality, resolvedScale,
+                    rtxHdr, codec, "rawvideo", "none", pixelFormat,
+                    new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
+                    audioStreamIndices, subtitleStreamIndices, pipePath,
+                    () => stopWatcher?.IsStopRequested() == true,
+                    () => ReadShmByte(pauseShm) == 1,
+                    cancellation.Token).GetAwaiter().GetResult();
+                if (!result.Succeeded)
+                {
+                    relayCancellation.Cancel();
+                    try { ffmpeg.StandardInput.Close(); } catch { }
+                    try { if (!ffmpeg.HasExited) ffmpeg.Kill(entireProcessTree: true); } catch { }
+                }
+                else
+                {
+                    relayTask.GetAwaiter().GetResult();
+                    ffmpeg.WaitForExit();
+                }
+            }
+            finally
+            {
+                relayCancellation.Cancel();
+                try { if (!ffmpeg.HasExited) ffmpeg.Kill(entireProcessTree: true); } catch { }
+            }
             foreach (var warning in result.Warnings)
             {
                 Console.WriteLine("[RTX Video] 警告：" + warning);
             }
             if (!result.Succeeded)
                 return result.Canceled ? 130 : Fail("RTX Video 处理失败：" + result.Error, 1);
+            var ffmpegError = ffmpegErrorTask.GetAwaiter().GetResult();
+            if (ffmpeg.ExitCode != 0)
+                return Fail("3FUI FFmpeg 编码失败（退出码 " + ffmpeg.ExitCode + "）：" + ffmpegError.Trim(), 1);
+            finalOutputCompleted = true;
             Console.WriteLine("[完成] RTX Video 输出：" + outputFile);
             return 0;
         }
         finally
         {
+            if (outputTouched && !finalOutputCompleted)
+            {
+                try { if (File.Exists(outputFile)) File.Delete(outputFile); }
+                catch (Exception ex) { Console.Error.WriteLine("[警告] 无法清理失败的 RTX 输出文件：" + ex.Message); }
+            }
             if (!string.IsNullOrWhiteSpace(intermediate))
             {
                 try { if (File.Exists(intermediate)) File.Delete(intermediate); }
@@ -404,9 +511,9 @@ internal static class Program
     }
 
     /// <summary>
-    /// 从 ffmpeg-settings 的编码参数中提取 NVENC 编码选项，映射为 sidecar 的
-    /// output.encoderOptions。忽略流指示后缀（如 -preset:v:0），非编码选项
-    /// （-c:v、-pix_fmt、-map、-y 等）一并忽略。
+    /// 从 ffmpeg-settings 提取常见编码选项用于控制台摘要。RTX 帧管道不会把这些
+    /// 选项交给 sidecar；完整参数由宿主 FFmpeg 原样执行。忽略流指示后缀
+    /// （如 -preset:v:0）以及 -c:v、-pix_fmt、-map、-y 等非摘要项。
     /// </summary>
     private static readonly string[] RtxEncoderOptionNames =
     {
@@ -445,6 +552,141 @@ internal static class Program
             }
         }
         return options;
+    }
+
+    private static Process StartRtxHostEncoder(
+        string sourceInput, string outputFile, string customEncoder, bool overwrite,
+        string rawPixelFormat, int width, int height, string frameRate, bool hdr,
+        IReadOnlyList<int>? audioStreamIndices, IReadOnlyList<int>? subtitleStreamIndices)
+    {
+        var start = new ProcessStartInfo
+        {
+            FileName = FfmpegExe,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardInput = true,
+            RedirectStandardError = true,
+        };
+        foreach (var value in new[]
+        {
+            "-hide_banner", "-loglevel", "warning", "-nostats", "-nostdin",
+            "-f", "rawvideo", "-pixel_format", rawPixelFormat,
+            "-video_size", width.ToString(CultureInfo.InvariantCulture) + "x" + height.ToString(CultureInfo.InvariantCulture),
+            "-framerate", frameRate, "-i", "pipe:0", "-i", sourceInput,
+            "-map", "0:v:0",
+        }) start.ArgumentList.Add(value);
+        AddRtxHostMaps(start.ArgumentList, "a", audioStreamIndices);
+        AddRtxHostMaps(start.ArgumentList, "s", subtitleStreamIndices);
+        if (hdr)
+        {
+            foreach (var value in new[]
+            {
+                "-color_primaries", "bt2020", "-color_trc", "smpte2084",
+                "-colorspace", "bt2020nc", "-color_range", "tv",
+            }) start.ArgumentList.Add(value);
+        }
+        foreach (var value in Tokenize(customEncoder)) start.ArgumentList.Add(value);
+        start.ArgumentList.Add(outputFile);
+        start.ArgumentList.Add(overwrite ? "-y" : "-n");
+        var process = new Process { StartInfo = start };
+        if (!process.Start()) throw new InvalidOperationException("无法启动 3FUI FFmpeg：" + FfmpegExe);
+        return process;
+    }
+
+    private static void AddRtxHostMaps(ICollection<string> arguments, string type, IReadOnlyList<int>? indices)
+    {
+        if (indices is null)
+        {
+            arguments.Add("-map");
+            arguments.Add("1:" + type + "?");
+            return;
+        }
+        foreach (var index in indices)
+        {
+            arguments.Add("-map");
+            arguments.Add("1:" + type + ":" + index.ToString(CultureInfo.InvariantCulture) + "?");
+        }
+    }
+
+    private static async Task RelayRtxFramesAsync(
+        NamedPipeServerStream source, Stream destination, CancellationToken token)
+    {
+        try
+        {
+            await source.WaitForConnectionAsync(token);
+            await source.CopyToAsync(destination, 4 * 1024 * 1024, token);
+            await destination.FlushAsync(token);
+        }
+        finally
+        {
+            try { destination.Close(); } catch { }
+        }
+    }
+
+    /// <summary>提取用户预设的视频像素格式；RTX HDR 始终使用 10-bit 输出。</summary>
+    private static string ParseRtxPixelFormat(string customEncoder, bool hdr)
+    {
+        if (hdr) return "p010le";
+        var tokens = Tokenize(customEncoder);
+        for (var i = 0; i + 1 < tokens.Count; i++)
+        {
+            var name = tokens[i].TrimStart('-');
+            var colon = name.IndexOf(':');
+            if (colon > 0) name = name[..colon];
+            if (!name.Equals("pix_fmt", StringComparison.OrdinalIgnoreCase)) continue;
+            return tokens[i + 1].ToLowerInvariant() switch
+            {
+                "p010" or "p010le" or "yuv420p10le" => "p010le",
+                "nv12" or "yuv420p" => "nv12",
+                _ => "auto",
+            };
+        }
+        return "auto";
+    }
+
+    /// <summary>
+    /// 解析 3FUI 生成的正向 -map 选流。null 表示沿用 sidecar 的“复制全部”行为，
+    /// 空数组表示用户显式映射但没有选择该类型；索引按音频/字幕类型分别计数。
+    /// </summary>
+    private static (IReadOnlyList<int>? Audio, IReadOnlyList<int>? Subtitles) ParseRtxStreamSelection(
+        string customEncoder)
+    {
+        var tokens = Tokenize(customEncoder);
+        var sawMap = false;
+        var allAudio = false;
+        var allSubtitles = false;
+        var audio = new SortedSet<int>();
+        var subtitles = new SortedSet<int>();
+        for (var i = 0; i < tokens.Count; i++)
+        {
+            if (!tokens[i].Equals("-map", StringComparison.OrdinalIgnoreCase)) continue;
+            if (++i >= tokens.Count) throw new ArgumentException("-map 缺少流选择表达式");
+            sawMap = true;
+            var map = tokens[i];
+            if (map.StartsWith('-'))
+                throw new ArgumentException("RTX Video 暂不支持排除式 -map，请改用明确的正向流映射：" + map);
+            map = map.TrimEnd('?');
+            if (map == "0")
+            {
+                allAudio = true;
+                allSubtitles = true;
+                continue;
+            }
+            var match = Regex.Match(map, @"^0:(a|s)(?::(\d+))?$", RegexOptions.IgnoreCase);
+            if (!match.Success) continue; // 视频映射由 RTX 主视频流固定处理。
+            var target = match.Groups[1].Value.ToLowerInvariant();
+            if (!match.Groups[2].Success)
+            {
+                if (target == "a") allAudio = true;
+                else allSubtitles = true;
+                continue;
+            }
+            var index = int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+            if (target == "a") audio.Add(index);
+            else subtitles.Add(index);
+        }
+        if (!sawMap) return (null, null);
+        return (allAudio ? null : audio.ToArray(), allSubtitles ? null : subtitles.ToArray());
     }
 
     /// <summary>
@@ -1171,7 +1413,7 @@ internal static class Program
         }
         if (o.Backend == "rtxvsr" || o.RtxHdr)
         {
-            return RunVideoWithRtx(input, outputFile, model, customEncoder, overwrite, scale,
+            return RunVideoWithRtx(input, outputFile, model, customEncoder, o.FfmpegSettings, overwrite, scale,
                 o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend,
                 o.ProcessOrder, hdrMode, o.DynamicOpticalFlow, sceneThreshold, tileSize, o.UpscalePrecision,
                 o.InterpPrecision, o.Backend == "rtxvsr" && useUpscale, o.RtxHdr, o.RtxTarget, rtxQuality);
@@ -3475,11 +3717,14 @@ internal static class Program
         _ => "FP16 优先（不兼容时回退 FP32）",
     };
 
-    /// <summary>超分精度独立决策：用户强制 FP32 优先，已知不兼容架构仍保持 FP32。</summary>
+    /// <summary>超分精度独立决策：用户强制 FP32 优先，已知 FP16 数值不稳定的模型保持 FP32。</summary>
     private static string ResolveUpscalePrecision(string modelPath, string backend, string requested)
     {
         if (requested == "float32") return "float32";
-        if (backend == "cuda" && Regex.IsMatch(ModelBaseName(modelPath), @"SwinIR|GRL", RegexOptions.IgnoreCase))
+        // DAT2 与 AniToon-RPLKSRL 在当前 PyTorch/CUDA FP16 路径会直接输出 NaN；
+        // 后续转字节会把 NaN 隐式变为黑值，因此不能依赖编码阶段发现问题。
+        if (backend == "cuda" && Regex.IsMatch(
+                ModelBaseName(modelPath), @"SwinIR|GRL|DAT2|AniToon-RPLKSRL", RegexOptions.IgnoreCase))
             return "float32";
         if (backend == "tensorrt" && Regex.IsMatch(ModelBaseName(modelPath), @"GRL", RegexOptions.IgnoreCase))
             return "float32";
@@ -4646,6 +4891,29 @@ internal static class Program
         return (0, 0);
     }
 
+    /// <summary>读取主视频流的精确平均帧率，供 RTX 原始帧管道建立时间基。</summary>
+    private static string GetInputFrameRate(string input)
+    {
+        try
+        {
+            var result = RunProcessCapture(FfprobeExe, new[]
+            {
+                "-v", "error", "-select_streams", "v:0", "-show_entries",
+                "stream=avg_frame_rate", "-of", "default=noprint_wrappers=1:nokey=1", input,
+            }, 30);
+            var value = result.Output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim()).FirstOrDefault() ?? "";
+            var match = Regex.Match(value, @"^(\d+)/(\d+)$");
+            if (match.Success && match.Groups[1].Value != "0" && match.Groups[2].Value != "0")
+                return value;
+        }
+        catch
+        {
+        }
+        Console.Error.WriteLine("[警告] 无法读取源帧率，RTX 帧管道回退为 30/1");
+        return "30/1";
+    }
+
     private sealed record VideoProbeInfo(int Width, int Height, long Frames);
 
     /// <summary>用 ffprobe 严格读取视频尺寸和可解码帧数；任何字段缺失都视为探测失败。</summary>
@@ -5424,7 +5692,7 @@ internal static class Program
         Console.WriteLine("[环境检查] 根目录   : " + CoreRoot);
 
         var ffmpegOk = File.Exists(FfmpegExe);
-        Report(ffmpegOk, "bin\\ffmpeg", FfmpegExe);
+        Report(ffmpegOk, "3FUI FFmpeg", FfmpegExe);
         ok &= ffmpegOk;
 
         var pythonOk = File.Exists(PythonExe);
@@ -6193,10 +6461,10 @@ internal static class Program
         writer.WriteLine();
         writer.WriteLine("说明");
         writer.WriteLine("  · 配置：exe 同目录的 videoenhancer.ini 第一行写入 core-path=\"<核心程序路径>\"，");
-        writer.WriteLine("    指向 bin\\ffmpeg、python、models 所在的根目录（后端分离部署时使用）；");
+        writer.WriteLine("    指向 python、models 所在的根目录（后端分离部署时使用）；");
         writer.WriteLine("    未配置时回退到 exe 同目录布局，任一路径缺失会报错并标出缺失项。");
-        writer.WriteLine("  · 程序自动检测 core-path 下的 bin\\ffmpeg\\ffmpeg.exe、python\\python\\python.exe、");
-        writer.WriteLine("    python\\backend\\rve-backend.py、python 库与 models\\ 模型库；");
+        writer.WriteLine("  · FFmpeg 优先使用 3FUI EXE 同目录或 PATH 中的 ffmpeg.exe/ffprobe.exe；");
+        writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 core-path 下的 python 与 models；");
         writer.WriteLine("    任一缺失会报错并标出缺失项。");
         writer.WriteLine("  · ffmpeg-settings 是“编码参数 + 输出文件”的完整片段，程序会中转给");
         writer.WriteLine("    rve-backend（--custom_encoder 与 -o）。输出路径必须是最后一个参数；");
