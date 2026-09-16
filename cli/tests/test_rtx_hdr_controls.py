@@ -79,6 +79,24 @@ class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
         self.assertIn('"根据ID获取任务"', adapter)
         self.assertIn('GetProperty("队列"', adapter)
 
+    def test_update_download_prefers_modelscope_and_keeps_github_manifest_priority(self):
+        updater = (PLUGIN / "PluginUpdater.vb").read_text(encoding="utf-8-sig")
+        manifest = updater.split(
+            "Public Shared Async Function FetchLatestManifestAsync", 1
+        )[1].split("Private Shared Async Function FetchGithubManifestAsync", 1)[0]
+        self.assertLess(
+            manifest.index("Return Await FetchGithubManifestAsync"),
+            manifest.index("Return Await FetchModelScopeManifestAsync"),
+        )
+        download = updater.split(
+            "Public Shared Async Function DownloadPackageAsync", 1
+        )[1].split("Public Shared Sub StartUpdate", 1)[0]
+        self.assertLess(
+            download.index("DownloadToFileAsync(BuildResolveUrl(manifest.Package.Path)"),
+            download.index("DownloadToFileAsync(githubUrl"),
+        )
+        self.assertIn("更新包优先走 ModelScope", download)
+
     def test_stop_graceful_then_force_contract(self):
         stop = (PLUGIN / "StopControl.vb").read_text(encoding="utf-8-sig")
         cli = (CLI / "Program.cs").read_text(encoding="utf-8-sig")

@@ -1,22 +1,22 @@
 # Project Status
 
-Last updated: 2026-09-16 12:29
+Last updated: 2026-09-16 13:00
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-16 12:29): 修复 RTX HDR 最大亮度启动时首位被裁剪的问题；已在不改写正式 `v1.3.3` 标签/远端资产的前提下更新源码，并部署到当前本机 3FUI。
-- Latest files/Git: `PluginPanel.vb` 为数字框初始化增加宽度保护，并在尺寸/字体变化时清除 LakeUI 左对齐的旧横向偏移；`cli/tests/test_rtx_hdr_controls.py` 增加回归断言。本地修复提交尚未推送。
-- Latest verification: 插件 SDK 构建 0 警告/0 错误（HostBin LakeUI 5.9.0.0）；Python 29/29；临时布局探针确认四个 HDR 文本完整、最大亮度 `1000` 且 `scroll=0`；`git diff --check` 通过。
-- Latest deployment: 部署前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-hdr-display-fix-final-20260916-122756`；当前插件 DLL 源/目标 SHA-256 均为 `DBDFEC451252A61A83F6F6878F2537170D33C4C9984881C8C2011ADBFAC61A71`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
-- Latest remaining issue/research: 需要用户重启 3FUI 目视确认最大亮度显示为 `1000`，并继续验收此前 HDR 输入、滚动、RTX 预览及任务控制；若要把本修复发布给其他用户，应在后续按发布流程生成 `1.3.4`，不要移动 `v1.3.3`。本地修复提交尚未推送。
+- Latest objective/state (2026-09-16 13:00): 按用户要求将插件“更新包下载”恢复为 ModelScope 首选、GitHub 兜底；版本清单检查仍保持 GitHub 首选，避免改变版本权威来源。已部署当前本机 3FUI，未改写正式 `v1.3.3` 标签/远端资产。
+- Latest files/Git: `PluginUpdater.vb` 调整下载顺序；README、发布流程、ModelScope 镜像说明和更新顺序回归断言同步更新。本地提交已形成，尚未推送。
+- Latest verification: 插件 SDK 构建 0 警告/0 错误（HostBin LakeUI 5.9.0.0）；Python 30/30；静态检查确认版本清单仍 GitHub→ModelScope、更新包下载为 ModelScope→GitHub；`git diff --check` 通过。
+- Latest deployment: 部署前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`；当前插件 DLL 源/目标 SHA-256 均为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
+- Latest remaining issue/research: 需要用户重启 3FUI 后确认更新检查/下载路径；若要把本轮顺序变更发布给其他用户，应在后续按发布流程生成 `1.3.4`，不要移动 `v1.3.3`。本地提交尚未推送。
 
-- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制、预览兼容性和 HDR 数字框启动显示修复，并在本机版本上完成用户验收。
+- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制、预览兼容性、HDR 数字框启动显示和双源更新顺序修复，并在本机版本上完成用户验收。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
 - Likely next agent: user / ZCode / Codex
-- Next recommended step: 用户重启 3FUI，确认最大亮度完整显示为 `1000`、中灰度按建议值保存/重载，再以原参数运行 RTX 任务；源码提交前请先核对 diff，后续发布应使用新补丁版本。
+- Next recommended step: 用户重启 3FUI，确认更新检查仍先访问 GitHub、更新包先访问 ModelScope，并继续验收 HDR 输入/滚动/RTX 任务；源码提交前请先核对 diff，后续发布应使用新补丁版本。
 
 ## Active TODO
 
@@ -2098,3 +2098,12 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Decision: 不移动或覆盖已发布的 `v1.3.3`；本轮改动待本地提交，若需要对外发布应作为后续 `1.3.4` 补丁版本。
 - Middle gray guidance: NVIDIA TrueHDR 文档给出的 SDK 默认值为 50；当前项目的 44 是面向约 200 nit 纸白/SDR 伽马 2.2 的实用起点。建议先保留 44，显示器或环境偏亮时试 50–60，若中间调过亮/发白试 35–40，并以校准后的显示器和熟悉画面判断。
 - Git/next: 本轮源码、测试和记录已提交，尚未推送；用户重启 3FUI 后应确认 `1000` 不再显示为 `000`，并验收滚轮/键盘输入和保存重载。
+
+### 2026-09-16 13:00 - Codex
+
+- Request: 用户要求将插件更新包下载恢复为 ModelScope 首选。
+- Decision: 只调整更新包下载顺序；版本清单仍由 GitHub Release 首选、ModelScope 兜底，以保持 GitHub 作为版本权威来源。
+- Implementation: `PluginUpdater.DownloadPackageAsync` 先调用 ModelScope resolve URL，失败或校验失败后再使用 GitHub Release 资产；两次下载均经过原有大小和 SHA-256 校验。同步更新根 README、发布流程和 ModelScope 数据集说明。
+- Verification: 新增下载顺序静态回归测试；Python 测试 30/30；插件 SDK 构建 0 警告/0 错误；`git diff --check` 通过；静态核对确认清单顺序 GitHub→ModelScope、包下载顺序 ModelScope→GitHub。
+- Deployment: 确认相关进程退出后覆盖本机 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`；源/目标 SHA-256 均为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`；安装 EXE `--version` 为 1.3.3，未残留相关进程。
+- Git/next: 已发布的 `v1.3.3` 未改写，本轮源码、测试、文档和记录已提交、尚未推送；如需对外分发此顺序变更，应创建后续 `1.3.4`，不要覆盖既有版本。

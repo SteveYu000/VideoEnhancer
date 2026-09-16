@@ -19,7 +19,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - TensorRT Engine 按 GPU、运行时版本、输入尺寸、倍率、分块、精度和转换配置隔离缓存，并在失效时重建。
 - 模型列表支持从 ModelScope 镜像读取、下载、校验和解压。
 - RTX 任务支持暂停与恢复，输出容器按输出扩展名直连（mkv/mp4/webm 等全部 FFmpeg 封装器），3FUI 编码参数（预设、调优、码率、CQ）直接传入 RTX 编码器。
-- 插件更新使用 GitHub Release 首选、ModelScope 兜底的双源机制，更新包带逐文件 SHA-256 校验和失败回滚。
+- 插件更新检查使用 GitHub Release 首选、ModelScope 兜底；更新包下载使用 ModelScope 首选、GitHub 兜底，均带 SHA-256 校验和失败回滚。
 
 ## 下载
 
@@ -155,7 +155,7 @@ AerithDream/VideoEnhancer-Models
 
 1. 优先从 GitHub `maxzrb/VideoEnhancer` 的最新 Release 读取 `stable.json`。
 2. GitHub 检查失败时，从 ModelScope `AerithDream/VideoEnhancer-Releases` 读取 `stable.json`。
-3. 下载更新包时优先使用 GitHub Release 资产，失败后使用 ModelScope 镜像。
+3. 下载更新包时优先使用 ModelScope 镜像，失败后使用 GitHub Release 资产。
 4. 下载完成后校验 EXE 大小和 SHA-256。
 5. 新 EXE 作为临时更新器等待 3FUI 退出；旧平铺布局会事务迁移到 `Plugin\videoenhancer`，EXE 写入子目录，DLL 保留在 `Plugin` 根目录。短暂占用会重试，持续占用或迁移失败会恢复旧布局；进程中断后下次更新会先恢复未完成事务。
 
@@ -192,7 +192,7 @@ BasicVSR++ 不支持与补帧组合。切换到 TensorRT、CUDA、NCNN 或其他
 
 ### 自动更新失败
 
-确认 3FUI 未被安全软件拦截，且 `videoenhancer.exe` 与插件 DLL 位于同一目录。更新器会先尝试 GitHub，再回退 ModelScope；两源都失败时不会替换本地文件。
+确认 3FUI 未被安全软件拦截，且 `videoenhancer.exe` 与插件 DLL 位于同一目录。更新器检查版本会先尝试 GitHub，再回退 ModelScope；下载包会先尝试 ModelScope，再回退 GitHub；两源都失败时不会替换本地文件。
 
 ## 从源码构建
 

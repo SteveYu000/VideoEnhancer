@@ -48,7 +48,7 @@ Namespace videoenhancer
         Public Property BrowserDownloadUrl As String = ""
     End Class
 
-    ''' <summary>读取独立发行清单并执行更新；GitHub 首选，ModelScope 兜底。</summary>
+    ''' <summary>读取独立发行清单并执行更新；版本检查 GitHub 首选，更新包 ModelScope 首选。</summary>
     Public NotInheritable Class PluginUpdater
 
         Private Const DefaultGithubRepo As String = "maxzrb/VideoEnhancer"
@@ -176,30 +176,31 @@ Namespace videoenhancer
             Dim destination = Path.Combine(updateDirectory, fileName)
             Dim temporary = destination & ".download"
             Try
-                ' GitHub 首选；受网络限制或资产不可达时回退 ModelScope；两源都校验大小与 SHA-256。
+                ' 版本清单确认后，更新包优先走 ModelScope；ModelScope 不可达或校验失败时回退 GitHub。
+                ' 两源都校验大小与 SHA-256。
                 Dim downloaded As Boolean = False
-                Dim githubError As Exception = Nothing
+                Dim modelScopeError As Exception = Nothing
                 Try
-                    Dim githubUrl = manifest.GithubPackageUrl
-                    If String.IsNullOrWhiteSpace(githubUrl) Then githubUrl = BuildGithubPackageUrl(manifest)
-                    Await DownloadToFileAsync(githubUrl, manifest, progress, temporary, True)
+                    Await DownloadToFileAsync(BuildResolveUrl(manifest.Package.Path), manifest, progress, temporary, False)
                     downloaded = True
                 Catch ex As Exception
-                    githubError = ex
+                    modelScopeError = ex
                 End Try
                 If Not downloaded Then
                     Try
-                        Await DownloadToFileAsync(BuildResolveUrl(manifest.Package.Path), manifest, progress, temporary, False)
+                        Dim githubUrl = manifest.GithubPackageUrl
+                        If String.IsNullOrWhiteSpace(githubUrl) Then githubUrl = BuildGithubPackageUrl(manifest)
+                        Await DownloadToFileAsync(githubUrl, manifest, progress, temporary, True)
                         downloaded = True
-                    Catch modelScopeError As Exception
-                        Throw New IOException("更新包下载失败（GitHub 与 ModelScope 均未成功）：" &
-                            Environment.NewLine & "GitHub：" &
-                            If(githubError IsNot Nothing, githubError.Message, "未知错误") &
-                            Environment.NewLine & "ModelScope：" & modelScopeError.Message, modelScopeError)
+                    Catch githubError As Exception
+                        Throw New IOException("更新包下载失败（ModelScope 与 GitHub 均未成功）：" &
+                            Environment.NewLine & "ModelScope：" &
+                            If(modelScopeError IsNot Nothing, modelScopeError.Message, "未知错误") &
+                            Environment.NewLine & "GitHub：" & githubError.Message, githubError)
                     End Try
                 End If
                 If Not downloaded Then
-                    Throw New IOException("更新包下载失败：" & If(githubError IsNot Nothing, githubError.Message, "未知错误"))
+                    Throw New IOException("更新包下载失败：" & If(modelScopeError IsNot Nothing, modelScopeError.Message, "未知错误"))
                 End If
                 File.Move(temporary, destination, True)
                 Return destination
