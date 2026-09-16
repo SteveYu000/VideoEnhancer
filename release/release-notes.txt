@@ -6,3 +6,4 @@
 [更改]修复超分工作台滚动后返回顶部出现大面积空白的问题
 [更改]构建系统迁移为 SDK 风格插件项目与 VideoEnhancer.slnx，CLI 自动构建并嵌入插件
 [移除]移除不参与运行时的旧 PluginDesigner 和手工 build.ps1 构建入口
+[更改]更新包下载优先使用 ModelScope，失败后回退 GitHub Release
