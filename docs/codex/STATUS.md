@@ -1,12 +1,12 @@
 # Project Status
 
-Last updated: 2026-09-16 10:49
+Last updated: 2026-09-16 10:52
 Updated by: Codex
 
 ## Current Snapshot
 
 - Latest objective/state (2026-09-16 10:49): GitHub PR #3 已正式合并，包含 HDR、3FUI 6.2.20 队列/任务控制、预览、优雅停止和滚动修复的 1.3.3 已发布到 GitHub 与 ModelScope，并部署到当前本机 3FUI。
-- Latest files/Git: PR 合并提交为 `c80c351`；发布代码提交 `7af6e21` 已推送 `fork/main`，GitHub 标签 `v1.3.3` 指向该提交。仅本次正式发布记录尚待收尾提交与推送。
+- Latest files/Git: PR 合并提交为 `c80c351`；发布代码提交 `7af6e21` 已推送 `fork/main`，GitHub 标签 `v1.3.3` 指向该提交；发布记录提交 `4698f1e` 已推送，主分支已同步。
 - Latest verification: `VideoEnhancer.slnx` 构建 0 警告/0 错误；Python 29/29；安装器五场景、更新器七场景、Backend 更新器 6/6、发布门禁 5/5 均通过；GitHub 和 ModelScope 三类资产远端回读哈希一致。
 - Latest deployment: 正式发布前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-final-release-deploy-20260916-104542`；当前插件 DLL 源/目标 SHA-256 均为 `AADB2A5B8905544F78FA8D9ECB63F1D15D109EDA8EE2698E786EFF21244F7DEF`，EXE 源/目标 SHA-256 均为 `6A87BF50B39C2056BA521A405730C26FE377CB431FDC7A2E50730AFBB6D615AF`，安装版 `--version` 为 1.3.3，未残留相关进程。
 - Latest remaining issue/research: 尚未在真实 3FUI 窗口逐项执行开始/暂停/恢复/停止/移除/重置/定位及 RTX VSR/HDR 画面刷新回归；尚未模拟 sidecar 无响应的实机强制停止；需要用户重启 3FUI 后验收。
@@ -2086,4 +2086,4 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Release: GitHub Release `https://github.com/maxzrb/VideoEnhancer/releases/tag/v1.3.3` 已创建为正式版本；ModelScope Releases 与 Models 备用 EXE 已同步。Backend 审计为 `UNCHANGED`，继续使用 2026.09.12.1；RTX runtime 未修改，继续使用 2026.09.14.1。
 - Verification: 正式构建、Python 29/29、安装器五场景、更新器七场景、Backend 更新器 6/6、发布门禁 5/5 均通过。EXE 16,967,565 bytes / `6A87BF50B39C2056BA521A405730C26FE377CB431FDC7A2E50730AFBB6D615AF`；手动 ZIP 13,973,833 bytes / `8A9538879C94163077E376D7852B6647C12A55BA9641D8348D8CFF9C843E7958`；stable.json 1,219 bytes / `8DB68209FCE0BB74B616E65223C54E6D8E37152CC9AF8797FE89715D306247F1`。GitHub 与 ModelScope 实际下载回读全部一致。
 - Deployment: 确认相关进程未运行后，将正式 DLL/EXE 部署到 `C:\Program portable\3FUI\3FUI\Plugin`；备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-final-release-deploy-20260916-104542`。安装 DLL 为 `AADB2A5B8905544F78FA8D9ECB63F1D15D109EDA8EE2698E786EFF21244F7DEF`，EXE 与正式发布哈希一致，`--version` 返回 1.3.3，未残留 videoenhancer/sidecar/FFmpeg 进程。
-- Remaining: 真实 3FUI 中的 HDR 输入、滚动、RTX 预览及开始/暂停/恢复/停止/停止后移除仍需用户重启后验收；发布记录提交并推送后工作树应保持干净。
+- Remaining: 真实 3FUI 中的 HDR 输入、滚动、RTX 预览及开始/暂停/恢复/停止/停止后移除仍需用户重启后验收；发布记录提交 `4698f1e` 已推送，收尾状态已核对。
