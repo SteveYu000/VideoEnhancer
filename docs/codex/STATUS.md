@@ -1,15 +1,17 @@
 # Project Status
 
-Last updated: 2026-09-14 16:19
+Last updated: 2026-09-16 10:22
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-14 16:19): 1.3.2 已按用户要求完成同版本覆盖：RTX runtime 支持专用右键卸载、安装后自动清理所有日期归档，“清理归档”覆盖 RTX 专用目录；旧 1.3.2 可按 EXE 哈希收到覆盖更新。
-- Latest files/Git: 功能提交 `cb489a6`、同版本更新提交 `57c0dcb` 已推送 `fork/main`，`v1.3.2` 标签已移动到 `57c0dcb`；最终双源资产回读一致。本机部署 EXE `ee3b66b5…`、DLL `86d1970e…`，RTX 归档数 0。
-- Latest remaining issue/research: 仅需提交并推送最终发布记录。Backend 2026.09.12.1 与 RTX runtime 内容 2026.09.14.1 均不变；完整《缎带英雄》长任务仍由用户重新启动。
+- Latest objective/state (2026-09-16 10:22): 已审查并在本地整合 GitHub PR #3 的 SDK 项目/`.slnx` 构建重构，同时完整保留候选 1.3.3 的 HDR 参数、队列兼容、任务控制、预览和滚动修复；组合版已构建、测试并部署，未推送、未合并远端 PR、未发布版本。
+- Latest files/Git: 启动时 `git pull --ff-only` 显示 Already up to date；本地 `main` 已快进包含 PR #3 的 `ff49abd`、`615875d`，相对 `fork/main` ahead 2；此前 1.3.3 源码、测试与记录改动零冲突恢复，仍未提交。
+- Latest verification: `VideoEnhancer.slnx` restore/build 0 警告/0 错误；Python 29/29；安装器场景、更新器场景、Backend 更新器 6/6、发布门禁 5/5 均通过；安装程序/ZIP 与 ZIP 内 EXE/DLL 哈希一致；SDK 产物通过滚动根 `Top=-168 -> -168 -> 0` 回归；`git diff --check` 通过（仅行尾转换提示）。
+- Latest deployment: PR 整合前安装文件备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-pr3-integration-20260916-1022`；当前插件 DLL 源/目标 SHA-256 均为 `03E6EC01FACA68EA40AFABF66CE534F48C4F4E6A2305609F7C462DD82D58A033`，EXE 源/目标 SHA-256 均为 `2ECBF72CCCCB275F9F9D1DD3DBBC9766EBE801F0929F9F52A67C9C2F505D6923`，安装版 `--version` 为 1.3.3。
+- Latest remaining issue/research: 尚未在真实 3FUI 窗口逐项执行开始/暂停/恢复/停止/移除/重置/定位及 RTX VSR/HDR 画面刷新回归；尚未模拟 sidecar 无响应的实机强制停止；需要用户重启 3FUI 后验收。
 
-- Current objective: 保持 GIMM R-LPIPS 不复制帧的正确性，同时逐项修复 RTX VSR/HDR 管线；当前阶段已完成 RTX 处理与 3FUI FFmpeg 编码解耦、软件编码支持、精确选流及相关回归。
+- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制和预览兼容性修复，并在本机候选版本上完成用户验收。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
@@ -17,6 +19,31 @@ Updated by: Codex
 - Next recommended step: 用户重启 3FUI 后以原参数重新运行完整《缎带英雄》任务；如需最高覆盖率再重跑完整 1262 项矩阵。发布后记录提交并推送后两个仓库应保持干净。
 
 ## Active TODO
+
+- [x] Task: 审查并整合 GitHub PR #3，同时保留候选 1.3.3 修复。
+  - Owner: Codex
+  - Status: PR #3 两个提交已快进整合到本地 `main`；现有未提交改动通过三方叠加零冲突恢复。未推送 `fork/main`，未操作远端 PR 合并状态。
+  - PR review: PR 将手工 `vbc`/`build.ps1` 迁移为 `VideoEnhancer.slnx`、SDK 风格插件项目和 CLI `ProjectReference`，统一插件构建/嵌入，并将解决方案发布产物收口到 `Artifacts\VideoEnhancerInstaller.exe`、`Artifacts\VideoEnhancer.zip`；删除不参与运行时的 `PluginDesigner`。业务处理文件无覆盖，实际重叠仅 `cli/VideoEnhancer.csproj` 的 1.3.3 版本号，自动合并成功。
+  - Verification: PR 原始分支独立 worktree 构建 0/0、Python 24/24，直接 CLI publish 不生成 `Artifacts`、解决方案 publish 正确生成两个产物；组合版构建 0/0、Python 29/29、安装器、更新器、Backend 更新器 6/6、发布门禁 5/5、ZIP 哈希一致性和滚动布局探针均通过。
+  - Deployment: 使用 SDK 产物覆盖本机 3FUI 的 DLL/EXE，部署前确认相关进程未运行；安装版仍为 1.3.3，备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-pr3-integration-20260916-1022`。
+  - Remaining: 仍需用户在真实 3FUI 窗口验收 HDR 输入、滚动、RTX 预览及任务停止/移除；当前本地分支 ahead 2 且候选修复未提交，建议形成整合提交后再决定是否推送及合并 PR。
+  - Relevant files: `VideoEnhancer.slnx`, `VideoEnhancerPlugin/VideoEnhancerPlugin.vbproj`, `cli/VideoEnhancer.csproj`, `release/*.ps1`, `VideoEnhancerPlugin/HostQueueAccess.vb`, `VideoEnhancerPlugin/PluginPanel.vb`, `VideoEnhancerPlugin/StopControl.vb`。
+
+- [x] Task: 修复 RTX HDR 参数、任务控制与预览兼容性（候选 1.3.3）。
+  - Owner: Codex
+  - Status: 已完成源码与本机部署；未创建标签、未推送、未发布远端版本。
+  - Implementation: PluginConfig 增加四项 HDR 整数参数并在加载时默认/钳制；PluginPanel 使用 LakeUI ModernNumericUpDown 两列两行布局；HDR 控件子类屏蔽滚轮、方向键/Page 键和不可见末端按钮步进，按钮区域压缩为 1px、箭头透明并增加文本内边距；QueueHook 传递四个 CLI 参数；CLI 校验并写入 sidecar `processing.hdr`；HostQueueAccess 反射优先调用 `获取队列快照()`/`根据ID获取任务()`；预览、进度、暂停和停止均移除旧 getter 绑定；按钮按字段名、控件名和文本识别；插件任务停止先恢复 CLI、写共享内存并等待 12 秒后调用宿主停止 API，CLI 取消后给 FFmpeg 8 秒封装窗口，并用成功标记保护可读取的部分输出。
+  - Verification: CLI build/publish 0 errors（2 条既有 CA1416）；LakeUI 5.9 插件构建通过；Python 29/29；HDR sidecar JSON 反射收到 37/151/73/1370；四项越界 CLI 参数明确退出 2；源码无直接 `编码队列_v6.队列` 调用；`git diff --check` 通过。
+  - Deployment: 当前 3FUI 6.2.20 未运行时完成备份和覆盖；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-deploy-20260915-132742`；安装 EXE `--version` 返回 1.3.3。待用户重启后验收真实按钮、预览和停止残留进程。
+  - Relevant files: `VideoEnhancerPlugin/HostQueueAccess.vb`, `VideoEnhancerPlugin/PluginConfig.vb`, `VideoEnhancerPlugin/PluginPanel.vb`, `VideoEnhancerPlugin/QueueHook.vb`, `VideoEnhancerPlugin/StopControl.vb`, `VideoEnhancerPlugin/PreviewEngine.vb`, `VideoEnhancerPlugin/BackendProgress.vb`, `VideoEnhancerPlugin/PauseControl.vb`, `cli/Program.cs`, `cli/RtxVideoBackendClient.cs`, `cli/tests/test_rtx_hdr_controls.py`.
+
+- [x] Task: 修复 HDR 参数加入后工作台向上滚动出现顶部空白。
+  - Owner: Codex
+  - Status: 已定位 LakeUI `ModernPanel` 的设计坐标误记问题，修复并完成本机 DLL 覆盖；未发布远端版本。
+  - Implementation: `SyncUpscaleRootBounds` 不再无条件执行 `root.SetBounds(0, 0, ...)`，而是在当前滚动坐标下保留根容器位置，仅同步宽度/高度；无滚动偏移且位置异常时才归零，避免滚动中的负位置被重新写入设计坐标。
+  - Verification: 临时 .NET 布局探针在旧逻辑下稳定复现 `Top=-168 -> Sync Top=0 -> 回顶 Top=168`，新逻辑验证为 `Top=-168 -> Sync Top=-168 -> 回顶 Top=0`；插件构建通过，Python 29/29，`git diff --check` 通过。
+  - Deployment: 当前 3FUI 未运行时完成目标 DLL 备份和覆盖，源/目标 SHA-256 均为 `4A328E31D18105CE1D433546CA10B2E97A845279EC3D75FD9063D97E407E59D5`。
+  - Relevant files: `VideoEnhancerPlugin/PluginPanel.vb`, `cli/tests/test_rtx_hdr_controls.py`。
 
 - [x] Task: RTX 处理帧交回 3FUI FFmpeg，并支持硬件/软件编码。
   - Owner: Codex
@@ -1999,3 +2026,55 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Same-version delivery: `PluginUpdater.HasUpdate` 在远端版本等于当前版本时比较已安装 EXE 大小与 SHA-256。反射实测旧 1.3.2 EXE 返回 True，最终 EXE 返回 False，覆盖版可自动到达且不会循环提示。
 - Deployment/cleanup: 确认相关进程未运行后部署最终 EXE/DLL；旧文件备份在 `%TEMP%\videoenhancer-1.3.2-final-before-deploy-20260914-1621`。直接 PowerShell 删除被策略阻止后，改用已发布程序重新校验解压 runtime 并自动删除 20260912/20260914 两个归档；安装目录归档数 0，sidecar SHA-256 仍为 `f66b15e0…`。
 - Git/next: 最终版本记录、STATUS 和中文进度待收尾提交并推送；功能提交已推送，标签已核对。提交后应确认工作树干净。
+
+### 2026-09-15 13:35 - Codex
+
+- Request: 用户要求按“修复 RTX HDR 参数、任务控制与预览兼容性”计划实施，限定只修改 VideoEnhancer 插件与 CLI，并部署到当前本机 3FUI，不发布远端版本。
+- Orientation: 已读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md` 及 HandShake 2.1.0-beta 说明；`git pull --ff-only` 已显示 Already up to date，基线 `e8b900f`，当前分支 `main...fork/main`。
+- Implementation: 新增 `HostQueueAccess.vb`，反射优先读取 6.2.20 的 `获取队列快照()`/`根据ID获取任务()`，旧宿主回退反射属性；替换预览、进度、暂停、停止中所有旧队列 getter。队列按钮支持字段名、控件名、按钮文本识别并保存/恢复宿主原事件；普通任务走宿主停止 API，插件任务共享内存优雅停止，12 秒后强制回退。
+- HDR: `PluginConfig` 增加对比度/饱和度/中灰度/最大亮度，加载时默认和钳制；PluginPanel 使用四个可编辑、0 位小数 `ModernNumericUpDown`，两列两行并扩展滚动内容高度；QueueHook、CLI 和 `RtxVideoBackendClient` 传递四个整数到 sidecar JSON。
+- CLI stop: sidecar 取消后关闭帧管道/FFmpeg stdin，最多等待 8 秒完成封装；退出码 0 且非空输出时保留部分文件，否则沿现有失败清理；常规 RTX 任务仍返回 130。
+- Verification: `dotnet build cli/VideoEnhancer.csproj --configuration Release --no-restore` 通过（2 条既有 CA1416）；`VideoEnhancerPlugin/build.ps1 -HostBin C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host -SkipInstall` 通过；`python -m unittest discover -s cli/tests -p test_*.py` 29/29；sidecar JSON 反射确认非默认值；CLI 越界参数返回 2；源码无 `编码队列_v6.队列` 直接引用；`git diff --check` 通过。
+- Deployment: 发布脚本生成候选 1.3.3；确认 `FFmpegFreeUI`、`videoenhancer`、`ffmpeg`、`vsr_backend` 均未运行后备份并覆盖当前安装。最终 DLL 覆盖前备份目录 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remove-race-dll-20260915-1408`；最终安装 DLL `18F568D9C0CE2983A09475027B11006005F95991B93FC1A67D1500C73CCC8260`，安装 EXE `EE4F85F0BC9C0BF328536788E4491951323728E1C512C33E1698BE46E9DF2377`；安装 EXE `--version` 返回 `1.3.3`。
+- Remaining: 真实 3FUI UI/预览/任务控制、sidecar 无响应强停和 ffprobe 部分输出验证待用户重启后执行；未创建标签、未推送、未发布远端版本。当前工作树含源码、测试和记录改动，建议提交后再进行用户验收。
+
+### 2026-09-15 13:40 - Codex
+
+- Final verification: 重新执行 `python -m unittest discover -s cli/tests -p 'test_*.py'`，29/29 通过；`dotnet build cli/VideoEnhancer.csproj --configuration Release --no-restore` 0 警告/0 错误；插件 `build.ps1 -SkipInstall` 构建通过；静态检查确认无 `编码队列_v6.队列` 直接引用；`git diff --check` 通过。
+- Deployment check: 当前安装 DLL SHA-256 为 `18F568D9C0CE2983A09475027B11006005F95991B93FC1A67D1500C73CCC8260`，CLI `--version` 返回 1.3.3，EXE SHA-256 为 `EE4F85F0BC9C0BF328536788E4491951323728E1C512C33E1698BE46E9DF2377`；部署目录未残留相关运行进程。
+- Documentation: `version/版本迭代记录.md` 已将 1.3.3 标记为本地候选，并保留 1.3.2 历史记录；当前源码、测试和记录均未提交，建议先提交后再进行用户实机验收。
+
+### 2026-09-15 14:02 - Codex
+
+- Stop-output safeguard: CLI 在 RTX 优雅停止且 FFmpeg 以 0 退出并生成非空输出时写入 `.videoenhancer-stop-ok` 标记；插件临时避免宿主 MP4 清理，宿主收尾后恢复原输出路径，并按标记保留有效部分或按原设置清理残缺 MP4。
+- Final build/deployment: 重新执行 CLI publish（0 错误，2 条既有 CA1416）、插件构建、Python 29/29 和安装核对；当前 DLL `18F568D9C0CE2983A09475027B11006005F95991B93FC1A67D1500C73CCC8260`，EXE `EE4F85F0BC9C0BF328536788E4491951323728E1C512C33E1698BE46E9DF2377`，`--version` 为 1.3.3。
+- Backup/Git: 最终 DLL 覆盖前备份为 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remove-race-dll-20260915-1408`；未创建标签、未推送、未发布远端，工作树仍未提交，建议提交后再让用户重启 3FUI 验收。
+
+### 2026-09-15 14:31 - Codex
+
+- Request: 用户要求 HDR 四个输入框不受鼠标滚轮影响、只能输入数字、去掉步进按钮，并修复数值被控件区域遮挡。
+- Implementation: `PluginPanel.vb` 新增 `RtxHdrNumericUpDown`，继承 LakeUI `ModernNumericUpDown`；不调用基类滚轮处理，拦截 Up/Down/PageUp/PageDown，并拦截右端不可见按钮区域。四个控件保留整数可编辑输入，`ButtonAreaWidth=1`、`DividerSize=0`、按钮/箭头透明，增加左右 10px 内边距和左对齐，释放文本绘制空间。
+- Verification: `python -m unittest discover -s cli/tests -p 'test_*.py'` 29/29 通过；`VideoEnhancerPlugin\build.ps1 -HostBin C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host -SkipInstall` 构建通过；源 DLL SHA-256 `1C46C9583DED8CCD2AD6E81F46F0BC7270CD3B1352F5C4843AF5051AC9E9B564`。
+- Deployment: 确认 3FUI、插件、FFmpeg 和 RTX 进程均未运行后覆盖 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`；部署前备份为 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-hdr-input-20260915-142919`，目标哈希与源一致。
+- Git/next: 版本仍为本地候选 1.3.3，未创建标签、未推送、未发布远端；需收尾执行 `git diff --check`/状态核对并由用户重启 3FUI 实测滚轮、键盘输入和四个数值完整显示。工作树仍含本轮未提交改动，建议提交后验收。
+
+### 2026-09-15 16:40 - Codex
+
+- Request: 用户反馈加入 HDR 参数后工作台可以向上滚动到顶部大面积空白，要求说明原因并修复。
+- Root cause: LakeUI `ModernPanel` 滚动时会把子控件根节点移动到负的视觉 `Top`；`SyncUpscaleRootBounds` 原先无条件执行 `root.SetBounds(0, 0, ...)`，位置变更事件随后把当前滚动偏移误写进设计坐标，回到顶部时根节点因此停在正的 `Top`。
+- Implementation: `PluginPanel.vb` 的同步方法改为保留当前滚动坐标，仅更新根节点宽度/高度；仅在水平/垂直滚动偏移为零且位置异常时归零，避免改变 LakeUI 设计坐标。
+- Verification: 临时 .NET 布局探针复现旧逻辑 `ScrollTo(0,180)` 后 `root.Top=-168`、同步后 `Top=0`、回顶后 `Top=168`；新 DLL 验证同步后仍为 `Top=-168`、回顶为 `Top=0`。插件构建通过，Python 29/29，`git diff --check` 通过。
+- Deployment: 确认相关进程未运行后备份并覆盖本机 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-scroll-fix-20260915-1638`，源/目标 SHA-256 均为 `4A328E31D18105CE1D433546CA10B2E97A845279EC3D75FD9063D97E407E59D5`。
+- Git/next: 版本仍为本地候选 1.3.3，未创建标签、未推送、未发布远端；当前工作树含所有候选改动，建议提交后重启 3FUI 验收滚动和 HDR 输入。
+
+### 2026-09-16 10:22 - Codex
+
+- Request: 用户要求审查 `maxzrb/VideoEnhancer#3` 的构建优化，并在不冲突的前提下整合此前 HDR、任务控制、预览兼容和滚动修复。
+- Orientation/Git: 已读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md`、HandShake 2.1.0-beta 与冲突流程；`git pull --ff-only` 为 Already up to date。PR #3 包含 `ff49abd`、`615875d`，无 CI checks 和评审评论。
+- Review: PR 主要将插件迁移到 SDK 风格 `VideoEnhancerPlugin.vbproj`，新增根解决方案 `VideoEnhancer.slnx`，CLI 通过项目引用自动构建并嵌入插件，区分普通 CLI publish 与解决方案安装产物；删除旧 `build.ps1` 和非运行时 `PluginDesigner`。PR 未修改 HDR、队列、停止、预览或滚动业务代码。
+- Conflict handling: 在独立 worktree 先验证 PR 原始状态，再将当前工作树补丁三方应用到 PR head；全部已跟踪文件零冲突，新增 `HostQueueAccess.vb` 自动进入 SDK 默认编译。正式整合时用带 untracked 的临时 stash 保护现有改动，`main` 快进到 PR head 后恢复成功，stash 已正常删除。
+- Verification: PR 原始状态 restore/build 0 警告/0 错误、Python 24/24；直接 CLI publish 不生成 `Artifacts`，解决方案 publish 只生成安装程序和手动 ZIP。组合版 restore/build 0/0、Python 29/29；安装器全新安装/迁移/短暂占用/注入回滚/持续占用通过，更新器迁移/占用/防篡改/无效包/回滚/中断恢复/失败重启通过，Backend 更新器 6/6、发布门禁 5/5；`git diff --check` 通过。
+- Artifacts: `Artifacts\VideoEnhancerInstaller.exe` 为 1.3.3，SHA-256 `2ECBF72CCCCB275F9F9D1DD3DBBC9766EBE801F0929F9F52A67C9C2F505D6923`；`Artifacts\VideoEnhancer.zip` SHA-256 `896B851640621BE287E6C52D18B0E06569D356B6B762398424B2388FB16A8316`；插件 SHA-256 `03E6EC01FACA68EA40AFABF66CE534F48C4F4E6A2305609F7C462DD82D58A033`。ZIP 内 EXE/DLL 与构建源逐项一致。
+- UI regression: SDK 插件产物经布局探针验证滚动后 `root.Top=-168`，尺寸同步后仍为 `-168`，回顶为 `0`，PR 构建迁移未破坏顶部空白修复。
+- Deployment: 确认 3FUI、videoenhancer、FFmpeg、sidecar 均未运行后备份并覆盖本机 DLL/EXE；备份目录 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-pr3-integration-20260916-1022`，目标哈希与源一致，安装版 `--version` 为 1.3.3。
+- Git/next: 本地 `main` 相对 `fork/main` ahead 2（PR 提交），此前候选 1.3.3 源码/测试/记录仍未提交；未推送、未合并远端 PR、未发布。下一步建议提交候选整合改动，并由用户重启 3FUI 做真实 UI 与任务流程验收。

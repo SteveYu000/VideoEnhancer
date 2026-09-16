@@ -191,8 +191,9 @@ Namespace videoenhancer
                         UpdateOutputSize(task)
                     End If
                 End Using
-            Catch
-                ' 进度解析失败不影响队列
+            Catch ex As Exception
+                ' 进度解析失败不影响队列，但要留下可定位日志。
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][进度] 解析任务进度失败：" & ex.Message)
             End Try
         End Sub
 
@@ -210,18 +211,17 @@ Namespace videoenhancer
                     End If
                     Return idEl.GetString()
                 End Using
-            Catch
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][进度] 解析任务 ID 失败：" & ex.Message)
                 Return ""
             End Try
         End Function
 
         Private Shared Function FindTask(id As String) As 编码任务_v6
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    Return queue.FirstOrDefault(Function(t) String.Equals(t.ID, id, StringComparison.Ordinal))
-                End SyncLock
-            Catch
+                Return HostQueueAccess.FindTask(id)
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][进度] 读取任务失败：" & ex.Message)
                 Return Nothing
             End Try
         End Function

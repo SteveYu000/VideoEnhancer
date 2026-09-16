@@ -36,6 +36,14 @@ Namespace videoenhancer
         Public Property ProcessOrder As String = "upscale-first"
         ''' <summary>对视频启用 NVIDIA RTX Video HDR 映射。</summary>
         Public Property RtxHdrEnabled As Boolean = False
+        ''' <summary>RTX HDR 对比度（0-200，默认 100）。</summary>
+        Public Property RtxHdrContrast As Integer = 100
+        ''' <summary>RTX HDR 饱和度（0-200，默认 100）。</summary>
+        Public Property RtxHdrSaturation As Integer = 100
+        ''' <summary>RTX HDR 中灰度（10-100，默认 44）。</summary>
+        Public Property RtxHdrMiddleGray As Integer = 44
+        ''' <summary>RTX HDR 最大亮度（400-2000 nit，默认 1000）。</summary>
+        Public Property RtxHdrMaxLuminance As Integer = 1000
         ''' <summary>RTX VSR 输出规格：倍率或按横竖方向映射的目标边。</summary>
         Public Property RtxTarget As String = "2x"
         ''' <summary>RTX VSR 质量等级（1-4）。</summary>
@@ -66,6 +74,7 @@ Namespace videoenhancer
 
         Public Shared Function Load() As PluginConfig
             Dim cfg As PluginConfig = Nothing
+            Dim configChanged As Boolean = False
             Try
                 If File.Exists(ConfigPath) Then
                     cfg = JsonSerializer.Deserialize(Of PluginConfig)(File.ReadAllText(ConfigPath))
@@ -74,12 +83,47 @@ Namespace videoenhancer
                 ' 配置损坏时回退到默认
             End Try
             If cfg Is Nothing Then cfg = New PluginConfig()
+            configChanged = cfg.NormalizeRtxHdrParameters()
             Dim detected = ResolveInstalledExePath(cfg.ExePath)
             If Not String.Equals(cfg.ExePath, detected, StringComparison.OrdinalIgnoreCase) Then
                 cfg.ExePath = detected
-                If Not String.IsNullOrWhiteSpace(detected) Then cfg.Save()
+                If Not String.IsNullOrWhiteSpace(detected) Then configChanged = True
             End If
+            If configChanged Then cfg.Save()
             Return cfg
+        End Function
+
+        ''' <summary>
+        ''' 将旧配置缺少的 HDR 字段保留为属性默认值，并把越界值钳制到 sidecar 合法范围。
+        ''' 返回是否发生修正，供 Load() 决定是否回写配置文件。
+        ''' </summary>
+        Public Function NormalizeRtxHdrParameters() As Boolean
+            Dim changed As Boolean = False
+            Dim contrast = ClampRtxHdrContrast(RtxHdrContrast)
+            If contrast <> RtxHdrContrast Then RtxHdrContrast = contrast : changed = True
+            Dim saturation = ClampRtxHdrSaturation(RtxHdrSaturation)
+            If saturation <> RtxHdrSaturation Then RtxHdrSaturation = saturation : changed = True
+            Dim middleGray = ClampRtxHdrMiddleGray(RtxHdrMiddleGray)
+            If middleGray <> RtxHdrMiddleGray Then RtxHdrMiddleGray = middleGray : changed = True
+            Dim maxLuminance = ClampRtxHdrMaxLuminance(RtxHdrMaxLuminance)
+            If maxLuminance <> RtxHdrMaxLuminance Then RtxHdrMaxLuminance = maxLuminance : changed = True
+            Return changed
+        End Function
+
+        Public Shared Function ClampRtxHdrContrast(value As Integer) As Integer
+            Return Math.Max(0, Math.Min(200, value))
+        End Function
+
+        Public Shared Function ClampRtxHdrSaturation(value As Integer) As Integer
+            Return Math.Max(0, Math.Min(200, value))
+        End Function
+
+        Public Shared Function ClampRtxHdrMiddleGray(value As Integer) As Integer
+            Return Math.Max(10, Math.Min(100, value))
+        End Function
+
+        Public Shared Function ClampRtxHdrMaxLuminance(value As Integer) As Integer
+            Return Math.Max(400, Math.Min(2000, value))
         End Function
 
         ''' <summary>

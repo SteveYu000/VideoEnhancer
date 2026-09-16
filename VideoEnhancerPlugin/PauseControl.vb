@@ -53,7 +53,8 @@ Namespace videoenhancer
                             ClearPending(id)
                     End Select
                 End Using
-            Catch
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][暂停] 处理队列事件失败：" & ex.Message)
             End Try
         End Sub
 
@@ -82,7 +83,8 @@ Namespace videoenhancer
                         End If
                     End If
                 Next
-            Catch
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][暂停] 读取选中任务失败：" & ex.Message)
             End Try
         End Sub
 
@@ -147,18 +149,17 @@ Namespace videoenhancer
                         Return tokens(i + 1).Text.Trim(""""c)
                     End If
                 Next
-            Catch
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][暂停] 解析共享内存参数失败：" & ex.Message)
             End Try
             Return ""
         End Function
 
         Private Shared Function FindTask(id As String) As 编码任务_v6
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    Return queue.FirstOrDefault(Function(t) String.Equals(t.ID, id, StringComparison.Ordinal))
-                End SyncLock
-            Catch
+                Return HostQueueAccess.FindTask(id)
+            Catch ex As Exception
+                Diagnostics.Trace.WriteLine("[VideoEnhancer][暂停] 查找任务失败：" & ex.Message)
                 Return Nothing
             End Try
         End Function

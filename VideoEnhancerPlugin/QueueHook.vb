@@ -208,31 +208,119 @@ Namespace videoenhancer
                 ' EnsurePreviewMenuItem 统一管理（挂 MouseUp 保证显示菜单前已存在）。
                 EnsurePreviewMenuItem()
 
-                Dim btnPause = TryCast(HostAccess.GetField(queueForm, "_ModernButton2", "ModernButton2"), Control)
-                If btnPause IsNot Nothing Then
-                    _btnPause = btnPause
-                    _originalPauseClick = RemoveControlEvent(btnPause, "Click")
-                    _hookedPauseClick = New EventHandler(AddressOf OnPauseClicked)
-                    AddHandler btnPause.Click, _hookedPauseClick
-                End If
-
-                Dim btnResume = TryCast(HostAccess.GetField(queueForm, "_ModernButton3", "ModernButton3"), Control)
-                If btnResume IsNot Nothing Then
-                    _btnResume = btnResume
-                    _originalResumeClick = RemoveControlEvent(btnResume, "Click")
-                    _hookedResumeClick = New EventHandler(AddressOf OnResumeClicked)
-                    AddHandler btnResume.Click, _hookedResumeClick
-                End If
-
-                Dim btnStop = TryCast(HostAccess.GetField(queueForm, "_ModernButton4", "ModernButton4"), Control)
-                If btnStop IsNot Nothing Then
-                    _btnStop = btnStop
-                    _originalStopClick = RemoveControlEvent(btnStop, "Click")
-                    _hookedStopClick = New EventHandler(AddressOf OnStopClicked)
-                    AddHandler btnStop.Click, _hookedStopClick
-                End If
-            Catch
+                HookActionButtons(queueForm)
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][队列] 挂载队列控件失败：" & ex.Message)
             End Try
+        End Sub
+
+        ''' <summary>按字段名优先、控件 Name/Text 辅助识别暂停、恢复和停止按钮。</summary>
+        Private Shared Sub HookActionButtons(queueForm As Object)
+            If queueForm Is Nothing Then Return
+            Dim btnPause = FindQueueActionButton(queueForm, "pause")
+            Dim btnResume = FindQueueActionButton(queueForm, "resume")
+            Dim btnStop = FindQueueActionButton(queueForm, "stop")
+
+            If btnPause IsNot Nothing AndAlso Not ReferenceEquals(_btnPause, btnPause) Then
+                If _btnPause IsNot Nothing AndAlso _hookedPauseClick IsNot Nothing Then
+                    RemoveHandler _btnPause.Click, _hookedPauseClick
+                    RestoreControlEvent(_btnPause, "Click", _originalPauseClick)
+                End If
+                _btnPause = btnPause
+                _originalPauseClick = RemoveControlEvent(btnPause, "Click")
+                _hookedPauseClick = New EventHandler(AddressOf OnPauseClicked)
+                AddHandler btnPause.Click, _hookedPauseClick
+            End If
+            If btnResume IsNot Nothing AndAlso Not ReferenceEquals(_btnResume, btnResume) Then
+                If _btnResume IsNot Nothing AndAlso _hookedResumeClick IsNot Nothing Then
+                    RemoveHandler _btnResume.Click, _hookedResumeClick
+                    RestoreControlEvent(_btnResume, "Click", _originalResumeClick)
+                End If
+                _btnResume = btnResume
+                _originalResumeClick = RemoveControlEvent(btnResume, "Click")
+                _hookedResumeClick = New EventHandler(AddressOf OnResumeClicked)
+                AddHandler btnResume.Click, _hookedResumeClick
+            End If
+            If btnStop IsNot Nothing AndAlso Not ReferenceEquals(_btnStop, btnStop) Then
+                If _btnStop IsNot Nothing AndAlso _hookedStopClick IsNot Nothing Then
+                    RemoveHandler _btnStop.Click, _hookedStopClick
+                    RestoreControlEvent(_btnStop, "Click", _originalStopClick)
+                End If
+                _btnStop = btnStop
+                _originalStopClick = RemoveControlEvent(btnStop, "Click")
+                _hookedStopClick = New EventHandler(AddressOf OnStopClicked)
+                AddHandler btnStop.Click, _hookedStopClick
+            End If
+        End Sub
+
+        Private Shared Function FindQueueActionButton(queueForm As Object, role As String) As Control
+            Dim aliases As String()
+            Select Case role
+                Case "pause"
+                    aliases = New String() {"_ModernButton2", "ModernButton2", "暂停", "pause"}
+                Case "resume"
+                    aliases = New String() {"_ModernButton3", "ModernButton3", "恢复", "resume"}
+                Case Else
+                    aliases = New String() {"_ModernButton4", "ModernButton4", "停止", "stop"}
+            End Select
+
+            ' 先按已知字段名读取，避免宿主控件尚未加入 Controls 集合时漏挂。
+            For Each aliasName In aliases
+                Dim fieldControl = TryCast(HostAccess.GetField(queueForm, aliasName), Control)
+                If fieldControl IsNot Nothing Then Return fieldControl
+            Next
+
+            Dim root = TryCast(queueForm, Control)
+            If root Is Nothing Then Return Nothing
+            Return FindActionButtonRecursive(root, role)
+        End Function
+
+        Private Shared Function FindActionButtonRecursive(parent As Control, role As String) As Control
+            For Each child As Control In parent.Controls
+                Dim name = If(child.Name, "")
+                Dim text = If(child.Text, "")
+                Dim typeName = child.GetType().Name
+                Dim nameMatch = role = "pause" AndAlso (name.IndexOf("pause", StringComparison.OrdinalIgnoreCase) >= 0 OrElse name.Contains("暂停")) OrElse
+                    role = "resume" AndAlso (name.IndexOf("resume", StringComparison.OrdinalIgnoreCase) >= 0 OrElse name.Contains("恢复")) OrElse
+                    role = "stop" AndAlso (name.IndexOf("stop", StringComparison.OrdinalIgnoreCase) >= 0 OrElse name.Contains("停止"))
+                Dim textMatch = role = "pause" AndAlso text.Contains("暂停") OrElse
+                    role = "resume" AndAlso text.Contains("恢复") OrElse
+                    role = "stop" AndAlso text.Contains("停止")
+                If nameMatch OrElse (textMatch AndAlso typeName.IndexOf("button", StringComparison.OrdinalIgnoreCase) >= 0) Then
+                    Return child
+                End If
+                Dim nested = FindActionButtonRecursive(child, role)
+                If nested IsNot Nothing Then Return nested
+            Next
+            Return Nothing
+        End Function
+
+        Private Shared Sub UnhookActionButtons()
+            Try
+                If _btnPause IsNot Nothing AndAlso _hookedPauseClick IsNot Nothing Then
+                    RemoveHandler _btnPause.Click, _hookedPauseClick
+                    RestoreControlEvent(_btnPause, "Click", _originalPauseClick)
+                End If
+                If _btnResume IsNot Nothing AndAlso _hookedResumeClick IsNot Nothing Then
+                    RemoveHandler _btnResume.Click, _hookedResumeClick
+                    RestoreControlEvent(_btnResume, "Click", _originalResumeClick)
+                End If
+                If _btnStop IsNot Nothing AndAlso _hookedStopClick IsNot Nothing Then
+                    RemoveHandler _btnStop.Click, _hookedStopClick
+                    RestoreControlEvent(_btnStop, "Click", _originalStopClick)
+                End If
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][队列] 卸载按钮钩子失败：" & ex.Message)
+            End Try
+            _btnPause = Nothing
+            _originalPauseClick = Nothing
+            _hookedPauseClick = Nothing
+            _btnResume = Nothing
+            _originalResumeClick = Nothing
+            _hookedResumeClick = Nothing
+            _btnStop = Nothing
+            _originalStopClick = Nothing
+            _hookedStopClick = Nothing
         End Sub
 
         ''' <summary>
@@ -255,6 +343,7 @@ Namespace videoenhancer
                 Return False
             End If
             If Not ReferenceEquals(_queueForm, queueForm) Then
+                UnhookActionButtons()
                 _queueForm = queueForm
                 _listView = TryCast(HostAccess.GetField(queueForm, "_UltraDetailListView1", "UltraDetailListView1"), Control)
                 _contextMenu = TryCast(HostAccess.GetField(queueForm, "_右键菜单", "右键菜单"), ModernContextMenu)
@@ -262,6 +351,7 @@ Namespace videoenhancer
                 _hookedListView = Nothing
                 _originalMouseUp = Nothing
                 _hookedMouseUp = Nothing
+                If _installed Then HookActionButtons(queueForm)
             End If
             Return _queueForm IsNot Nothing
         End Function
@@ -492,7 +582,8 @@ Namespace videoenhancer
                         result.Add(id)
                     End If
                 Next
-            Catch
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][队列] 读取选中任务 ID 失败：" & ex.Message)
             End Try
             Return result
         End Function
@@ -501,7 +592,8 @@ Namespace videoenhancer
         Private Shared Sub OnPauseClicked(sender As Object, e As EventArgs)
             Try
                 PauseControl.WriteForSelectedTasks(1)
-            Catch
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][暂停] 写入暂停控制失败：" & ex.Message)
             End Try
             InvokeOriginal(_originalPauseClick, sender, e)
         End Sub
@@ -510,17 +602,23 @@ Namespace videoenhancer
         Private Shared Sub OnResumeClicked(sender As Object, e As EventArgs)
             Try
                 PauseControl.WriteForSelectedTasks(0)
-            Catch
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][恢复] 写入恢复控制失败：" & ex.Message)
             End Try
             InvokeOriginal(_originalResumeClick, sender, e)
         End Sub
 
-        ''' <summary>停止按钮：先写后端停止字节（CLI 优雅停止并保留已处理部分），再把任务标记为手动停止。</summary>
+        ''' <summary>停止按钮：插件任务优雅停止，普通任务继续使用宿主原生停止。</summary>
         Private Shared Sub OnStopClicked(sender As Object, e As EventArgs)
+            Dim handled = False
             Try
-                StopControl.StopSelectedTasks()
-            Catch
+                handled = StopControl.StopSelectedTasks()
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][停止] 插件停止处理失败：" & ex.Message)
             End Try
+            If Not handled Then
+                InvokeOriginal(_originalStopClick, sender, e)
+            End If
         End Sub
 
         ''' <summary>空格键暂停/恢复：先按当前状态写字节，再执行 3fui 原逻辑。</summary>
@@ -537,11 +635,13 @@ Namespace videoenhancer
 
         Private Shared Sub InvokeOriginal(original As [Delegate], ParamArray args As Object())
             If original Is Nothing Then
+                Trace.WriteLine("[VideoEnhancer][队列] 宿主原始事件处理器为空")
                 Return
             End If
             Try
                 original.DynamicInvoke(args)
-            Catch
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][队列] 调用宿主原始事件失败：" & ex.Message)
             End Try
         End Sub
 
@@ -563,13 +663,14 @@ Namespace videoenhancer
                 For Each item In items
                     Dim id = TryCast(HostAccess.GetProperty(item, "Tag"), String)
                     If Not String.IsNullOrWhiteSpace(id) Then
-                        Dim task = 编码队列_v6.根据ID获取任务(id)
+                        Dim task = HostQueueAccess.FindTask(id)
                         If task IsNot Nothing AndAlso task.状态 = 编码任务状态_v6.已暂停 Then
                             Return True
                         End If
                     End If
                 Next
-            Catch
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][暂停] 读取暂停状态失败：" & ex.Message)
             End Try
             Return False
         End Function
@@ -676,7 +777,7 @@ Namespace videoenhancer
                     effectiveInterp = False
                     effectiveHdr = False
                 End If
-                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64)
+                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64, cfg.RtxHdrContrast, cfg.RtxHdrSaturation, cfg.RtxHdrMiddleGray, cfg.RtxHdrMaxLuminance)
                 AddQueueTask(args, Path.GetFileName(input), output, input)
                 added += 1
             Next
@@ -827,7 +928,7 @@ Namespace videoenhancer
         ' ────────────────────────── 命令构建 ──────────────────────────
 
         ''' <summary>构建 videoenhancer.exe 的参数：-i / -modelpath / -ffmpeg-settings / -pause-shm / -stop-shm / -interp-model / -no-upscale。</summary>
-        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "") As String
+        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "", Optional rtxHdrContrast As Integer = 100, Optional rtxHdrSaturation As Integer = 100, Optional rtxHdrMiddleGray As Integer = 44, Optional rtxHdrMaxLuminance As Integer = 1000) As String
             Dim sb As New StringBuilder()
             sb.Append("-i ").Append(Arg(input))
             If upscaleOn AndAlso Not String.IsNullOrWhiteSpace(model) Then
@@ -867,7 +968,13 @@ Namespace videoenhancer
                 sb.Append(" -rtx-target ").Append(Arg(If(String.IsNullOrWhiteSpace(rtxTarget), "2x", rtxTarget)))
                 sb.Append(" -rtx-quality ").Append(Math.Max(1, Math.Min(4, rtxQuality)).ToString(System.Globalization.CultureInfo.InvariantCulture))
             End If
-            If rtxHdr Then sb.Append(" -rtx-hdr")
+            If rtxHdr Then
+                sb.Append(" -rtx-hdr")
+                sb.Append(" -rtx-hdr-contrast ").Append(PluginConfig.ClampRtxHdrContrast(rtxHdrContrast).ToString(System.Globalization.CultureInfo.InvariantCulture))
+                sb.Append(" -rtx-hdr-saturation ").Append(PluginConfig.ClampRtxHdrSaturation(rtxHdrSaturation).ToString(System.Globalization.CultureInfo.InvariantCulture))
+                sb.Append(" -rtx-hdr-middle-gray ").Append(PluginConfig.ClampRtxHdrMiddleGray(rtxHdrMiddleGray).ToString(System.Globalization.CultureInfo.InvariantCulture))
+                sb.Append(" -rtx-hdr-max-luminance ").Append(PluginConfig.ClampRtxHdrMaxLuminance(rtxHdrMaxLuminance).ToString(System.Globalization.CultureInfo.InvariantCulture))
+            End If
             If Not String.IsNullOrWhiteSpace(segmentsBase64) Then
                 sb.Append(" --segments-base64 ").Append(Arg(segmentsBase64))
             End If

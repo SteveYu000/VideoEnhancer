@@ -1,0 +1,93 @@
+import re
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[2]
+PLUGIN = ROOT / "VideoEnhancerPlugin"
+CLI = ROOT / "cli"
+
+
+class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
+    def test_hdr_config_defaults_and_clamp_contract(self):
+        config = (PLUGIN / "PluginConfig.vb").read_text(encoding="utf-8-sig")
+        expected = {
+            "RtxHdrContrast": "100",
+            "RtxHdrSaturation": "100",
+            "RtxHdrMiddleGray": "44",
+            "RtxHdrMaxLuminance": "1000",
+        }
+        for name, default in expected.items():
+            self.assertRegex(config, rf"Property {name} As Integer = {default}")
+        self.assertIn("ClampRtxHdrContrast", config)
+        self.assertIn("ClampRtxHdrSaturation", config)
+        self.assertIn("ClampRtxHdrMiddleGray", config)
+        self.assertIn("ClampRtxHdrMaxLuminance", config)
+
+    def test_hdr_ui_uses_editable_integer_numeric_controls_and_layout(self):
+        panel = (PLUGIN / "PluginPanel.vb").read_text(encoding="utf-8-sig")
+        self.assertEqual(4, panel.count("New RtxHdrNumericUpDown()"))
+        self.assertIn("Inherits ModernNumericUpDown", panel)
+        self.assertIn("Protected Overrides Sub OnMouseWheel", panel)
+        self.assertIn("Case Keys.Up, Keys.Down, Keys.PageUp, Keys.PageDown", panel)
+        self.assertGreaterEqual(panel.count("ConfigureRtxHdrNumeric("), 4)
+        self.assertIn("control.DecimalPlaces = 0", panel)
+        self.assertIn("control.Editable = True", panel)
+        self.assertIn("control.ButtonAreaWidth = 1", panel)
+        self.assertIn("control.DividerSize = 0", panel)
+        self.assertIn("control.Padding = New Padding(10, 0, 10, 0)", panel)
+        self.assertIn("_config.Enabled AndAlso _config.RtxHdrEnabled", panel)
+        self.assertIn("_rtxHdrContrastField, 744", panel)
+        self.assertIn("_rtxHdrMaxLuminanceField, 814", panel)
+        self.assertIn("Dim rootTop As Integer = root.Top", panel)
+        self.assertIn("root.SetBounds(rootLeft, rootTop, width, UpscaleContentHeight)", panel)
+        self.assertNotIn("root.SetBounds(0, 0, width, UpscaleContentHeight)", panel)
+
+    def test_cli_validates_all_hdr_ranges_and_serializes_json_fields(self):
+        program = (CLI / "Program.cs").read_text(encoding="utf-8-sig")
+        client = (CLI / "RtxVideoBackendClient.cs").read_text(encoding="utf-8-sig")
+        ranges = {
+            "rtxHdrContrast": "0 or > 200",
+            "rtxHdrSaturation": "0 or > 200",
+            "rtxHdrMiddleGray": "10 or > 100",
+            "rtxHdrMaxLuminance": "400 or > 2000",
+        }
+        for variable, bound in ranges.items():
+            self.assertIn(f"{variable} is < {bound}", program)
+        for option in (
+            "--rtx-hdr-contrast",
+            "--rtx-hdr-saturation",
+            "--rtx-hdr-middle-gray",
+            "--rtx-hdr-max-luminance",
+        ):
+            self.assertIn(option, program)
+        for field in ("contrast", "saturation", "middleGray", "maxLuminance"):
+            self.assertRegex(client, rf'WriteNumber\("{field}", hdr')
+
+    def test_queue_access_does_not_bind_old_list_getter(self):
+        sources = [
+            path.read_text(encoding="utf-8-sig")
+            for path in PLUGIN.glob("*.vb")
+        ]
+        joined = "\n".join(sources)
+        self.assertNotIn("编码队列_v6.队列", joined)
+        adapter = (PLUGIN / "HostQueueAccess.vb").read_text(encoding="utf-8-sig")
+        self.assertIn('"获取队列快照"', adapter)
+        self.assertIn('"根据ID获取任务"', adapter)
+        self.assertIn('GetProperty("队列"', adapter)
+
+    def test_stop_graceful_then_force_contract(self):
+        stop = (PLUGIN / "StopControl.vb").read_text(encoding="utf-8-sig")
+        cli = (CLI / "Program.cs").read_text(encoding="utf-8-sig")
+        self.assertIn("GracefulStopTimeoutSeconds As Double = 12.0", stop)
+        self.assertIn('"停止任务"', stop)
+        self.assertIn("task.手动停止 = True", stop)
+        self.assertIn("OutputMarkerSuffix", stop)
+        self.assertIn("CleanupInvalidStoppedOutput", stop)
+        self.assertIn("WaitForExit(8000)", cli)
+        self.assertIn("WriteGracefulStopMarker", cli)
+        self.assertIn("finalOutputCompleted = true", cli)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -302,18 +302,16 @@ Namespace videoenhancer
         Private Function CollectActiveTasks() As List(Of PreviewTaskInfo)
             Dim result As New List(Of PreviewTaskInfo)()
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    For Each t In queue
-                        If t.正在执行 Then
-                            result.Add(New PreviewTaskInfo() With {
-                                .Id = t.ID,
-                                .Name = If(String.IsNullOrWhiteSpace(t.任务名称), t.ID, t.任务名称)
-                            })
-                        End If
-                    Next
-                End SyncLock
-            Catch
+                For Each t In HostQueueAccess.GetQueueSnapshot()
+                    If t.正在执行 Then
+                        result.Add(New PreviewTaskInfo() With {
+                            .Id = t.ID,
+                            .Name = If(String.IsNullOrWhiteSpace(t.任务名称), t.ID, t.任务名称)
+                        })
+                    End If
+                Next
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][预览] 读取活动队列失败：" & ex.Message)
             End Try
             Return result
         End Function
@@ -366,11 +364,9 @@ Namespace videoenhancer
 
         Private Shared Function FindTaskById(id As String) As 编码任务_v6
             Try
-                Dim queue = 编码队列_v6.队列
-                SyncLock queue
-                    Return queue.FirstOrDefault(Function(t) String.Equals(t.ID, id, StringComparison.Ordinal))
-                End SyncLock
-            Catch
+                Return HostQueueAccess.FindTask(id)
+            Catch ex As Exception
+                Trace.WriteLine("[VideoEnhancer][预览] 读取任务失败：" & ex.Message)
                 Return Nothing
             End Try
         End Function

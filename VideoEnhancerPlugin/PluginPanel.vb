@@ -36,6 +36,34 @@ Namespace videoenhancer
             End Sub
         End Class
 
+        ' RTX HDR 参数只允许直接输入整数；关闭 LakeUI 数字框默认的滚轮、方向键和隐藏按钮步进。
+        Private NotInheritable Class RtxHdrNumericUpDown
+            Inherits ModernNumericUpDown
+
+            Protected Overrides Sub OnMouseWheel(e As MouseEventArgs)
+                ' 不调用基类，避免鼠标滚轮修改 HDR 参数。
+            End Sub
+
+            Protected Overrides Sub OnKeyDown(e As KeyEventArgs)
+                Select Case e.KeyCode
+                    Case Keys.Up, Keys.Down, Keys.PageUp, Keys.PageDown
+                        e.Handled = True
+                        Return
+                End Select
+                MyBase.OnKeyDown(e)
+            End Sub
+
+            Protected Overrides Sub OnMouseDown(e As MouseEventArgs)
+                ' ButtonAreaWidth 最小为 1；再拦截末端少量像素，确保不可见区域也不会触发步进。
+                If e.Button = MouseButtons.Left AndAlso
+                   e.X >= Math.Max(0, ClientSize.Width - 6) Then
+                    Focus()
+                    Return
+                End If
+                MyBase.OnMouseDown(e)
+            End Sub
+        End Class
+
         ' 与官方 API 示例插件保持一致：#181818 背景、半透明灰控件、低饱和文字和单一蓝色强调。
         Private Shared ReadOnly UiCanvas As Color = Color.FromArgb(24, 24, 24)
         Private Shared ReadOnly UiSurface As Color = Color.FromArgb(40, 220, 220, 220)
@@ -79,6 +107,10 @@ Namespace videoenhancer
         ' RTX HDR 状态使用无换行的 LakeUI 文本按钮，避免 HtmlColorLabel 按空格拆成两行。
         Private ReadOnly _lblSwitchRtxHdr As New ModernButton()
         Private ReadOnly _cmbRtxHdrMode As New WheelLockedComboBox()
+        Private ReadOnly _numRtxHdrContrast As New RtxHdrNumericUpDown()
+        Private ReadOnly _numRtxHdrSaturation As New RtxHdrNumericUpDown()
+        Private ReadOnly _numRtxHdrMiddleGray As New RtxHdrNumericUpDown()
+        Private ReadOnly _numRtxHdrMaxLuminance As New RtxHdrNumericUpDown()
         Private ReadOnly _cmbRtxTarget As New WheelLockedComboBox()
         Private ReadOnly _cmbRtxQuality As New WheelLockedComboBox()
         Private _upscaleModelField As Control
@@ -86,6 +118,10 @@ Namespace videoenhancer
         Private _upscaleTileHint As LakeTextLabel
         Private _rtxTargetField As Control
         Private _rtxQualityField As Control
+        Private _rtxHdrContrastField As Control
+        Private _rtxHdrSaturationField As Control
+        Private _rtxHdrMiddleGrayField As Control
+        Private _rtxHdrMaxLuminanceField As Control
         Private _syncingMaster As Boolean = False
         Private _syncingBackend As Boolean = False
         Private _syncingInterpBackend As Boolean = False
@@ -99,6 +135,7 @@ Namespace videoenhancer
         Private _syncingUpscaleHalfSwitch As Boolean = False
         Private _syncingInterpHalfSwitch As Boolean = False
         Private _syncingRtxHdrSwitch As Boolean = False
+        Private _syncingRtxHdrParameters As Boolean = False
         Private _modelsLoaded As Boolean = False
         Private _loadingModels As Boolean = False
         Private _interpModelsLoaded As Boolean = False
@@ -201,6 +238,7 @@ Namespace videoenhancer
         ' ── 模型下载页 ──
         Private Const DownloadActionColumn As Integer = 3
         Private Const MaxParallelDownloads As Integer = 3
+        Private Const UpscaleContentHeight As Integer = 920
         Private ReadOnly _downloadList As New UltraDetailListView()
         Private ReadOnly _btnRefreshDownloads As New ModernButton()
         Private ReadOnly _btnDownloadPluginUpdate As New ModernButton()
@@ -787,7 +825,32 @@ Namespace videoenhancer
             _config.RtxHdrEnabled = _switchRtxHdr.Checked
             _config.Save()
             UpdateModeStateLabels()
+            UpdateAdvancedControlState()
             UpdateHookState()
+        End Sub
+
+        Private Sub OnRtxHdrContrastChanged(sender As Object, e As EventArgs)
+            If _syncingRtxHdrParameters Then Return
+            _config.RtxHdrContrast = PluginConfig.ClampRtxHdrContrast(CInt(_numRtxHdrContrast.Value))
+            _config.Save()
+        End Sub
+
+        Private Sub OnRtxHdrSaturationChanged(sender As Object, e As EventArgs)
+            If _syncingRtxHdrParameters Then Return
+            _config.RtxHdrSaturation = PluginConfig.ClampRtxHdrSaturation(CInt(_numRtxHdrSaturation.Value))
+            _config.Save()
+        End Sub
+
+        Private Sub OnRtxHdrMiddleGrayChanged(sender As Object, e As EventArgs)
+            If _syncingRtxHdrParameters Then Return
+            _config.RtxHdrMiddleGray = PluginConfig.ClampRtxHdrMiddleGray(CInt(_numRtxHdrMiddleGray.Value))
+            _config.Save()
+        End Sub
+
+        Private Sub OnRtxHdrMaxLuminanceChanged(sender As Object, e As EventArgs)
+            If _syncingRtxHdrParameters Then Return
+            _config.RtxHdrMaxLuminance = PluginConfig.ClampRtxHdrMaxLuminance(CInt(_numRtxHdrMaxLuminance.Value))
+            _config.Save()
         End Sub
 
         Private Sub OnRtxTargetSelected(sender As Object, e As EventArgs)
@@ -2241,6 +2304,41 @@ Namespace videoenhancer
             combo.DropDownScrollBarTrackColor = Color.Transparent
         End Sub
 
+        ''' <summary>配置 RTX HDR 数字控件：整数、可编辑，并保留 LakeUI 统一外观。</summary>
+        Private Shared Sub ConfigureRtxHdrNumeric(control As ModernNumericUpDown,
+                                                   minimum As Integer, maximum As Integer,
+                                                   value As Integer, increment As Integer)
+            control.Minimum = CDec(minimum)
+            control.Maximum = CDec(maximum)
+            control.Value = CDec(Math.Max(minimum, Math.Min(maximum, value)))
+            control.Increment = CDec(increment)
+            control.DecimalPlaces = 0
+            control.Editable = True
+            control.AutoSize = False
+            control.Dock = DockStyle.Fill
+            control.MinimumSize = New Size(0, 32)
+            ' 隐藏默认上下按钮并取消右侧预留，避免按钮覆盖最后几位数值；文本两侧保留明确内边距。
+            control.ButtonAreaWidth = 1
+            control.DividerSize = 0
+            control.ButtonBackColor1 = Color.Transparent
+            control.ButtonBackColor2 = Color.Transparent
+            control.HoverButtonBackColor1 = Color.Transparent
+            control.HoverButtonBackColor2 = Color.Transparent
+            control.PressedButtonBackColor1 = Color.Transparent
+            control.PressedButtonBackColor2 = Color.Transparent
+            control.ArrowColor = Color.Transparent
+            control.HoverArrowColor = Color.Transparent
+            control.PressedArrowColor = Color.Transparent
+            control.Padding = New Padding(10, 0, 10, 0)
+            control.TextAlign = ModernNumericUpDown.TextAlignMode.Left
+            control.Font = New Font("Microsoft YaHei UI", 10.0F)
+            control.BackColor1 = UiSurfaceRaised
+            control.ForeColor = UiText
+            control.BorderColor = Color.Transparent
+            control.BorderSize = 0
+            control.BorderRadius = 10
+        End Sub
+
         Private Shared Sub ConfigureModelSelector(combo As ModernComboBox)
             ConfigureCombo(combo)
             ' 模型框的 DropDownOpened 会立即关闭 LakeUI 原生列表并打开自定义模型菜单。
@@ -2763,8 +2861,15 @@ Namespace videoenhancer
                     ModernPanel1.ClientSize.Width - ModernPanel1.Padding.Left - ModernPanel1.Padding.Right)
             End If
             Dim width = Math.Max(0, availableWidth - _pageUpscale.ScrollBarWidth - 2)
-            If root.Left <> 0 OrElse root.Top <> 0 OrElse root.Width <> width OrElse root.Height <> 776 Then
-                root.SetBounds(0, 0, width, 776)
+            ' ModernPanel 会在滚动时把子控件移动到负的 Top/Left。这里只能同步尺寸，
+            ' 不能无条件把位置重置为 0，否则 LakeUI 会把当前位置重新记录为设计坐标，
+            ' 下一次回到顶部时就会在内容上方留下一大片空白。
+            Dim rootLeft As Integer = root.Left
+            Dim rootTop As Integer = root.Top
+            If _pageUpscale.VerticalScrollOffset <= 0 AndAlso rootTop <> 0 Then rootTop = 0
+            If _pageUpscale.HorizontalScrollOffset <= 0 AndAlso rootLeft <> 0 Then rootLeft = 0
+            If root.Left <> rootLeft OrElse root.Top <> rootTop OrElse root.Width <> width OrElse root.Height <> UpscaleContentHeight Then
+                root.SetBounds(rootLeft, rootTop, width, UpscaleContentHeight)
             End If
         End Sub
 
@@ -2814,8 +2919,8 @@ Namespace videoenhancer
                 .Dock = DockStyle.None,
                 .Anchor = AnchorStyles.Top Or AnchorStyles.Left,
                 .AutoSize = False,
-                .MinimumSize = New Size(0, 776),
-                .Height = 776,
+                .MinimumSize = New Size(0, UpscaleContentHeight),
+                .Height = UpscaleContentHeight,
                 .BackColor = Color.Transparent,
                 .BackColor1 = Color.Transparent,
                 .LayoutMode = ModernPanel.LayoutModeEnum.Absolute,
@@ -2928,6 +3033,18 @@ Namespace videoenhancer
             ConfigureCombo(_cmbRtxHdrMode)
             _cmbRtxHdrMode.Enabled = True
             Dim hdrModeField = CreateOfficialField("HDR 处理方式", _cmbRtxHdrMode)
+            ConfigureRtxHdrNumeric(_numRtxHdrContrast, 0, 200, _config.RtxHdrContrast, 1)
+            ConfigureRtxHdrNumeric(_numRtxHdrSaturation, 0, 200, _config.RtxHdrSaturation, 1)
+            ConfigureRtxHdrNumeric(_numRtxHdrMiddleGray, 10, 100, _config.RtxHdrMiddleGray, 1)
+            ConfigureRtxHdrNumeric(_numRtxHdrMaxLuminance, 400, 2000, _config.RtxHdrMaxLuminance, 10)
+            AddHandler _numRtxHdrContrast.ValueChanged, AddressOf OnRtxHdrContrastChanged
+            AddHandler _numRtxHdrSaturation.ValueChanged, AddressOf OnRtxHdrSaturationChanged
+            AddHandler _numRtxHdrMiddleGray.ValueChanged, AddressOf OnRtxHdrMiddleGrayChanged
+            AddHandler _numRtxHdrMaxLuminance.ValueChanged, AddressOf OnRtxHdrMaxLuminanceChanged
+            _rtxHdrContrastField = CreateOfficialField("对比度（0-200）", _numRtxHdrContrast, 8)
+            _rtxHdrSaturationField = CreateOfficialField("饱和度（0-200）", _numRtxHdrSaturation, 8)
+            _rtxHdrMiddleGrayField = CreateOfficialField("中灰度（10-100）", _numRtxHdrMiddleGray, 8)
+            _rtxHdrMaxLuminanceField = CreateOfficialField("最大亮度（nit，400-2000）", _numRtxHdrMaxLuminance, 12)
             ConfigureDpiSwitch(_switchInterp)
             ConfigureDpiSwitch(_switchInterpHalf)
             _switchInterpHalf.Checked = _config.InterpHalfPrecision
@@ -2990,6 +3107,11 @@ Namespace videoenhancer
             AddWorkbenchControl(root, _upscaleTileHint, 282, 70, 0.46F, 1.0F)
             AddWorkbenchRow(root, hdrHeader, 630, 38)
             AddWorkbenchControl(root, hdrModeField, 668, 76, 0.0F, 0.46F, 0, -12)
+            ' HDR 原生参数采用两列两行数字输入框；允许键盘输入范围内任意整数。
+            AddWorkbenchControl(root, _rtxHdrContrastField, 744, 70, 0.0F, 0.5F, 0, -4)
+            AddWorkbenchControl(root, _rtxHdrSaturationField, 744, 70, 0.5F, 1.0F, 4, 0)
+            AddWorkbenchControl(root, _rtxHdrMiddleGrayField, 814, 70, 0.0F, 0.5F, 0, -4)
+            AddWorkbenchControl(root, _rtxHdrMaxLuminanceField, 814, 70, 0.5F, 1.0F, 4, 0)
             AddWorkbenchRow(root, interpHeader, 371, 38)
             ' 补帧后端的固定选项（尤其是 TensorRT (NVIDIA)）需要在箭头区域前保留
             ' 足够文本宽度；将窄列从 29% 调整到 34%，模型列仍保留主要空间。
@@ -3025,7 +3147,7 @@ Namespace videoenhancer
             orderRow.AddColumn(_cmbProcessOrder, 1)
             orderRow.AddColumn(_lblProcessOrder, 2)
             AddWorkbenchRow(root, orderRow, 555, 56)
-            AddWorkbenchRow(root, CreateOfficialSeparator(), 769, 25)
+            AddWorkbenchRow(root, CreateOfficialSeparator(), 884, 25)
 
 
             _pageUpscale.Controls.Add(root)
@@ -6314,6 +6436,7 @@ Namespace videoenhancer
             _switchRtxHdr.Checked = _config.RtxHdrEnabled
             _syncingRtxHdrSwitch = False
             _switchRtxHdr.Enabled = _config.Enabled
+            SyncRtxHdrNumericControls()
             ' 补帧开关：仅主开关开启时可操作
             If String.Equals(_config.Backend, "basicvsrpp", StringComparison.OrdinalIgnoreCase) Then
                 _config.InterpEnabled = False
@@ -6437,6 +6560,11 @@ Namespace videoenhancer
             If _rtxQualityField IsNot Nothing Then _rtxQualityField.Visible = rtxVsr
             _cmbRtxTarget.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso rtxVsr
             _cmbRtxQuality.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso rtxVsr
+            Dim hdrParametersEnabled = _config.Enabled AndAlso _config.RtxHdrEnabled
+            _numRtxHdrContrast.Enabled = hdrParametersEnabled
+            _numRtxHdrSaturation.Enabled = hdrParametersEnabled
+            _numRtxHdrMiddleGray.Enabled = hdrParametersEnabled
+            _numRtxHdrMaxLuminance.Enabled = hdrParametersEnabled
             _cmbModel.Enabled = _config.Enabled AndAlso _config.UpscaleEnabled AndAlso Not rtxVsr
             _cmbDynamicOpticalFlow.Enabled = _config.Enabled AndAlso _config.InterpEnabled AndAlso String.Equals(_config.InterpBackend, "cuda", StringComparison.OrdinalIgnoreCase)
             _cmbSceneThreshold.Enabled = _config.Enabled AndAlso _config.InterpEnabled
@@ -6451,6 +6579,20 @@ Namespace videoenhancer
             Dim interpPrecisionBackend = String.Equals(_config.InterpBackend, "cuda", StringComparison.OrdinalIgnoreCase) OrElse
                 String.Equals(_config.InterpBackend, "tensorrt", StringComparison.OrdinalIgnoreCase)
             _switchInterpHalf.Enabled = _config.Enabled AndAlso _config.InterpEnabled AndAlso interpPrecisionBackend
+        End Sub
+
+        Private Sub SyncRtxHdrNumericControls()
+            If _numRtxHdrContrast Is Nothing Then Return
+            Dim previous = _syncingRtxHdrParameters
+            _syncingRtxHdrParameters = True
+            Try
+                _numRtxHdrContrast.Value = CDec(PluginConfig.ClampRtxHdrContrast(_config.RtxHdrContrast))
+                _numRtxHdrSaturation.Value = CDec(PluginConfig.ClampRtxHdrSaturation(_config.RtxHdrSaturation))
+                _numRtxHdrMiddleGray.Value = CDec(PluginConfig.ClampRtxHdrMiddleGray(_config.RtxHdrMiddleGray))
+                _numRtxHdrMaxLuminance.Value = CDec(PluginConfig.ClampRtxHdrMaxLuminance(_config.RtxHdrMaxLuminance))
+            Finally
+                _syncingRtxHdrParameters = previous
+            End Try
         End Sub
 
         Private Sub ShowStatus(text As String, error_ As Boolean)

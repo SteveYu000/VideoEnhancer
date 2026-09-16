@@ -135,6 +135,10 @@ internal sealed class RtxVideoBackendClient : IDisposable
         int quality,
         double scale,
         bool hdrEnabled,
+        int hdrContrast,
+        int hdrSaturation,
+        int hdrMiddleGray,
+        int hdrMaxLuminance,
         string codec,
         string container,
         string audioMode,
@@ -147,7 +151,7 @@ internal sealed class RtxVideoBackendClient : IDisposable
         Func<bool>? isPaused,
         CancellationToken token)
     {
-        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, codec, container, audioMode, pixelFormat, encoderOptions, audioStreamIndices, subtitleStreamIndices, framePipePath));
+        using var createContent = JsonContent(CreateJobJson(inputPath, outputPath, vsrEnabled, quality, scale, hdrEnabled, hdrContrast, hdrSaturation, hdrMiddleGray, hdrMaxLuminance, codec, container, audioMode, pixelFormat, encoderOptions, audioStreamIndices, subtitleStreamIndices, framePipePath));
         using var create = await _http.PostAsync("/api/jobs", createContent, token);
         var createText = await create.Content.ReadAsStringAsync(token);
         if (!create.IsSuccessStatusCode) return new JobResult(false, false, ApiError(createText, create.StatusCode), Array.Empty<string>());
@@ -249,7 +253,8 @@ internal sealed class RtxVideoBackendClient : IDisposable
     }
 
     private static string CreateJobJson(string inputPath, string outputPath, bool vsrEnabled,
-        int quality, double scale, bool hdrEnabled, string codec, string container, string audioMode,
+        int quality, double scale, bool hdrEnabled, int hdrContrast, int hdrSaturation,
+        int hdrMiddleGray, int hdrMaxLuminance, string codec, string container, string audioMode,
         string pixelFormat, IReadOnlyDictionary<string, string> encoderOptions,
         IReadOnlyList<int>? audioStreamIndices, IReadOnlyList<int>? subtitleStreamIndices,
         string? framePipePath)
@@ -271,10 +276,10 @@ internal sealed class RtxVideoBackendClient : IDisposable
             writer.WritePropertyName("hdr");
             writer.WriteStartObject();
             writer.WriteBoolean("enabled", hdrEnabled);
-            writer.WriteNumber("contrast", 100);
-            writer.WriteNumber("saturation", 100);
-            writer.WriteNumber("middleGray", 44);
-            writer.WriteNumber("maxLuminance", 1000);
+            writer.WriteNumber("contrast", hdrContrast);
+            writer.WriteNumber("saturation", hdrSaturation);
+            writer.WriteNumber("middleGray", hdrMiddleGray);
+            writer.WriteNumber("maxLuminance", hdrMaxLuminance);
             writer.WriteEndObject();
             writer.WriteEndObject();
             writer.WritePropertyName("output");

@@ -365,12 +365,15 @@ internal static class Program
         string pauseShm, StopWatcher? stopWatcher, string? interpModel, string? interpFactor,
         string upscaleBackend, string interpBackend, string processOrder, bool hdrMode, bool dynamicOpticalFlow,
         double sceneThreshold, int tileSize, string requestedUpscalePrecision, string requestedInterpPrecision,
-        bool rtxVsr, bool rtxHdr, string rtxTarget, int rtxQuality)
+        bool rtxVsr, bool rtxHdr, string rtxTarget, int rtxQuality,
+        int rtxHdrContrast, int rtxHdrSaturation, int rtxHdrMiddleGray, int rtxHdrMaxLuminance)
     {
         var outputDir = Path.GetDirectoryName(outputFile);
         if (string.IsNullOrWhiteSpace(outputDir)) outputDir = Environment.CurrentDirectory;
         Directory.CreateDirectory(outputDir);
         if (File.Exists(outputFile) && !overwrite) return Fail("输出文件已存在；请在 FFmpeg 参数中加入 -y 允许覆盖：" + outputFile, 1);
+        var gracefulStopMarker = outputFile + ".videoenhancer-stop-ok";
+        try { if (File.Exists(gracefulStopMarker)) File.Delete(gracefulStopMarker); } catch { }
 
         var rveInput = input;
         string? intermediate = null;
@@ -459,7 +462,8 @@ internal static class Program
             try
             {
                 result = client.RunAsync(rveInput, outputFile, rtxVsr, rtxQuality, resolvedScale,
-                    rtxHdr, codec, "rawvideo", "none", pixelFormat,
+                    rtxHdr, rtxHdrContrast, rtxHdrSaturation, rtxHdrMiddleGray, rtxHdrMaxLuminance,
+                    codec, "rawvideo", "none", pixelFormat,
                     new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
                     audioStreamIndices, subtitleStreamIndices, pipePath,
                     () => stopWatcher?.IsStopRequested() == true,
@@ -469,7 +473,40 @@ internal static class Program
                 {
                     relayCancellation.Cancel();
                     try { ffmpeg.StandardInput.Close(); } catch { }
-                    try { if (!ffmpeg.HasExited) ffmpeg.Kill(entireProcessTree: true); } catch { }
+                    if (result.Canceled)
+                    {
+                        // sidecar 取消后先给 FFmpeg 最多 8 秒读取 EOF 并完成尾部封装；
+                        // 只有仍未退出时才强制终止，避免把可读取的部分输出误删。
+                        try
+                        {
+                            if (!ffmpeg.HasExited && !ffmpeg.WaitForExit(8000))
+                            {
+                                ffmpeg.Kill(entireProcessTree: true);
+                            }
+                        }
+                        catch
+                        {
+                            try { if (!ffmpeg.HasExited) ffmpeg.Kill(entireProcessTree: true); } catch { }
+                        }
+                        try { relayTask.Wait(TimeSpan.FromSeconds(1)); } catch { }
+                        if (ffmpeg.HasExited && ffmpeg.ExitCode == 0 && File.Exists(outputFile))
+                        {
+                            try
+                            {
+                                if (new FileInfo(outputFile).Length > 0)
+                                {
+                                    finalOutputCompleted = true;
+                                    WriteGracefulStopMarker(gracefulStopMarker);
+                                    Console.WriteLine("[停止] RTX Video 已完成尾部封装，保留非空部分输出：" + outputFile);
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        try { if (!ffmpeg.HasExited) ffmpeg.Kill(entireProcessTree: true); } catch { }
+                    }
                 }
                 else
                 {
@@ -501,6 +538,10 @@ internal static class Program
             {
                 try { if (File.Exists(outputFile)) File.Delete(outputFile); }
                 catch (Exception ex) { Console.Error.WriteLine("[警告] 无法清理失败的 RTX 输出文件：" + ex.Message); }
+            }
+            if (!finalOutputCompleted)
+            {
+                try { if (File.Exists(gracefulStopMarker)) File.Delete(gracefulStopMarker); } catch { }
             }
             if (!string.IsNullOrWhiteSpace(intermediate))
             {
@@ -605,6 +646,19 @@ internal static class Program
         {
             arguments.Add("-map");
             arguments.Add("1:" + type + ":" + index.ToString(CultureInfo.InvariantCulture) + "?");
+        }
+    }
+
+    /// <summary>通知插件：RTX 任务被优雅停止且最终 FFmpeg 已完成非空封装。</summary>
+    private static void WriteGracefulStopMarker(string markerPath)
+    {
+        try
+        {
+            File.WriteAllText(markerPath, DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("[警告] 无法写入优雅停止标记：" + ex.Message);
         }
     }
 
@@ -839,6 +893,10 @@ internal static class Program
         public bool RtxHdr;
         public string RtxTarget = "2x";
         public string RtxQuality = "3";
+        public string RtxHdrContrast = "100";
+        public string RtxHdrSaturation = "100";
+        public string RtxHdrMiddleGray = "44";
+        public string RtxHdrMaxLuminance = "1000";
         public string SegmentsBase64 = "";
         public bool ListInterpModels;
         public string Backend = "ncnn";
@@ -1040,6 +1098,18 @@ internal static class Program
         if (!int.TryParse(o.RtxQuality, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxQuality)
             || rtxQuality is < 1 or > 4)
             return Fail("-rtx-quality 必须是 1-4 的整数，当前值：" + o.RtxQuality);
+        if (!int.TryParse(o.RtxHdrContrast, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxHdrContrast)
+            || rtxHdrContrast is < 0 or > 200)
+            return Fail("-rtx-hdr-contrast 必须是 0-200 的整数，当前值：" + o.RtxHdrContrast);
+        if (!int.TryParse(o.RtxHdrSaturation, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxHdrSaturation)
+            || rtxHdrSaturation is < 0 or > 200)
+            return Fail("-rtx-hdr-saturation 必须是 0-200 的整数，当前值：" + o.RtxHdrSaturation);
+        if (!int.TryParse(o.RtxHdrMiddleGray, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxHdrMiddleGray)
+            || rtxHdrMiddleGray is < 10 or > 100)
+            return Fail("-rtx-hdr-middle-gray 必须是 10-100 的整数，当前值：" + o.RtxHdrMiddleGray);
+        if (!int.TryParse(o.RtxHdrMaxLuminance, NumberStyles.Integer, CultureInfo.InvariantCulture, out var rtxHdrMaxLuminance)
+            || rtxHdrMaxLuminance is < 400 or > 2000)
+            return Fail("-rtx-hdr-max-luminance 必须是 400-2000 的整数，当前值：" + o.RtxHdrMaxLuminance);
         if (!double.TryParse(o.SceneThreshold, NumberStyles.Float, CultureInfo.InvariantCulture, out var sceneThreshold) || sceneThreshold <= 0 || sceneThreshold > 10.0)
             return Fail("-scene-threshold 必须是官方 0-10 标尺中的大于 0 数字，当前值：" + o.SceneThreshold);
         if (!int.TryParse(o.TileSize, NumberStyles.Integer, CultureInfo.InvariantCulture, out var tileSize) || tileSize < 0 || (tileSize > 0 && tileSize < 32))
@@ -1422,7 +1492,8 @@ internal static class Program
             return RunVideoWithRtx(input, outputFile, model, customEncoder, o.FfmpegSettings, overwrite, scale,
                 o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend,
                 o.ProcessOrder, hdrMode, o.DynamicOpticalFlow, sceneThreshold, tileSize, o.UpscalePrecision,
-                o.InterpPrecision, o.Backend == "rtxvsr" && useUpscale, o.RtxHdr, o.RtxTarget, rtxQuality);
+                o.InterpPrecision, o.Backend == "rtxvsr" && useUpscale, o.RtxHdr, o.RtxTarget, rtxQuality,
+                rtxHdrContrast, rtxHdrSaturation, rtxHdrMiddleGray, rtxHdrMaxLuminance);
         }
         return RunVideoPipeline(input, outputFile, model, customEncoder, overwrite, scale,
             o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend, o.ProcessOrder, hdrMode,
@@ -1630,6 +1701,22 @@ internal static class Program
                 case "-rtx-quality":
                 case "--rtx-quality":
                     o.RtxQuality = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "-rtx-hdr-contrast":
+                case "--rtx-hdr-contrast":
+                    o.RtxHdrContrast = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "-rtx-hdr-saturation":
+                case "--rtx-hdr-saturation":
+                    o.RtxHdrSaturation = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "-rtx-hdr-middle-gray":
+                case "--rtx-hdr-middle-gray":
+                    o.RtxHdrMiddleGray = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "-rtx-hdr-max-luminance":
+                case "--rtx-hdr-max-luminance":
+                    o.RtxHdrMaxLuminance = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--segments-base64":
                     o.SegmentsBase64 = TakeValue(args, ref i, name, inlineValue);
@@ -6514,7 +6601,7 @@ internal static class Program
         writer.WriteLine("  videoenhancer.exe -i <输入视频> -no-upscale -backend cuda -interp-model <CUDA 补帧模型> -ffmpeg-settings \"<FFmpeg 参数 + 输出路径>\"");
         writer.WriteLine("  videoenhancer.exe --image-input <图片> --image-output <文件夹> -backend onnx -modelpath <模型>");
         writer.WriteLine("  videoenhancer.exe --image-folder <文件夹> --image-output-original -modelpath <模型>");
-        writer.WriteLine("  videoenhancer.exe -i <输入视频> -backend rtxvsr -rtx-target 2160p -rtx-quality 3 -rtx-hdr -ffmpeg-settings \"...\"");
+        writer.WriteLine("  videoenhancer.exe -i <输入视频> -backend rtxvsr -rtx-target 2160p -rtx-quality 3 -rtx-hdr -rtx-hdr-contrast 100 -ffmpeg-settings \"...\"");
         writer.WriteLine("  videoenhancer.exe --list-download-models --json");
         writer.WriteLine("  videoenhancer.exe --import-model <模型文件、目录或压缩包> --json");
         writer.WriteLine("  videoenhancer.exe --clean-download-archives");
@@ -6564,6 +6651,10 @@ internal static class Program
         writer.WriteLine("  -rtx-target <规格>  RTX VSR 输出规格：1x/1.5x/2x/3x/4x 或 1080p/1440p/2160p/4320p；最大 4x，输出边长取偶数");
         writer.WriteLine("  -rtx-quality <1-4>  RTX VSR 质量等级，默认 3");
         writer.WriteLine("  -rtx-hdr            启用 RTX Video HDR；输入已是 PQ/HLG 时会拒绝重复映射");
+        writer.WriteLine("  -rtx-hdr-contrast <0-200>       RTX HDR 对比度，默认 100，可输入范围内任意整数");
+        writer.WriteLine("  -rtx-hdr-saturation <0-200>     RTX HDR 饱和度，默认 100，可输入范围内任意整数");
+        writer.WriteLine("  -rtx-hdr-middle-gray <10-100>   RTX HDR 中灰度，默认 44，可输入范围内任意整数");
+        writer.WriteLine("  -rtx-hdr-max-luminance <400-2000> RTX HDR 最大亮度（nit），默认 1000，可输入范围内任意整数");
         writer.WriteLine("  --segments-base64 <Base64 JSON>");
         writer.WriteLine("        按帧段选择单帧超分模型；所有段必须连续覆盖全片，并锁定同一后端与倍率");
         writer.WriteLine("  -no-upscale         不放大（可用于仅补帧或仅 RTX HDR）");
