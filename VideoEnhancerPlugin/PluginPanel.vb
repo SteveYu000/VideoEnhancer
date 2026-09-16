@@ -62,6 +62,31 @@ Namespace videoenhancer
                 End If
                 MyBase.OnMouseDown(e)
             End Sub
+
+            ' LakeUI 左对齐文本在控件由窄变宽时不会主动清除旧的横向滚动偏移。
+            ' 临时使用居中对齐让基类在尺寸/字体变化时执行“文本未溢出则归零”，
+            ' 再恢复左对齐，避免四位数的第一位在启动布局期间被裁掉。
+            Protected Overrides Sub OnSizeChanged(e As EventArgs)
+                ResetViewportDuringLayout(Sub() MyBase.OnSizeChanged(e))
+            End Sub
+
+            Protected Overrides Sub OnFontChanged(e As EventArgs)
+                ResetViewportDuringLayout(Sub() MyBase.OnFontChanged(e))
+            End Sub
+
+            Private Sub ResetViewportDuringLayout(action As Action)
+                Dim originalAlign = TextAlign
+                If originalAlign = ModernNumericUpDown.TextAlignMode.Left Then
+                    TextAlign = ModernNumericUpDown.TextAlignMode.Center
+                End If
+                Try
+                    action.Invoke()
+                Finally
+                    If originalAlign = ModernNumericUpDown.TextAlignMode.Left Then
+                        TextAlign = originalAlign
+                    End If
+                End Try
+            End Sub
         End Class
 
         ' 与官方 API 示例插件保持一致：#181818 背景、半透明灰控件、低饱和文字和单一蓝色强调。
@@ -2308,15 +2333,21 @@ Namespace videoenhancer
         Private Shared Sub ConfigureRtxHdrNumeric(control As ModernNumericUpDown,
                                                    minimum As Integer, maximum As Integer,
                                                    value As Integer, increment As Integer)
+            ' LakeUI 文本内核会在 Value/DecimalPlaces 设置时按当时的控件宽度计算横向滚动偏移。
+            ' 数字框尚未加入工作台时可能仍是很窄的默认尺寸；四位最大亮度会因此缓存偏移，
+            ' 后续布局变宽后左对齐不会自动清零，导致启动时首位被裁掉（1000 显示为 000）。
+            ' 先给控件一个足够容纳初始值的临时宽度，再设置文本相关属性，Dock=Fill 后仍使用最终布局宽度。
+            control.AutoSize = False
+            control.Font = New Font("Microsoft YaHei UI", 10.0F)
+            control.Size = New Size(320, 34)
+            control.MinimumSize = New Size(0, 32)
             control.Minimum = CDec(minimum)
             control.Maximum = CDec(maximum)
             control.Value = CDec(Math.Max(minimum, Math.Min(maximum, value)))
             control.Increment = CDec(increment)
             control.DecimalPlaces = 0
             control.Editable = True
-            control.AutoSize = False
             control.Dock = DockStyle.Fill
-            control.MinimumSize = New Size(0, 32)
             ' 隐藏默认上下按钮并取消右侧预留，避免按钮覆盖最后几位数值；文本两侧保留明确内边距。
             control.ButtonAreaWidth = 1
             control.DividerSize = 0
@@ -2331,7 +2362,6 @@ Namespace videoenhancer
             control.PressedArrowColor = Color.Transparent
             control.Padding = New Padding(10, 0, 10, 0)
             control.TextAlign = ModernNumericUpDown.TextAlignMode.Left
-            control.Font = New Font("Microsoft YaHei UI", 10.0F)
             control.BackColor1 = UiSurfaceRaised
             control.ForeColor = UiText
             control.BorderColor = Color.Transparent

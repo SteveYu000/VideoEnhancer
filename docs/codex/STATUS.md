@@ -1,22 +1,22 @@
 # Project Status
 
-Last updated: 2026-09-16 10:52
+Last updated: 2026-09-16 12:29
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-16 10:49): GitHub PR #3 已正式合并，包含 HDR、3FUI 6.2.20 队列/任务控制、预览、优雅停止和滚动修复的 1.3.3 已发布到 GitHub 与 ModelScope，并部署到当前本机 3FUI。
-- Latest files/Git: PR 合并提交为 `c80c351`；发布代码提交 `7af6e21` 已推送 `fork/main`，GitHub 标签 `v1.3.3` 指向该提交；发布记录提交 `4698f1e` 已推送，主分支已同步。
-- Latest verification: `VideoEnhancer.slnx` 构建 0 警告/0 错误；Python 29/29；安装器五场景、更新器七场景、Backend 更新器 6/6、发布门禁 5/5 均通过；GitHub 和 ModelScope 三类资产远端回读哈希一致。
-- Latest deployment: 正式发布前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-final-release-deploy-20260916-104542`；当前插件 DLL 源/目标 SHA-256 均为 `AADB2A5B8905544F78FA8D9ECB63F1D15D109EDA8EE2698E786EFF21244F7DEF`，EXE 源/目标 SHA-256 均为 `6A87BF50B39C2056BA521A405730C26FE377CB431FDC7A2E50730AFBB6D615AF`，安装版 `--version` 为 1.3.3，未残留相关进程。
-- Latest remaining issue/research: 尚未在真实 3FUI 窗口逐项执行开始/暂停/恢复/停止/移除/重置/定位及 RTX VSR/HDR 画面刷新回归；尚未模拟 sidecar 无响应的实机强制停止；需要用户重启 3FUI 后验收。
+- Latest objective/state (2026-09-16 12:29): 修复 RTX HDR 最大亮度启动时首位被裁剪的问题；已在不改写正式 `v1.3.3` 标签/远端资产的前提下更新源码，并部署到当前本机 3FUI。
+- Latest files/Git: `PluginPanel.vb` 为数字框初始化增加宽度保护，并在尺寸/字体变化时清除 LakeUI 左对齐的旧横向偏移；`cli/tests/test_rtx_hdr_controls.py` 增加回归断言。本地修复提交尚未推送。
+- Latest verification: 插件 SDK 构建 0 警告/0 错误（HostBin LakeUI 5.9.0.0）；Python 29/29；临时布局探针确认四个 HDR 文本完整、最大亮度 `1000` 且 `scroll=0`；`git diff --check` 通过。
+- Latest deployment: 部署前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-hdr-display-fix-final-20260916-122756`；当前插件 DLL 源/目标 SHA-256 均为 `DBDFEC451252A61A83F6F6878F2537170D33C4C9984881C8C2011ADBFAC61A71`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
+- Latest remaining issue/research: 需要用户重启 3FUI 目视确认最大亮度显示为 `1000`，并继续验收此前 HDR 输入、滚动、RTX 预览及任务控制；若要把本修复发布给其他用户，应在后续按发布流程生成 `1.3.4`，不要移动 `v1.3.3`。本地修复提交尚未推送。
 
-- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制和预览兼容性修复，并在本机候选版本上完成用户验收。
+- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制、预览兼容性和 HDR 数字框启动显示修复，并在本机版本上完成用户验收。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
 - Likely next agent: user / ZCode / Codex
-- Next recommended step: 用户重启 3FUI 后以原参数重新运行完整《缎带英雄》任务；如需最高覆盖率再重跑完整 1262 项矩阵。发布后记录提交并推送后两个仓库应保持干净。
+- Next recommended step: 用户重启 3FUI，确认最大亮度完整显示为 `1000`、中灰度按建议值保存/重载，再以原参数运行 RTX 任务；源码提交前请先核对 diff，后续发布应使用新补丁版本。
 
 ## Active TODO
 
@@ -2087,3 +2087,14 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: 正式构建、Python 29/29、安装器五场景、更新器七场景、Backend 更新器 6/6、发布门禁 5/5 均通过。EXE 16,967,565 bytes / `6A87BF50B39C2056BA521A405730C26FE377CB431FDC7A2E50730AFBB6D615AF`；手动 ZIP 13,973,833 bytes / `8A9538879C94163077E376D7852B6647C12A55BA9641D8348D8CFF9C843E7958`；stable.json 1,219 bytes / `8DB68209FCE0BB74B616E65223C54E6D8E37152CC9AF8797FE89715D306247F1`。GitHub 与 ModelScope 实际下载回读全部一致。
 - Deployment: 确认相关进程未运行后，将正式 DLL/EXE 部署到 `C:\Program portable\3FUI\3FUI\Plugin`；备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-final-release-deploy-20260916-104542`。安装 DLL 为 `AADB2A5B8905544F78FA8D9ECB63F1D15D109EDA8EE2698E786EFF21244F7DEF`，EXE 与正式发布哈希一致，`--version` 返回 1.3.3，未残留 videoenhancer/sidecar/FFmpeg 进程。
 - Remaining: 真实 3FUI 中的 HDR 输入、滚动、RTX 预览及开始/暂停/恢复/停止/停止后移除仍需用户重启后验收；发布记录提交 `4698f1e` 已推送，收尾状态已核对。
+
+### 2026-09-16 12:29 - Codex
+
+- Request: 用户反馈启动时 RTX HDR 最大亮度默认值 `1000` 显示为 `000`，并询问中灰度的合适取值。
+- Root cause: LakeUI `SingleLineTextBoxRenderer` 在数字框经历窄尺寸中间布局时可能缓存左对齐文本的横向滚动偏移；后续宽度变大时，左对齐路径不会自动清零，于是只裁掉四位数的首位，底层值仍为 `1000`。
+- Implementation: `ConfigureRtxHdrNumeric` 先设置 320×34 的临时尺寸、字体和整数值，再交给工作台最终布局；`RtxHdrNumericUpDown` 在尺寸/字体变化时临时使用居中对齐，让 LakeUI 在文本未溢出时清除旧偏移，然后恢复左对齐。新增静态回归断言。
+- Verification: `dotnet build VideoEnhancerPlugin/VideoEnhancerPlugin.vbproj -c Release -p:HostBin=...` 0 警告/0 错误；Python 29/29；布局探针显示四项文本 `100`/`100`/`44`/`1000` 且 `scroll=0`；`git diff --check` 通过。
+- Deployment: 确认相关进程退出后覆盖本机 `C:\Program portable\3FUI\3FUI\Plugin\videoenhancer.3fui.dll`；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-hdr-display-fix-final-20260916-122756`；源/目标 SHA-256 均为 `DBDFEC451252A61A83F6F6878F2537170D33C4C9984881C8C2011ADBFAC61A71`；安装 EXE `--version` 为 1.3.3，未残留相关进程。
+- Decision: 不移动或覆盖已发布的 `v1.3.3`；本轮改动待本地提交，若需要对外发布应作为后续 `1.3.4` 补丁版本。
+- Middle gray guidance: NVIDIA TrueHDR 文档给出的 SDK 默认值为 50；当前项目的 44 是面向约 200 nit 纸白/SDR 伽马 2.2 的实用起点。建议先保留 44，显示器或环境偏亮时试 50–60，若中间调过亮/发白试 35–40，并以校准后的显示器和熟悉画面判断。
+- Git/next: 本轮源码、测试和记录已提交，尚未推送；用户重启 3FUI 后应确认 `1000` 不再显示为 `000`，并验收滚轮/键盘输入和保存重载。
