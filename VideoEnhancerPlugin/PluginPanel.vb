@@ -52,7 +52,6 @@ Namespace videoenhancer
         Private Shared ReadOnly UiTextMuted As Color = Color.FromArgb(120, 255, 255, 255)
 
         Private ReadOnly _config As PluginConfig
-        Private ReadOnly _btnPickExe As New ModernButton()
         Private ReadOnly _switchMaster As New LakeUI.BooleanSwitch()
         Private ReadOnly _lblMaster As New HtmlColorLabel()
         Private ReadOnly _cmbModel As New WheelLockedComboBox()
@@ -597,7 +596,7 @@ Namespace videoenhancer
             Try
                 Dim manifest = Await PluginUpdater.FetchLatestManifestAsync()
                 If Not PluginUpdater.HasUpdate(manifest,
-                    PluginConfig.ResolveInstalledExePath(_config.ExePath)) Then
+                    PluginConfig.ResolveInstalledExePath()) Then
                     If Not silent Then ShowStatus("当前已是最新稳定版 v" & PluginVersion.Current, False)
                     Return
                 End If
@@ -611,11 +610,11 @@ Namespace videoenhancer
                 If Not ShowLakeConfirm(Me, message, "发现新版本", defaultYes:=True) Then Return
                 userAccepted = True
 
-                Dim installedExe = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+                Dim installedExe = PluginConfig.ResolveInstalledExePath()
                 If String.IsNullOrWhiteSpace(installedExe) OrElse Not File.Exists(installedExe) Then
                     Throw New FileNotFoundException("找不到已安装的 videoenhancer.exe")
                 End If
-                Dim targetDirectory = PluginConfig.ResolvePluginRoot(installedExe)
+                Dim targetDirectory = PluginConfig.PluginRoot
                 If String.IsNullOrWhiteSpace(targetDirectory) OrElse
                     Not File.Exists(Path.Combine(targetDirectory, "videoenhancer.3fui.dll")) Then
                     Throw New InvalidOperationException("自动更新无法确定承载插件 DLL 的 Plugin 目录")
@@ -661,13 +660,18 @@ Namespace videoenhancer
         ''' <summary>尝试启用（供主开关与测试共用）。silent 时不在失败时弹窗。</summary>
         Public Function TryEnable(exePath As String, Optional silent As Boolean = False) As Boolean
             Try
+                Dim canonicalExe = PluginConfig.ResolveInstalledExePath()
+                If Not Path.GetFullPath(exePath).Equals(
+                    Path.GetFullPath(canonicalExe), StringComparison.OrdinalIgnoreCase) Then
+                    If Not silent Then ShowStatus("处理程序路径固定为：" & canonicalExe, True)
+                    Return False
+                End If
                 If Not File.Exists(exePath) Then
                     If Not silent Then
                         ShowStatus("videoenhancer.exe 不存在：" & exePath, True)
                     End If
                     Return False
                 End If
-                _config.ExePath = exePath
                 _config.Enabled = True
                 _config.Save()
                 RefreshUi()
@@ -696,7 +700,7 @@ Namespace videoenhancer
             ShowStatus("已停用：编码队列恢复为直接执行 ffmpeg", False)
         End Sub
 
-        ''' <summary>"插件总开关"切换：开 → 未指定路径时弹出选择；关 → 停止对参数面板的 hook。</summary>
+        ''' <summary>"插件总开关"切换：开 → 使用固定便携 EXE；关 → 停止对参数面板的 hook。</summary>
         Private Sub OnMasterSwitchChanged(sender As Object, e As EventArgs)
             If _syncingMaster Then
                 Return
@@ -704,19 +708,11 @@ Namespace videoenhancer
             If _switchMaster.Checked Then
                 Dim exePath = _config.ExePath
                 If Not File.Exists(exePath) Then
-                    Using dialog As New OpenFileDialog With {
-                        .Title = "请选择 videoenhancer.exe",
-                        .Filter = "videoenhancer.exe|videoenhancer.exe|可执行文件 (*.exe)|*.exe",
-                        .CheckFileExists = True
-                    }
-                        If dialog.ShowDialog(Me) <> DialogResult.OK Then
-                            _syncingMaster = True
-                            _switchMaster.Checked = False
-                            _syncingMaster = False
-                            Return
-                        End If
-                        exePath = dialog.FileName
-                    End Using
+                    ShowStatus("固定位置缺少 videoenhancer.exe：" & exePath, True)
+                    _syncingMaster = True
+                    _switchMaster.Checked = False
+                    _syncingMaster = False
+                    Return
                 End If
                 If Not TryEnable(exePath) Then
                     _syncingMaster = True
@@ -843,23 +839,6 @@ Namespace videoenhancer
             End If
         End Sub
 
-        Private Sub OnPickExeClick(sender As Object, e As EventArgs)
-            Using dialog As New OpenFileDialog With {
-                .Title = "请选择 videoenhancer.exe",
-                .Filter = "videoenhancer.exe|videoenhancer.exe|可执行文件 (*.exe)|*.exe",
-                .CheckFileExists = True,
-                .InitialDirectory = If(Path.GetDirectoryName(_config.ExePath), Environment.CurrentDirectory)
-            }
-                If dialog.ShowDialog(Me) <> DialogResult.OK Then
-                    Return
-                End If
-                _config.ExePath = dialog.FileName
-                _config.Save()
-                RefreshUi()
-                RefreshModels()
-            End Using
-        End Sub
-
         ' ────────────────────────── 模型下拉框 ──────────────────────────
 
         Private Sub OnModelDropDownOpened(sender As Object, e As EventArgs)
@@ -897,7 +876,7 @@ Namespace videoenhancer
             StartInterpModelLoad()
         End Sub
 
-        ''' <summary>重新读取模型列表（启用 / 更换 exe / 下拉重试共用）。</summary>
+        ''' <summary>重新读取模型列表（启用 / 下拉重试共用）。</summary>
         Public Sub RefreshModels()
             _modelsLoaded = False
             _interpModelsLoaded = False
@@ -1522,9 +1501,7 @@ Namespace videoenhancer
             If models.Count = 0 AndAlso String.Equals(_config.Backend, "tensorrt", StringComparison.OrdinalIgnoreCase) Then
                 Try
                     Dim dirs = New List(Of String) From {
-                        Path.Combine(Path.GetDirectoryName(_config.ExePath), "models"),
-                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "models"),
-                        "C:\PortableSoft\VideoEnhancer-CLI\models"
+                        Path.Combine(PluginConfig.ApplicationRoot, "models")
                     }
                     For Each modelDir In dirs.Distinct(StringComparer.OrdinalIgnoreCase)
                         If Not Directory.Exists(modelDir) Then Continue For
@@ -1819,6 +1796,7 @@ Namespace videoenhancer
                     .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("--json")
                 For Each a In extraArgs
                     If Not String.IsNullOrWhiteSpace(a) Then
@@ -1880,6 +1858,7 @@ Namespace videoenhancer
                     .StandardOutputEncoding = Encoding.UTF8,
                     .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("--json")
                 For Each argument In extraArgs
                     If Not String.IsNullOrWhiteSpace(argument) Then psi.ArgumentList.Add(argument)
@@ -1916,6 +1895,7 @@ Namespace videoenhancer
                 .StandardOutputEncoding = Encoding.UTF8,
                 .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(psi)
             psi.ArgumentList.Add("--json")
             psi.ArgumentList.Add("--list-user-models")
             Using child = Diagnostics.Process.Start(psi)
@@ -1957,6 +1937,7 @@ Namespace videoenhancer
                                  .StandardOutputEncoding = Encoding.UTF8,
                                  .StandardErrorEncoding = Encoding.UTF8
                              }
+                             PortableRuntime.ConfigureProcess(psi)
                              psi.ArgumentList.Add("--check")
                              psi.ArgumentList.Add("-backend")
                              psi.ArgumentList.Add(_config.Backend)
@@ -2383,7 +2364,7 @@ Namespace videoenhancer
                 "",
                 "## 第 1 步：连接处理程序",
                 "1. 在 3FUI 打开本插件的 **超分工作台**。",
-                "2. 点击 **选择处理程序**，选择插件目录下的 `videoenhancer\\videoenhancer.exe`。新布局通常是 `3FUI\\Plugin\\videoenhancer\\videoenhancer.exe`；不要选择 `videoenhancer.3fui.dll`、`FFmpegFreeUI.exe` 或模型文件。",
+                "2. 处理程序固定为插件目录下的 `videoenhancer\\videoenhancer.exe`。如果该文件缺失，请重新运行安装程序或按手动安装包的目录结构放置文件。",
                 "3. 开启 **插件总开关**。如果路径正确，状态区会开始检查运行环境；请等它结束，不要在检查过程中反复切换后端。",
                 "4. 看到环境检查通过后，再开启 **视频超分** 或 **运动补帧**。如果检查失败，先看状态区的具体文字，不要直接换模型，因为程序可能连 Python、显卡驱动或后端都还没有找到。",
                 "",
@@ -2845,15 +2826,13 @@ Namespace videoenhancer
                 "插件总开关", "", _switchMaster, _lblMaster), 0, 40)
 
             Dim exeRow As New ModernHorizontalPanel(150.0F, 12.0F, -1.0F)
-            _btnPickExe.Text = "选择处理程序"
-            _btnPickExe.Dock = DockStyle.Fill
-            _btnPickExe.Margin = New Padding(0, 6, 0, 6)
-            ConfigureSecondaryButton(_btnPickExe)
-            AddHandler _btnPickExe.Click, AddressOf OnPickExeClick
+            Dim exeCaption = CreateOfficialCaption("固定处理程序")
+            exeCaption.TextAlign = ContentAlignment.MiddleLeft
+            exeCaption.Padding = New Padding(12, 0, 0, 0)
             _lblExe.AutoSize = False
             _lblExe.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleLeft
             _lblExe.ForeColor = UiText
-            exeRow.AddColumn(_btnPickExe, 0)
+            exeRow.AddColumn(exeCaption, 0)
             exeRow.AddColumn(CreateOfficialValueBox(_lblExe), 2)
             AddWorkbenchRow(root, exeRow, 40, 48)
             AddWorkbenchRow(root, CreateOfficialSeparator(), 88, 25)
@@ -3541,6 +3520,7 @@ Namespace videoenhancer
                 .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8,
                 .Arguments = String.Join(" ", args.Select(Function(value) QuoteCommandArgument(value)))
             }
+            PortableRuntime.ConfigureProcess(psi)
             _imageProcess = New Process With {.StartInfo = psi, .EnableRaisingEvents = True}
             Dim errors As New StringBuilder()
             AddHandler _imageProcess.OutputDataReceived, Sub(s, ev) If ev.Data IsNot Nothing Then HandleImageProgressLine(ev.Data)
@@ -3838,7 +3818,7 @@ Namespace videoenhancer
         End Sub
 
         Private Function DownloadExecutablePath() As String
-            Return PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Return PluginConfig.ResolveInstalledExePath()
         End Function
 
         Private Sub ResetDownloadList()
@@ -3893,6 +3873,7 @@ Namespace videoenhancer
                             .RedirectStandardError = True, .CreateNoWindow = True,
                             .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                         }
+                        PortableRuntime.ConfigureProcess(psi)
                         psi.ArgumentList.Add("--list-download-models")
                         psi.ArgumentList.Add("--json")
                         Using runningProcess As Process = Diagnostics.Process.Start(psi)
@@ -3919,6 +3900,7 @@ Namespace videoenhancer
                             .RedirectStandardError = True, .CreateNoWindow = True,
                             .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                         }
+                        PortableRuntime.ConfigureProcess(backendPsi)
                         backendPsi.ArgumentList.Add("--backend-status")
                         backendPsi.ArgumentList.Add("--json")
                         Using backendProcess As Process = Diagnostics.Process.Start(backendPsi)
@@ -4090,7 +4072,7 @@ Namespace videoenhancer
                 Dim category = normalized.Substring(0, slash)
                 Dim suffix = normalized.Substring(slash + 1).Replace("/"c, Path.DirectorySeparatorChar)
                 Dim coreRoot = ResolveCoreRoot()
-                Dim resolvedExe = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+                Dim resolvedExe = PluginConfig.ResolveInstalledExePath()
                 Dim destinationRoot = If(category.Equals("Plugin", StringComparison.OrdinalIgnoreCase),
                     If(String.IsNullOrWhiteSpace(resolvedExe), coreRoot, Path.GetDirectoryName(resolvedExe)),
                     If(category.Equals("Backend", StringComparison.OrdinalIgnoreCase),
@@ -4331,6 +4313,7 @@ Namespace videoenhancer
                     .RedirectStandardError = True, .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("--delete-download-model")
                 psi.ArgumentList.Add(relativePath)
                 Using child = Diagnostics.Process.Start(psi)
@@ -4533,6 +4516,7 @@ Namespace videoenhancer
                     .RedirectStandardError = True, .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 If isBackendUpdate Then
                     psi.ArgumentList.Add("--update-backend")
                     If forceBackendFull Then psi.ArgumentList.Add("--force-backend-full")
@@ -4715,6 +4699,7 @@ Namespace videoenhancer
                             .RedirectStandardOutput = True, .RedirectStandardError = True,
                             .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                         }
+                        PortableRuntime.ConfigureProcess(psi)
                         psi.ArgumentList.Add("--clean-download-archives")
                         Using process As New Process With {.StartInfo = psi}
                             process.Start()
@@ -5055,7 +5040,7 @@ Namespace videoenhancer
 
         Private Async Sub LoadUserModels()
             If _userModelsLoading Then Return
-            Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Dim exePath = PluginConfig.ResolveInstalledExePath()
             _importModelList.Items.Clear()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
                 AddImportModelMessage("找不到 videoenhancer.exe，请先在超分工作台指定处理程序")
@@ -5183,7 +5168,7 @@ Namespace videoenhancer
                 "路径：" & model.RelativePath
             If Not ShowLakeConfirm(Me, question, "删除用户模型", defaultYes:=False) Then Return
 
-            Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Dim exePath = PluginConfig.ResolveInstalledExePath()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
                 _lblImportStatus.Text = "<font color=#EB5D5D>删除失败：找不到 videoenhancer.exe</font>"
                 Return
@@ -5216,6 +5201,7 @@ Namespace videoenhancer
                     .RedirectStandardError = True, .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("--delete-user-model")
                 psi.ArgumentList.Add(id)
                 Using child = Diagnostics.Process.Start(psi)
@@ -5423,7 +5409,7 @@ Namespace videoenhancer
         Private Function UpdateUserModelCapabilities(id As String, architecture As String, purpose As String,
                                                      scale As Integer, inputMultiple As Integer,
                                                      backends As String()) As String
-            Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Dim exePath = PluginConfig.ResolveInstalledExePath()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then Return "找不到 videoenhancer.exe"
             Try
                 Dim psi As New ProcessStartInfo With {
@@ -5431,6 +5417,7 @@ Namespace videoenhancer
                     .RedirectStandardError = True, .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 Dim arguments = New String() {"--json", "--update-user-model", id, "--user-architecture", architecture,
                     "--user-purpose", purpose, "--user-scale", scale.ToString(), "--user-input-multiple",
                     inputMultiple.ToString(), "--user-backends", String.Join(",", backends)}
@@ -5510,6 +5497,7 @@ Namespace videoenhancer
                     .StandardOutputEncoding = Encoding.UTF8,
                     .StandardErrorEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("--json")
                 psi.ArgumentList.Add("--import-model")
                 psi.ArgumentList.Add(_importSourcePath)
@@ -5689,7 +5677,7 @@ Namespace videoenhancer
             If Not File.Exists(pythonExe) OrElse
                (Not _convertIsInterpolation AndAlso Not File.Exists(converter)) OrElse
                (_convertIsInterpolation AndAlso Not File.Exists(rifePrepare)) Then
-                SetConverterStatus("找不到便携 Python 或所需的 TensorRT 构建脚本，请检查 videoenhancer.exe 的 core-path。", True)
+                SetConverterStatus("找不到便携 Python 或所需的 TensorRT 构建脚本，请检查 videoenhancer.exe 同目录下的 python。", True)
                 Return
             End If
 
@@ -5753,6 +5741,7 @@ Namespace videoenhancer
                 .StandardOutputEncoding = Encoding.UTF8,
                 .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(psi)
             psi.ArgumentList.Add(converter)
             psi.ArgumentList.Add(inputPath)
             psi.ArgumentList.Add("--output-dir")
@@ -5787,27 +5776,7 @@ Namespace videoenhancer
         End Function
 
         Private Function ResolveCoreRoot() As String
-            Dim resolvedExe = PluginConfig.ResolveInstalledExePath(_config.ExePath)
-            Dim exeDir = If(String.IsNullOrWhiteSpace(resolvedExe), AppDomain.CurrentDomain.BaseDirectory,
-                Path.GetDirectoryName(resolvedExe))
-            Dim iniPath = Path.Combine(exeDir, "videoenhancer.ini")
-            Try
-                If File.Exists(iniPath) Then
-                    For Each rawLine In File.ReadLines(iniPath)
-                        Dim line = rawLine.Trim()
-                        If line.StartsWith("core-path", StringComparison.OrdinalIgnoreCase) Then
-                            Dim equalsAt = line.IndexOf("="c)
-                            If equalsAt >= 0 Then
-                                Dim value = line.Substring(equalsAt + 1).Trim().Trim(""""c)
-                                If Not Path.IsPathRooted(value) Then value = Path.GetFullPath(Path.Combine(exeDir, value))
-                                If Directory.Exists(value) Then Return value
-                            End If
-                        End If
-                    Next
-                End If
-            Catch
-            End Try
-            Return exeDir
+            Return PluginConfig.ApplicationRoot
         End Function
 
         Private Function GetPersonalizedTensorRtDirectory() As String
@@ -6184,6 +6153,7 @@ Namespace videoenhancer
                 .RedirectStandardOutput = True, .RedirectStandardError = True,
                 .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(psi)
             For Each argument In arguments
                 psi.ArgumentList.Add(argument)
             Next
@@ -6206,6 +6176,7 @@ Namespace videoenhancer
                 .RedirectStandardOutput = True, .RedirectStandardError = True,
                 .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(psi)
             For Each argument In New String() {prepareScript, inputPath, "--width", width.ToString(), "--height", height.ToString()}
                 psi.ArgumentList.Add(argument)
             Next
@@ -6361,8 +6332,8 @@ Namespace videoenhancer
             _syncingProcessOrder = False
             UpdateModeStateLabels()
             UpdateProcessOrderState()
-            If String.IsNullOrWhiteSpace(_config.ExePath) Then
-                _lblExe.Text = "<font color=#888888>尚未指定 videoenhancer.exe</font>"
+            If Not File.Exists(_config.ExePath) Then
+                _lblExe.Text = "<font color=#F4707A>固定位置缺少：" & EscapeHtml(_config.ExePath) & "</font>"
             Else
                 _lblExe.Text = "<font color=#DCDCDC>" & EscapeHtml(_config.ExePath) & "</font>"
             End If

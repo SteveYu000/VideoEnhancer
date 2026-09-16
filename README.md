@@ -53,16 +53,16 @@ stable.json
 1. 安装或准备可运行的 3FUI。
 2. 从 GitHub Release 下载 `VideoEnhancer-<version>-win-x64.exe`，无需手动改名或移动。
 3. 双击版本化 EXE 并选择 3FUI 主程序；安装器会创建 `Plugin\videoenhancer`，把自身安装为固定名称 `videoenhancer.exe`，并将插件 DLL 放在 `Plugin` 根目录。
-4. 启动 3FUI，VideoEnhancer 会自动识别子目录中的 `videoenhancer.exe`；也可在页面中手动指定。
+4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 
-插件配置默认保存在：
+插件配置固定保存在：
 
 ```text
-%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json
+Plugin\videoenhancer\videoenhancer.plugin.json
 ```
 
-可使用环境变量 `VIDEOENHANCER_CONFIG_DIR` 指定测试或便携配置目录。
+安装器发现旧版 `%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json` 时，会先把仍可读取的设置迁移到上述便携位置，并丢弃已废弃的 `ExePath` 字段。安装结束前可选择清理旧配置、旧更新状态、旧内置工具与更新器副本；清理器只删除明确命名的旧文件，只移除空目录，配置迁移失败时会保留原文件。
 
 ### 核心目录
 
@@ -73,6 +73,11 @@ Plugin\
 ├─ videoenhancer.3fui.dll
 └─ videoenhancer\
    ├─ videoenhancer.exe
+   ├─ videoenhancer.plugin.json
+   ├─ cache\...（运行缓存）
+   ├─ .work\...（临时工作文件）
+   ├─ .update\...（更新包、更新器和更新结果）
+   ├─ bin\embedded-tools\...（内置下载/解压工具）
    ├─ bin\ffmpeg\ffmpeg.exe
    ├─ bin\rtx-video\runtime\vsr_backend.exe（RTX 运行组件，可选）
    ├─ python\python\python.exe
@@ -81,6 +86,8 @@ Plugin\
 ```
 
 首次运行时，安装程序可以创建 `models`、`python` 和 `bin` 目录；模型下载页也可以按资源类别自动放置文件。
+
+`CoreRoot` 永远等于当前 `videoenhancer.exe` 所在目录。程序不再读取路径 INI，也不能通过配置把 `python`、`models` 或 `bin` 指向其他磁盘。除用户明确选择的输入文件、最终输出目录和模型导入源外，插件配置、更新文件、工具副本、计算缓存与临时文件均写入上面的便携目录，不写入 `AppData` 或系统临时目录。Python、FFmpeg、RTX sidecar 等子进程的常见临时/缓存环境变量也会重定向到 `.work` 和 `cache`。
 
 ## 推理后端
 

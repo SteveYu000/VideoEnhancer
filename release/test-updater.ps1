@@ -34,7 +34,6 @@ if (-not $resolvedTest.StartsWith($resolvedTemp, [System.StringComparison]::Ordi
 }
 New-Item -ItemType Directory -Force -Path $testRoot | Out-Null
 $originalPauseAfterMove = $env:VIDEOENHANCER_TEST_LAYOUT_PAUSE_AFTER_MOVE
-$originalReadyFile = $env:VIDEOENHANCER_TEST_LAYOUT_READY_FILE
 
 function New-DummyTarget([string]$name) {
     $target = Join-Path $testRoot $name
@@ -68,11 +67,10 @@ function Assert-UpdatedLayout([string]$target) {
     }
 }
 
-function Invoke-Updater([string]$archive, [string]$target, [string]$result,
+function Invoke-Updater([string]$archive, [string]$target,
         [string]$restart = '', [int]$waitPid = 0) {
     $arguments = @('--apply-update', '--update-package', $archive, '--update-target', $target,
-        '--wait-pid', $waitPid.ToString([Globalization.CultureInfo]::InvariantCulture),
-        '--update-result', $result)
+        '--wait-pid', $waitPid.ToString([Globalization.CultureInfo]::InvariantCulture))
     if (-not [string]::IsNullOrWhiteSpace($restart)) {
         $arguments += @('--restart-exe', $restart)
     }
@@ -82,9 +80,12 @@ function Invoke-Updater([string]$archive, [string]$target, [string]$result,
 
 try {
     $successTarget = New-DummyTarget 'success'
-    $successResult = Join-Path $testRoot 'success-result.txt'
-    if ((Invoke-Updater $package $successTarget $successResult) -ne 0) { throw '正常 EXE 更新测试失败' }
+    if ((Invoke-Updater $package $successTarget) -ne 0) { throw '正常 EXE 更新测试失败' }
     Assert-UpdatedLayout $successTarget
+    $successResult = Join-Path $successTarget 'videoenhancer\.update\update-result.txt'
+    if ((Get-Content -Raw -Encoding UTF8 $successResult) -notmatch '^OK\|') {
+        throw '更新结果没有写入目标便携目录'
+    }
 
     # 场景 2：宿主退出后残留的短暂文件占用应等待解除，而不是立即放弃更新。
     $transientTarget = New-DummyTarget 'transient-lock'
@@ -107,7 +108,7 @@ try {
             Start-Sleep -Milliseconds 100
         }
         if (-not (Test-Path -LiteralPath $lockReady)) { throw '临时占用测试未能建立文件锁' }
-        if ((Invoke-Updater $package $transientTarget (Join-Path $testRoot 'transient-result.txt')) -ne 0) {
+        if ((Invoke-Updater $package $transientTarget) -ne 0) {
             throw '短暂文件占用解除后更新仍失败'
         }
     } finally {
@@ -123,14 +124,14 @@ try {
         $stream.WriteByte(0)
     } finally { $stream.Dispose() }
     $tamperedTarget = New-DummyTarget 'tampered'
-    if ((Invoke-Updater $tamperedPackage $tamperedTarget (Join-Path $testRoot 'tampered-result.txt')) -eq 0) {
+    if ((Invoke-Updater $tamperedPackage $tamperedTarget) -eq 0) {
         throw '被篡改的 EXE 更新包未被拒绝'
     }
 
     $invalidPackage = Join-Path $testRoot 'invalid.exe'
     [System.IO.File]::WriteAllText($invalidPackage, 'not-a-videoenhancer-exe', [System.Text.UTF8Encoding]::new($false))
     $invalidTarget = New-DummyTarget 'invalid'
-    if ((Invoke-Updater $invalidPackage $invalidTarget (Join-Path $testRoot 'invalid-result.txt')) -eq 0) {
+    if ((Invoke-Updater $invalidPackage $invalidTarget) -eq 0) {
         throw '无效 EXE 更新包未被拒绝'
     }
 
@@ -142,7 +143,7 @@ try {
     $lockedPath = Join-Path $rollbackTarget 'videoenhancer.3fui.dll'
     $lock = [System.IO.File]::Open($lockedPath, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
     try {
-        if ((Invoke-Updater $package $rollbackTarget (Join-Path $testRoot 'rollback-result.txt')) -eq 0) {
+        if ((Invoke-Updater $package $rollbackTarget) -eq 0) {
             throw '文件锁存在时更新器错误地报告成功'
         }
     } finally { $lock.Dispose() }
@@ -158,17 +159,14 @@ try {
 
     # 场景 6：迁移进程被强制终止后，下一次更新必须先按持久日志恢复，再重新完成迁移。
     $interruptedTarget = New-DummyTarget 'interrupted-layout'
-    $interruptReady = Join-Path $testRoot 'layout-interrupt-ready.txt'
-    $interruptResult = Join-Path $testRoot 'layout-interrupt-result.txt'
+    $interruptReady = Join-Path $interruptedTarget '.videoenhancer-layout-test-ready'
     $env:VIDEOENHANCER_TEST_LAYOUT_PAUSE_AFTER_MOVE = '2'
-    $env:VIDEOENHANCER_TEST_LAYOUT_READY_FILE = $interruptReady
     $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $startInfo.FileName = $updater
     $startInfo.UseShellExecute = $false
     $startInfo.CreateNoWindow = $true
     foreach ($argument in @('--apply-update', '--update-package', $updater,
-            '--update-target', $interruptedTarget, '--wait-pid', '0',
-            '--update-result', $interruptResult)) {
+            '--update-target', $interruptedTarget, '--wait-pid', '0')) {
         $startInfo.ArgumentList.Add($argument)
     }
     $interruptedProcess = [System.Diagnostics.Process]::Start($startInfo)
@@ -183,12 +181,11 @@ try {
     } finally {
         $interruptedProcess.Dispose()
         $env:VIDEOENHANCER_TEST_LAYOUT_PAUSE_AFTER_MOVE = $null
-        $env:VIDEOENHANCER_TEST_LAYOUT_READY_FILE = $null
     }
     if (-not (Test-Path -LiteralPath (Join-Path $interruptedTarget '.videoenhancer-layout-pending.json'))) {
         throw '迁移进程中断后没有保留恢复日志'
     }
-    if ((Invoke-Updater $updater $interruptedTarget $interruptResult) -ne 0) {
+    if ((Invoke-Updater $updater $interruptedTarget) -ne 0) {
         throw '中断后的下一次更新未能恢复并完成迁移'
     }
     Assert-UpdatedLayout $interruptedTarget
@@ -201,12 +198,11 @@ try {
     $restartScript = Join-Path $testRoot 'restart-host.cmd'
     [System.IO.File]::WriteAllText($restartScript,
         "@echo off`r`n> `"$restartMarker`" echo restarted`r`n", [System.Text.ASCIIEncoding]::new())
-    $restartResult = Join-Path $testRoot 'restart-result.txt'
     $exitingHost = Start-Process -FilePath 'pwsh.exe' -ArgumentList @(
         '-NoProfile', '-Command', 'Start-Sleep -Seconds 1') -WindowStyle Hidden -PassThru
     try {
         if ((Invoke-Updater $invalidPackage (New-DummyTarget 'restart-on-failure') `
-                $restartResult $restartScript $exitingHost.Id) -eq 0) {
+                $restartScript $exitingHost.Id) -eq 0) {
             throw '无效更新包错误地报告成功'
         }
     } finally {
@@ -222,7 +218,6 @@ try {
     Write-Host 'PASS: migration / transient-lock / tamper / invalid-package / rollback / interruption-recovery / restart-on-failure'
 } finally {
     $env:VIDEOENHANCER_TEST_LAYOUT_PAUSE_AFTER_MOVE = $originalPauseAfterMove
-    $env:VIDEOENHANCER_TEST_LAYOUT_READY_FILE = $originalReadyFile
     if (Test-Path -LiteralPath $resolvedTest) {
         Remove-Item -LiteralPath $resolvedTest -Recurse -Force
     }

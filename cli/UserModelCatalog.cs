@@ -709,6 +709,7 @@ internal sealed class ModelImportManager
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
+            PortablePaths.ConfigureChildProcess(start);
             start.Environment["PYTHONUTF8"] = "1";
             start.Environment["PYTHONIOENCODING"] = "utf-8";
             start.Environment["VIDEOENHANCER_BACKEND_DIR"] = Path.GetDirectoryName(_upscaleInspector)!;

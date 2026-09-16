@@ -6,9 +6,10 @@
 
 ## 配置
 
-无需 `videoenhancer.ini`。安装程序会把任意版本化发行 EXE 安装为
+`CoreRoot` 固定为 `videoenhancer.exe` 所在目录，不读取路径 INI。安装程序会把任意版本化发行 EXE 安装为
 `3FUI\Plugin\videoenhancer\videoenhancer.exe`，并在同级建立 `models`、`python`、`bin`
 三个便携核心目录；插件 DLL 单独保留在 `3FUI\Plugin` 根目录，3FUI 加载后会自动识别子目录 EXE。
+配置、缓存、临时文件和更新文件分别保存在同级的 `videoenhancer.plugin.json`、`cache`、`.work` 和 `.update` 中。
 
 ## 构建（单文件）
 
@@ -71,7 +72,7 @@ videoenhancer.exe -i <输入视频> -no-upscale -backend cuda -interp-model <CUD
   - 进度行按每秒 1 行节流输出，避免界面闪烁；
   - FPS 精确重算：用「已渲染帧数 / 有效耗时（总耗时 − 暂停耗时）」计算并保留两位小数
     （后端自报为取整且包含暂停时间），ETA 按相同速率重算；暂停状态来自 `-pause-shm` 共享内存字节。
-- `-h`：帮助（含 videoenhancer.ini 配置说明）；`-scale <N>`：强制倍率；`--list-models` / `--search-models`：按后端递归列出 `models` 子目录中的放大模型，并排除补帧目录；`--list-interp-models`：列出 `models\Frame-Interpolation` 与旧 `models\RIFE` 下的兼容补帧模型（CUDA 列全部权重，TensorRT 只列可自动构建的 RIFE 权重；均可用 `--json` 输出一行 JSON 数组，供插件下拉框解析）；`--check`：仅检测环境。
+- `-h`：帮助（含固定便携目录说明）；`-scale <N>`：强制倍率；`--list-models` / `--search-models`：按后端递归列出 `models` 子目录中的放大模型，并排除补帧目录；`--list-interp-models`：列出 `models\Frame-Interpolation` 与旧 `models\RIFE` 下的兼容补帧模型（CUDA 列全部权重，TensorRT 只列可自动构建的 RIFE 权重；均可用 `--json` 输出一行 JSON 数组，供插件下拉框解析）；`--check`：仅检测环境。
 - `-pause-shm <ID>`：透传暂停共享内存名（供插件暂停/恢复后端）；`-stop-shm <ID>`：停止共享内存名，字节变 1 时优雅停止，已处理部分正常写入输出文件（退出码 130）。
 - `--debug-split`：仅打印 `-ffmpeg-settings` 的拆分结果（`custom_encoder` / `output` / `overwrite`），用于调试 -map 剥除逻辑。
 

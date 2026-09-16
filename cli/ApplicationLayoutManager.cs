@@ -18,8 +18,11 @@ internal static partial class ApplicationLayoutManager
     private static readonly string[] ManagedDirectories =
     {
         "bin",
+        "cache",
         "models",
         "python",
+        ".work",
+        ".update",
         ".videoenhancer-backend-update"
     };
 
@@ -149,7 +152,7 @@ internal static partial class ApplicationLayoutManager
                 else
                     File.Move(move.Source, move.Target);
                 completedMoves++;
-                RunMigrationTestHook(completedMoves);
+                RunMigrationTestHook(completedMoves, root);
             }
 
             if (replaceCanonicalExe)
@@ -159,8 +162,6 @@ internal static partial class ApplicationLayoutManager
 
             VerifySameFile(stagedExe, canonicalExe, "安装后的 videoenhancer.exe 校验失败");
             VerifySameFile(stagedPluginDll, pluginDll, "安装后的 videoenhancer.3fui.dll 校验失败");
-            RewriteMigratedIni(appRoot, root);
-
             File.Delete(journalPath);
             TryDeleteDirectory(workRoot);
             return canonicalExe;
@@ -189,7 +190,7 @@ internal static partial class ApplicationLayoutManager
             }
         }
 
-        foreach (var name in new[] { "videoenhancer.ini", "videoenhancer-layout.json", "ffmpeg_log.txt" })
+        foreach (var name in new[] { "videoenhancer-layout.json", "ffmpeg_log.txt" })
         {
             var source = Path.Combine(pluginRoot, name);
             if (File.Exists(source))
@@ -293,28 +294,7 @@ internal static partial class ApplicationLayoutManager
         }
     }
 
-    private static void RewriteMigratedIni(string appRoot, string oldRoot)
-    {
-        var iniPath = Path.Combine(appRoot, "videoenhancer.ini");
-        if (!File.Exists(iniPath)) return;
-        var lines = File.ReadAllLines(iniPath, Encoding.UTF8);
-        var changed = false;
-        for (var index = 0; index < lines.Length; index++)
-        {
-            var trimmed = lines[index].Trim();
-            if (!trimmed.StartsWith("core-path", StringComparison.OrdinalIgnoreCase)) continue;
-            var equals = trimmed.IndexOf('=');
-            if (equals < 0) continue;
-            var value = trimmed[(equals + 1)..].Trim().Trim('"');
-            if (value.Length == 0 || Path.IsPathRooted(value)) continue;
-            lines[index] = "core-path=\"" + Path.GetFullPath(Path.Combine(oldRoot, value)) + "\"";
-            changed = true;
-            break;
-        }
-        if (changed) File.WriteAllLines(iniPath, lines, new UTF8Encoding(false));
-    }
-
-    private static void RunMigrationTestHook(int completedMoves)
+    private static void RunMigrationTestHook(int completedMoves, string pluginRoot)
     {
         if (int.TryParse(Environment.GetEnvironmentVariable("VIDEOENHANCER_TEST_LAYOUT_FAIL_AFTER_MOVE"),
                 out var failAfter) && failAfter == completedMoves)
@@ -323,12 +303,8 @@ internal static partial class ApplicationLayoutManager
         }
         if (!int.TryParse(Environment.GetEnvironmentVariable("VIDEOENHANCER_TEST_LAYOUT_PAUSE_AFTER_MOVE"),
                 out var pauseAfter) || pauseAfter != completedMoves) return;
-        var readyPath = Environment.GetEnvironmentVariable("VIDEOENHANCER_TEST_LAYOUT_READY_FILE")?.Trim();
-        if (!string.IsNullOrWhiteSpace(readyPath))
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(readyPath))!);
-            File.WriteAllText(readyPath, completedMoves.ToString(), new UTF8Encoding(false));
-        }
+        var readyPath = Path.Combine(pluginRoot, ".videoenhancer-layout-test-ready");
+        File.WriteAllText(readyPath, completedMoves.ToString(), new UTF8Encoding(false));
         Thread.Sleep(Timeout.Infinite);
     }
 

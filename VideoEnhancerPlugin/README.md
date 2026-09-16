@@ -154,10 +154,12 @@
 
 ## 配置
 
-插件配置保存在
-`%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json`
-（ExePath / Model / Enabled / UpscaleEnabled / InterpEnabled / InterpModel / InterpFactor / Backend）。
-支持环境变量 `VIDEOENHANCER_CONFIG_DIR` 覆盖配置目录（便携/测试用）。
+插件配置固定保存在
+`Plugin\videoenhancer\videoenhancer.plugin.json`
+（Model / Enabled / UpscaleEnabled / InterpEnabled / InterpModel / InterpFactor / Backend 等）。
+`ExePath` 不再持久化，也不能由环境变量覆盖；插件只使用 DLL 同目录下
+`videoenhancer\videoenhancer.exe`。运行缓存、工作文件和更新文件分别位于同目录的
+`cache`、`.work` 和 `.update`。
 
 ## 自动更新
 

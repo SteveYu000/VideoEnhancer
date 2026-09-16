@@ -6,7 +6,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('videoenhancer-backend-tests-' + [guid]::NewGuid().ToString('N'))
-$appRoot = Join-Path $testRoot 'app'
+$activeExe = ''
 
 function Write-TestText([string]$path, [string]$content) {
     New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($path)) | Out-Null
@@ -21,12 +21,14 @@ function New-BackendTree([string]$root, [string]$backendText, [switch]$WithDelet
     }
 }
 
-function Set-CorePath([string]$coreRoot) {
-    Write-TestText (Join-Path $appRoot 'videoenhancer.ini') ('core-path="' + $coreRoot + '"')
+function Use-CoreRoot([string]$coreRoot) {
+    New-Item -ItemType Directory -Force -Path $coreRoot | Out-Null
+    Copy-Item -Path (Join-Path $BuildOutput '*') -Destination $coreRoot -Recurse -Force
+    $script:activeExe = Join-Path $coreRoot 'videoenhancer.exe'
 }
 
 function Invoke-VideoEnhancer([string[]]$arguments) {
-    $commandOutput = & (Join-Path $appRoot 'videoenhancer.exe') @arguments
+    $commandOutput = & $script:activeExe @arguments
     $commandExitCode = $LASTEXITCODE
     $commandOutput | Out-Host
     return $commandExitCode
@@ -44,9 +46,6 @@ try {
     if (-not (Test-Path -LiteralPath (Join-Path $BuildOutput 'videoenhancer.exe'))) {
         throw "找不到已构建 CLI：$BuildOutput"
     }
-    New-Item -ItemType Directory -Force -Path $appRoot | Out-Null
-    Copy-Item -Path (Join-Path $BuildOutput '*') -Destination $appRoot -Recurse -Force
-
     # 场景 1：旧版哨兵识别、状态计算、在线通道式增量更新。
     $success = Join-Path $testRoot 'success'
     $successCore = Join-Path $success 'core'
@@ -81,8 +80,8 @@ try {
     }
     $channelPath = Join-Path $success 'channel.json'
     Write-TestText $channelPath ($channel | ConvertTo-Json -Depth 8)
-    Set-CorePath $successCore
-    $statusOutput = & (Join-Path $appRoot 'videoenhancer.exe') --backend-status --backend-channel $channelPath --json
+    Use-CoreRoot $successCore
+    $statusOutput = & $script:activeExe --backend-status --backend-channel $channelPath --json
     Assert-True ($LASTEXITCODE -eq 0) '旧版后端状态检查应成功'
     $status = $statusOutput | Select-Object -Last 1 | ConvertFrom-Json
     Assert-True ($status.state -eq 'legacy-update-available') '应通过哨兵识别旧版基线'
@@ -102,8 +101,8 @@ try {
     $conflictCore = Join-Path $conflict 'core'
     $conflictPython = Join-Path $conflictCore 'python'
     New-BackendTree $conflictPython 'locally-modified' -WithDeletedFile
-    Set-CorePath $conflictCore
-    $conflictOutput = & (Join-Path $appRoot 'videoenhancer.exe') --apply-backend-patch $successPatch 2>&1
+    Use-CoreRoot $conflictCore
+    $conflictOutput = & $script:activeExe --apply-backend-patch $successPatch 2>&1
     $exitCode = $LASTEXITCODE
     $conflictOutput | Out-Host
     Assert-True ($exitCode -ne 0) 'SHA 冲突必须失败'
@@ -125,7 +124,7 @@ try {
         -BaseRoot $rollbackBase -TargetRoot $rollbackTarget `
         -BaseVersion 'base-1' -TargetVersion 'broken-2' `
         -OutputArchive $rollbackPatch -SevenZip $SevenZip -DisablePythonProbe | Out-Null
-    Set-CorePath $rollbackCore
+    Use-CoreRoot $rollbackCore
     $exitCode = Invoke-VideoEnhancer @('--apply-backend-patch', $rollbackPatch)
     Assert-True ($exitCode -ne 0) '健康检查失败必须返回非零'
     Assert-True ((Get-Content -Raw -Encoding UTF8 (Join-Path $rollbackPython 'backend\rve-backend.py')) -eq 'old') '健康检查失败后未恢复原文件'
@@ -149,7 +148,7 @@ try {
         oldMarkerBase64 = ''
     }
     Write-TestText (Join-Path $stateRoot 'pending.json') ($journal | ConvertTo-Json -Depth 5)
-    Set-CorePath $recoveryCore
+    Use-CoreRoot $recoveryCore
     $exitCode = Invoke-VideoEnhancer @('--apply-backend-patch', (Join-Path $recovery 'missing.7z'))
     Assert-True ($exitCode -ne 0) '恢复后缺失补丁仍应返回非零'
     Assert-True ((Get-Content -Raw -Encoding UTF8 (Join-Path $recoveryPython 'backend\rve-backend.py')) -eq 'old') '启动恢复未还原备份'
@@ -191,8 +190,8 @@ try {
     }
     $fullChannelPath = Join-Path $full 'channel.json'
     Write-TestText $fullChannelPath ($fullChannel | ConvertTo-Json -Depth 5)
-    Set-CorePath $fullCore
-    $fullStatusOutput = & (Join-Path $appRoot 'videoenhancer.exe') --backend-status --backend-channel $fullChannelPath --json
+    Use-CoreRoot $fullCore
+    $fullStatusOutput = & $script:activeExe --backend-status --backend-channel $fullChannelPath --json
     Assert-True ($LASTEXITCODE -eq 0) '完整修复场景状态检查应成功'
     $fullStatus = $fullStatusOutput | Select-Object -Last 1 | ConvertFrom-Json
     Assert-True ($fullStatus.mode -eq 'patch') '测试前置条件必须先选择增量补丁'
@@ -209,7 +208,7 @@ try {
     $partialPython = Join-Path $partialCore 'python'
     New-BackendTree $partialPython 'new'
     Write-TestText (Join-Path $partialPython 'backend\add-me.py') 'add'
-    Set-CorePath $partialCore
+    Use-CoreRoot $partialCore
     $exitCode = Invoke-VideoEnhancer @('--apply-backend-patch', $successPatch)
     Assert-True ($exitCode -eq 0) '已部分自修补的后端应幂等完成'
     $partialMarker = Get-Content -Raw -Encoding UTF8 (Join-Path $partialPython '.videoenhancer-backend.json') | ConvertFrom-Json

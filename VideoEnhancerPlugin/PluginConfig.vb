@@ -1,13 +1,21 @@
 Imports System
 Imports System.IO
+Imports System.Text
 Imports System.Text.Json
+Imports System.Text.Json.Serialization
 
 Namespace videoenhancer
 
-    ''' <summary>插件配置，持久化到 %LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json。</summary>
+    ''' <summary>插件配置，持久化到 Plugin\videoenhancer\videoenhancer.plugin.json。</summary>
     Public Class PluginConfig
 
-        Public Property ExePath As String = ""
+        ''' <summary>处理程序路径由插件 DLL 所在目录唯一确定，不再允许配置外部 EXE。</summary>
+        <JsonIgnore>
+        Public ReadOnly Property ExePath As String
+            Get
+                Return ResolveInstalledExePath()
+            End Get
+        End Property
         Public Property Model As String = ""
         Public Property Enabled As Boolean = False
         ''' <summary>超分开关：是否将"加入编码队列"hook 到 videoenhancer.exe 中转。</summary>
@@ -51,18 +59,23 @@ Namespace videoenhancer
         ''' <summary>插件页面首次加载后是否在后台检查稳定版更新。</summary>
         Public Property AutoCheckUpdates As Boolean = True
 
-        Private Shared Function GetConfigDir() As String
-            ' 支持环境变量覆盖（测试/便携部署用），默认 %LocalAppData%\FFmpegFreeUI
-            Dim overrideDir = Environment.GetEnvironmentVariable("VIDEOENHANCER_CONFIG_DIR")
-            If Not String.IsNullOrWhiteSpace(overrideDir) Then
-                Return overrideDir
-            End If
-            Return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FFmpegFreeUI")
-        End Function
+        Public Shared ReadOnly Property PluginRoot As String
+            Get
+                Return PortableRuntime.PluginRoot
+            End Get
+        End Property
 
-        Private Shared ReadOnly ConfigDir As String = GetConfigDir()
-        Private Shared ReadOnly ConfigPath As String = Path.Combine(ConfigDir, "videoenhancer.plugin.json")
+        Public Shared ReadOnly Property ApplicationRoot As String
+            Get
+                Return PortableRuntime.ApplicationRoot
+            End Get
+        End Property
+
+        Public Shared ReadOnly Property ConfigPath As String
+            Get
+                Return Path.Combine(ApplicationRoot, "videoenhancer.plugin.json")
+            End Get
+        End Property
 
         Public Shared Function Load() As PluginConfig
             Dim cfg As PluginConfig = Nothing
@@ -74,92 +87,28 @@ Namespace videoenhancer
                 ' 配置损坏时回退到默认
             End Try
             If cfg Is Nothing Then cfg = New PluginConfig()
-            Dim detected = ResolveInstalledExePath(cfg.ExePath)
-            If Not String.Equals(cfg.ExePath, detected, StringComparison.OrdinalIgnoreCase) Then
-                cfg.ExePath = detected
-                If Not String.IsNullOrWhiteSpace(detected) Then cfg.Save()
-            End If
             Return cfg
         End Function
 
-        ''' <summary>
-        ''' 配置丢失或旧平铺路径失效时，优先从 Plugin\videoenhancer 子目录自动发现，再兼容旧路径。
-        ''' </summary>
-        Public Shared Function ResolveInstalledExePath(Optional configuredPath As String = "") As String
-            If Not String.IsNullOrWhiteSpace(configuredPath) Then
-                Try
-                    Dim configuredFullPath = Path.GetFullPath(configuredPath)
-                    Dim configuredDirectory = Path.GetDirectoryName(configuredFullPath)
-                    If Not String.IsNullOrWhiteSpace(configuredDirectory) AndAlso
-                       Not Path.GetFileName(configuredDirectory).Equals("videoenhancer", StringComparison.OrdinalIgnoreCase) Then
-                        Dim migratedPath = Path.Combine(configuredDirectory, "videoenhancer", "videoenhancer.exe")
-                        If File.Exists(migratedPath) Then Return Path.GetFullPath(migratedPath)
-                    End If
-                    If File.Exists(configuredFullPath) Then Return configuredFullPath
-                Catch
-                End Try
-            End If
-            Dim candidates As New Collections.Generic.List(Of String)()
-            Try
-                AddLayoutCandidates(candidates, AppContext.BaseDirectory)
-            Catch
-            End Try
-            Try
-                Dim assemblyDir = Path.GetDirectoryName(GetType(PluginConfig).Assembly.Location)
-                If Not String.IsNullOrWhiteSpace(assemblyDir) Then
-                    AddLayoutCandidates(candidates, assemblyDir)
-                    Dim hostDir = Directory.GetParent(assemblyDir)
-                    If hostDir IsNot Nothing Then AddLayoutCandidates(candidates, hostDir.FullName)
-                End If
-            Catch
-            End Try
-            Try
-                Dim processPath = Environment.ProcessPath
-                If Not String.IsNullOrWhiteSpace(processPath) Then
-                    AddLayoutCandidates(candidates, Path.GetDirectoryName(processPath))
-                End If
-            Catch
-            End Try
-            Try
-                AddLayoutCandidates(candidates, Environment.CurrentDirectory)
-            Catch
-            End Try
-            For Each candidate In candidates
-                Try
-                    If File.Exists(candidate) Then Return Path.GetFullPath(candidate)
-                Catch
-                End Try
-            Next
-            Return ""
+        ''' <summary>处理程序固定为插件 DLL 同目录下的 videoenhancer\videoenhancer.exe。</summary>
+        Public Shared Function ResolveInstalledExePath() As String
+            Return Path.Combine(ApplicationRoot, "videoenhancer.exe")
         End Function
-
-        ''' <summary>由已安装 EXE 反推出承载 DLL 的 Plugin 根目录，同时兼容旧平铺布局。</summary>
-        Public Shared Function ResolvePluginRoot(exePath As String) As String
-            If String.IsNullOrWhiteSpace(exePath) Then Return ""
-            Try
-                Dim exeDirectory = Path.GetDirectoryName(Path.GetFullPath(exePath))
-                If String.IsNullOrWhiteSpace(exeDirectory) Then Return ""
-                If Path.GetFileName(exeDirectory).Equals("videoenhancer", StringComparison.OrdinalIgnoreCase) Then
-                    Dim parent = Directory.GetParent(exeDirectory)
-                    If parent IsNot Nothing Then Return parent.FullName
-                End If
-                Return exeDirectory
-            Catch
-                Return ""
-            End Try
-        End Function
-
-        Private Shared Sub AddLayoutCandidates(candidates As Collections.Generic.List(Of String), root As String)
-            If String.IsNullOrWhiteSpace(root) Then Return
-            candidates.Add(Path.Combine(root, "videoenhancer", "videoenhancer.exe"))
-            candidates.Add(Path.Combine(root, "videoenhancer.exe"))
-        End Sub
 
         Public Sub Save()
+            Dim temporary = ConfigPath & ".new"
             Try
-                Directory.CreateDirectory(ConfigDir)
-                File.WriteAllText(ConfigPath, JsonSerializer.Serialize(Me, New JsonSerializerOptions With {.WriteIndented = True}))
+                Directory.CreateDirectory(ApplicationRoot)
+                File.WriteAllText(temporary,
+                    JsonSerializer.Serialize(Me, New JsonSerializerOptions With {.WriteIndented = True}),
+                    New UTF8Encoding(False))
+                File.Move(temporary, ConfigPath, True)
             Catch
+            Finally
+                Try
+                    If File.Exists(temporary) Then File.Delete(temporary)
+                Catch
+                End Try
             End Try
         End Sub
 

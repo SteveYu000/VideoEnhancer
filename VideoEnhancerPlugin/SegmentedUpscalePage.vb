@@ -165,7 +165,7 @@ Namespace videoenhancer
 
         Private Async Sub LoadSegmentModelCatalogs()
             If _segmentModelsLoaded OrElse _segmentModelsLoading Then Return
-            Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Dim exePath = PluginConfig.ResolveInstalledExePath()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then Return
             _segmentModelsLoading = True
             Try
@@ -211,7 +211,7 @@ Namespace videoenhancer
                 Dim paths = QueueHook.GetCurrentPrepareFilePaths().
                     Where(Function(path) Not String.IsNullOrWhiteSpace(path) AndAlso File.Exists(path)).
                     Select(Function(filePath) IO.Path.GetFullPath(filePath)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+                Dim exePath = PluginConfig.ResolveInstalledExePath()
                 Dim ffprobe = If(String.IsNullOrWhiteSpace(exePath), "", Path.Combine(Path.GetDirectoryName(exePath), "bin", "ffmpeg", "ffprobe.exe"))
                 Dim probed = Await Task.Run(Function()
                     Dim result As New List(Of KeyValuePair(Of String, Long))()
@@ -260,6 +260,7 @@ Namespace videoenhancer
                 .StandardOutputEncoding = Encoding.UTF8,
                 .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(info)
             For Each argument In New String() {"-v", "error", "-select_streams", "v:0", "-count_frames", "-show_entries", "stream=nb_read_frames,nb_frames", "-of", "json", source}
                 info.ArgumentList.Add(argument)
             Next

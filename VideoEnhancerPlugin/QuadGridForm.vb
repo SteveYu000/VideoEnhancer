@@ -1050,6 +1050,7 @@ Namespace videoenhancer
                         .CreateNoWindow = True,
                         .RedirectStandardOutput = True,
                         .RedirectStandardError = True}
+                    PortableRuntime.ConfigureProcess(psi)
                     psi.ArgumentList.Add("-v")
                     psi.ArgumentList.Add("error")
                     psi.ArgumentList.Add("-show_entries")
@@ -1127,6 +1128,7 @@ Namespace videoenhancer
                 .CreateNoWindow = True,
                 .RedirectStandardOutput = True,
                 .RedirectStandardError = True}
+            PortableRuntime.ConfigureProcess(psi)
             psi.ArgumentList.Add("-v")
             psi.ArgumentList.Add("error")
             psi.ArgumentList.Add("-nostdin")
@@ -1441,6 +1443,7 @@ Namespace videoenhancer
                     psi.UseShellExecute = False
                     psi.CreateNoWindow = True
                     psi.RedirectStandardOutput = True
+                    PortableRuntime.ConfigureProcess(psi)
                     psi.ArgumentList.Add("-v")
                     psi.ArgumentList.Add("error")
                     psi.ArgumentList.Add("-nostdin")
@@ -1738,7 +1741,7 @@ Namespace videoenhancer
             Dim assPath = ""
             If _chkBurnFileName.Checked Then
                 Try
-                    assPath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(outputPath), System.IO.Path.GetFileNameWithoutExtension(outputPath) & "_labels.ass")
+                    assPath = PortableRuntime.CreateWorkFilePath("quad-labels", ".ass")
                     System.IO.File.WriteAllText(assPath, BuildAss(inputs, kind, w, h), New UTF8Encoding(False))
                 Catch
                     assPath = ""
@@ -1772,6 +1775,7 @@ Namespace videoenhancer
                 psi.ArgumentList.Add("-f") : psi.ArgumentList.Add("matroska")
             End If
             psi.ArgumentList.Add(outputPath)
+            PortableRuntime.ConfigureProcess(psi)
 
             _running = True
             _btnOutput.Text = "编码中…"
@@ -1781,14 +1785,22 @@ Namespace videoenhancer
                 _process = New Process()
                 _process.StartInfo = psi
                 If Not _process.Start() Then
+                    Try
+                        If Not String.IsNullOrWhiteSpace(assPath) AndAlso File.Exists(assPath) Then File.Delete(assPath)
+                    Catch
+                    End Try
                     _running = False
                     _btnOutput.Enabled = True
                     _btnOutput.Text = "开始生成"
                     SetStatusText("启动 ffmpeg 失败", True)
                     Return
                 End If
-                MonitorEncode(_process, outputPath)
+                MonitorEncode(_process, outputPath, assPath)
             Catch ex As Exception
+                Try
+                    If Not String.IsNullOrWhiteSpace(assPath) AndAlso File.Exists(assPath) Then File.Delete(assPath)
+                Catch
+                End Try
                 _running = False
                 _btnOutput.Enabled = True
                 _btnOutput.Text = "开始生成"
@@ -1814,7 +1826,7 @@ Namespace videoenhancer
             End If
         End Sub
 
-        Private Sub MonitorEncode(p As Process, outputPath As String)
+        Private Sub MonitorEncode(p As Process, outputPath As String, workFile As String)
             Dim captured = p
             Dim capturedOutput = outputPath
             System.Threading.Tasks.Task.Run(New Action(Sub()
@@ -1835,6 +1847,10 @@ Namespace videoenhancer
                 End Try
                 Try
                     captured.WaitForExit()
+                Catch
+                End Try
+                Try
+                    If Not String.IsNullOrWhiteSpace(workFile) AndAlso File.Exists(workFile) Then File.Delete(workFile)
                 Catch
                 End Try
                 Dim code As Integer = -1
@@ -2034,9 +2050,7 @@ Namespace videoenhancer
                 If Not String.IsNullOrWhiteSpace(exePath) Then
                     exeDir = System.IO.Path.GetDirectoryName(exePath)
                 End If
-                If exeDir = "" Then
-                    exeDir = Environment.CurrentDirectory
-                End If
+                If exeDir = "" Then exeDir = PortableRuntime.ApplicationRoot
                 Dim core As String = exeDir
                 Dim ff1 = System.IO.Path.Combine(core, "bin", "ffmpeg", "ffmpeg.exe")
                 Dim ff2 = System.IO.Path.Combine(core, "bin", "ffmpeg.exe")

@@ -61,6 +61,7 @@ internal sealed class RtxVideoBackendClient : IDisposable
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        PortablePaths.ConfigureChildProcess(start);
         start.ArgumentList.Add("--port");
         start.ArgumentList.Add(port.ToString(CultureInfo.InvariantCulture));
         start.ArgumentList.Add("--app-session-id");
