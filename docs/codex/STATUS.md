@@ -8,7 +8,7 @@ Updated by: Codex
 - Latest objective/state (2026-09-16 14:01): 按用户授权将 `v1.3.3` 远端版本覆盖为 ModelScope 首选更新包下载修订；版本清单检查仍保持 GitHub 首选、ModelScope 兜底。GitHub Release、ModelScope Releases 和 Models 备用资产已同步覆盖。
 - Latest files/Git: `PluginUpdater.vb` 调整下载顺序；README、发布流程、ModelScope 镜像说明、发布说明和更新顺序回归断言同步更新。`v1.3.3` 标签指向发布代码 `7b3c46b`，收尾记录提交 `10f69af` 已推送 `fork/main`。
 - Latest verification: 正式解决方案发布构建 0 警告/0 错误；Python 30/30；安装器/更新器门禁通过；静态检查确认版本清单仍 GitHub→ModelScope、更新包下载为 ModelScope→GitHub；`git diff --check` 通过。GitHub 与 ModelScope 三份本体资产及 Models 备用 EXE 已逐字节回读一致。
-- Latest deployment: 部署前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`；当前插件 DLL 源/目标 SHA-256 均为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
+- Latest deployment: 覆盖远端资产后再次部署本机 EXE/DLL；备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remote-overwrite-deploy-20260916-140628`；DLL 源/目标 SHA-256 均为 `6B27A41CEBCEE7261F7EB3C4D29B6DE16A0AC569E6EB22639063D82CA2EF05E4`，EXE 源/目标 SHA-256 均为 `A2A390E3E2065A89BF7DB61CE47DB9B287080013C8C03FC55F6E8FB7C830137E`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
 - Latest remaining issue/research: 需要用户重启 3FUI 后确认更新检查/下载路径；本次已按授权覆盖 `v1.3.3`，后续无需再移动标签，除非出现新的用户授权修订。
 
 - Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制、预览兼容性、HDR 数字框启动显示和双源更新顺序修复，并在本机版本上完成用户验收。
@@ -2116,5 +2116,11 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Assets: 新 EXE 16,967,974 bytes / `a2a390e3e2065a89bf7db61ce47db9b287080013c8c03fc55f6e8fb7c830137e`；手动 ZIP 13,974,530 bytes / `ab7af3b3b4d5b4b73ffdb62891719749454c239596b4f1b89f8d24085c4c42e4`；stable.json 1,300 bytes / `683764b372df9d97c9aa58af3023f89c70a79c198012b88363ebcb3a4dd48cac`。
 - Remote verification: GitHub Release 三资产使用 `--clobber` 覆盖；ModelScope Releases 的 stable.json、EXE、手动 ZIP 和 Models 备用 `Plugin/videoenhancer.exe` 均同步覆盖。两源下载回读与 Models 备用 EXE 均逐字节匹配本地产物；stable.json 的包路径、大小和 SHA-256 一致。
 - Release note: 新增 `[更改]更新包下载优先使用 ModelScope，失败后回退 GitHub Release`；Backend 与 RTX runtime 未重新发布。
-- Local deployment: 本机 DLL 仍为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`，安装版 EXE `--version` 为 1.3.3，相关进程已退出；部署前备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`。
+- Local deployment: 覆盖远端资产后重新部署本机 EXE/DLL；DLL 源/目标 SHA-256 均为 `6B27A41CEBCEE7261F7EB3C4D29B6DE16A0AC569E6EB22639063D82CA2EF05E4`，EXE 源/目标 SHA-256 均为 `A2A390E3E2065A89BF7DB61CE47DB9B287080013C8C03FC55F6E8FB7C830137E`，安装版 EXE `--version` 为 1.3.3，相关进程已退出；部署前备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remote-overwrite-deploy-20260916-140628`。
 - Remaining: 用户重启 3FUI 后实机点“检查更新”确认正常路径；当前远端已覆盖，不再创建 1.3.4 仅用于本次下载顺序修订。记录收尾提交 `10f69af` 已推送，需确认工作树干净。
+
+### 2026-09-16 14:06 - Codex
+
+- Deployment follow-up: 远端 `v1.3.3` 覆盖完成后，确认 3FUI、插件、FFmpeg 和 RTX 相关进程均未运行，备份旧本机文件后覆盖最新 EXE/DLL。
+- Verification: 本机 DLL 源/目标 SHA-256 `6b27a41cebcee7261f7eb3c4d29b6de16a0ac569e6eb22639063d82ca2ef05e4`，EXE 源/目标 SHA-256 `a2a390e3e2065a89bf7db61ce47db9b287080013c8c03fc55f6e8fb7c830137e`；EXE `--version` 返回 1.3.3，相关进程数 0。
+- Backup: `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remote-overwrite-deploy-20260916-140628`。
