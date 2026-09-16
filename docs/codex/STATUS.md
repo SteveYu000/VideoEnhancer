@@ -6,7 +6,7 @@ Updated by: Codex
 ## Current Snapshot
 
 - Latest objective/state (2026-09-16 14:01): 按用户授权将 `v1.3.3` 远端版本覆盖为 ModelScope 首选更新包下载修订；版本清单检查仍保持 GitHub 首选、ModelScope 兜底。GitHub Release、ModelScope Releases 和 Models 备用资产已同步覆盖。
-- Latest files/Git: `PluginUpdater.vb` 调整下载顺序；README、发布流程、ModelScope 镜像说明、发布说明和更新顺序回归断言同步更新。`fork/main` 与 `v1.3.3` 均指向 `7b3c46b`，记录收尾提交待推送。
+- Latest files/Git: `PluginUpdater.vb` 调整下载顺序；README、发布流程、ModelScope 镜像说明、发布说明和更新顺序回归断言同步更新。`v1.3.3` 标签指向发布代码 `7b3c46b`，收尾记录提交 `10f69af` 已推送 `fork/main`。
 - Latest verification: 正式解决方案发布构建 0 警告/0 错误；Python 30/30；安装器/更新器门禁通过；静态检查确认版本清单仍 GitHub→ModelScope、更新包下载为 ModelScope→GitHub；`git diff --check` 通过。GitHub 与 ModelScope 三份本体资产及 Models 备用 EXE 已逐字节回读一致。
 - Latest deployment: 部署前备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`；当前插件 DLL 源/目标 SHA-256 均为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
 - Latest remaining issue/research: 需要用户重启 3FUI 后确认更新检查/下载路径；本次已按授权覆盖 `v1.3.3`，后续无需再移动标签，除非出现新的用户授权修订。
@@ -2117,4 +2117,4 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Remote verification: GitHub Release 三资产使用 `--clobber` 覆盖；ModelScope Releases 的 stable.json、EXE、手动 ZIP 和 Models 备用 `Plugin/videoenhancer.exe` 均同步覆盖。两源下载回读与 Models 备用 EXE 均逐字节匹配本地产物；stable.json 的包路径、大小和 SHA-256 一致。
 - Release note: 新增 `[更改]更新包下载优先使用 ModelScope，失败后回退 GitHub Release`；Backend 与 RTX runtime 未重新发布。
 - Local deployment: 本机 DLL 仍为 `20A9E49E4A8B19A7E8135B448FE3AB0E4FDC2C13FD3B94CB94805063E131A679`，安装版 EXE `--version` 为 1.3.3，相关进程已退出；部署前备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-modelscope-download-priority-20260916-125954`。
-- Remaining: 用户重启 3FUI 后实机点“检查更新”确认正常路径；当前远端已覆盖，不再创建 1.3.4 仅用于本次下载顺序修订。记录收尾提交后需确认工作树干净。
+- Remaining: 用户重启 3FUI 后实机点“检查更新”确认正常路径；当前远端已覆盖，不再创建 1.3.4 仅用于本次下载顺序修订。记录收尾提交 `10f69af` 已推送，需确认工作树干净。
