@@ -148,9 +148,19 @@ class NCNNImageUpscaler:
 
 
 class ImageUpscaler:
-    def __init__(self, backend: str, model: Path, width: int, height: int):
+    def __init__(
+        self,
+        backend: str,
+        model: Path,
+        width: int,
+        height: int,
+        tile_size: int = 0,
+        use_rve_ncnn: bool = False,
+    ):
         self.backend, self.model_path = backend, model
         self.width, self.height = width, height
+        self.tile_size = max(0, int(tile_size))
+        self.use_rve_ncnn = bool(use_rve_ncnn)
         try:
             self.scale = model_scale(model)
         except ValueError:
@@ -183,21 +193,46 @@ class ImageUpscaler:
             self.frame_precision = "float32" if actual_dtype == torch.float32 else "float16"
             return model
         if self.backend == "ncnn":
+            if not self.use_rve_ncnn:
+                model = self.model_path / self.model_path.name if self.model_path.is_dir() else self.model_path.with_suffix("")
+                return NCNNImageUpscaler(model, self.scale)
+            from src.ncnn.UpscaleNCNN import UpscaleNCNN
             model = self.model_path / self.model_path.name if self.model_path.is_dir() else self.model_path.with_suffix("")
-            return NCNNImageUpscaler(model, self.scale)
+            return UpscaleNCNN(
+                modelPath=str(model),
+                num_threads=1,
+                scale=self.scale,
+                gpuid=0,
+                width=self.width,
+                height=self.height,
+                tilesize=self.tile_size,
+            )
         raise ValueError(f"不支持的图片推理后端：{self.backend}")
 
     def __call__(self, rgb: np.ndarray) -> np.ndarray:
         if self.backend == "onnx":
             return onnx_tiled(self.model, rgb)
         if self.backend == "ncnn":
-            return self.model(rgb)
+            if not self.use_rve_ncnn:
+                return self.model(rgb)
+            return np.frombuffer(self.process_bytes(rgb.tobytes()), dtype=np.uint8).reshape(
+                self.height * self.scale, self.width * self.scale, 3
+            )
         from src.utils.Frame import Frame
         internal = "pytorch" if self.backend == "cuda" else self.backend
         frame = Frame(internal, self.width, self.height, "cuda", 0, False, self.frame_precision).set_frame_bytes(rgb.tobytes())
         result = self.model(frame)
         return np.frombuffer(result.get_frame_bytes(), dtype=np.uint8).reshape(
             self.height * self.scale, self.width * self.scale, 3)
+
+    def process_bytes(self, payload: bytes) -> bytes:
+        if self.backend != "ncnn" or not self.use_rve_ncnn:
+            raise ValueError("process_bytes 仅用于分段视频的 RVE NCNN 优化路径")
+        from src.utils.Frame import Frame
+        frame = Frame(
+            "ncnn", self.width, self.height, "cuda", 0, False, "float16"
+        ).set_frame_bytes(payload)
+        return self.model(frame).get_frame_bytes()
 
 
 def run_checked(command: list[str], stage: str) -> None:

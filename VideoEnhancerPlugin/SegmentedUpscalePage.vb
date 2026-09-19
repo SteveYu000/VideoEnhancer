@@ -628,7 +628,7 @@ Namespace videoenhancer
             If requestedMode = "frames" Then
                 _cmbSegmentMode.Enabled = False
                 _lblSegmentStatus.Text = "<font color=#B8B8B8>正在读取精确帧数…</font>"
-                Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+                Dim exePath = PluginConfig.ResolveInstalledExePath()
                 Dim ffprobe = ResolveSegmentFfprobe(exePath)
                 Dim exactFrames = Await Task.Run(Function() ProbeSegmentFrameCount(ffprobe, config.Path))
                 _cmbSegmentMode.Enabled = True

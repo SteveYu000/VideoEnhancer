@@ -87,7 +87,7 @@ Plugin\
 
 首次运行时，安装程序可以创建 `models`、`python` 和 `bin` 目录；模型下载页也可以按资源类别自动放置文件。
 
-`CoreRoot` 永远等于当前 `videoenhancer.exe` 所在目录。程序不再读取路径 INI，也不能通过配置把 `python`、`models` 或 `bin` 指向其他磁盘。除用户明确选择的输入文件、最终输出目录和模型导入源外，插件配置、更新文件、工具副本、计算缓存与临时文件均写入上面的便携目录，不写入 `AppData` 或系统临时目录。Python、FFmpeg、RTX sidecar 等子进程的常见临时/缓存环境变量也会重定向到 `.work` 和 `cache`。
+新安装的 `CoreRoot` 固定为当前 `videoenhancer.exe` 所在目录。为避免旧用户升级后外置后端立即失效，程序仍只读识别 EXE 同目录既有 `videoenhancer.ini` 中的 `core-path`；不再创建或修改该 INI，新安装也不提供外置路径入口。除这个旧版兼容入口以及用户明确选择的输入、输出和模型导入源外，插件配置、更新文件、工具副本、计算缓存与临时文件均写入上面的便携目录，不写入 `AppData` 或系统临时目录。Python、FFmpeg、RTX sidecar 等子进程的常见临时/缓存环境变量也会重定向到 `.work` 和 `cache`。
 
 ## 推理后端
 

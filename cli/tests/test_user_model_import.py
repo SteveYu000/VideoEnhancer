@@ -53,6 +53,8 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("StartSeconds As Double", config)
         self.assertIn("TargetWidth As Integer", config)
         self.assertIn("AllowMixedModelBackends As Boolean = False", config)
+        self.assertIn("GetLegacyConfigPath", config)
+        self.assertIn("loadedLegacyConfig", config)
         self.assertIn("测试功能：跨模型后端混用", segmented)
         self.assertIn("config.AllowMixedModelBackends", segmented)
         self.assertIn("allowMixedSegmentBackends", queue)
@@ -78,6 +80,10 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("不再进入 Python 逐帧 pipe", program)
         self.assertIn("prepared.Any(segment => !IsSegmentModelBackend(segment.Backend))", program)
         self.assertIn("ProbeGeneratedVideoFast(", program)
+        portable_paths = (ROOT / "cli" / "PortablePaths.cs").read_text(encoding="utf-8")
+        self.assertIn('"videoenhancer.ini"', portable_paths)
+        self.assertIn('"core-path"', portable_paths)
+        self.assertIn("ApplicationRoot", portable_paths)
 
     def test_import_page_lists_models_and_exposes_capability_editor(self):
         source = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")

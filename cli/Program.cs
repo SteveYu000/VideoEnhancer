@@ -64,9 +64,9 @@ internal static class Program
     private static string ModelScopeResolveRoot =>
         "https://www.modelscope.cn/datasets/" + ModelScopeDataset + "/resolve/master/";
 
-    // 严格便携布局：CoreRoot 永远是当前 videoenhancer.exe 所在目录，不接受配置覆盖。
-    private static readonly string AppRoot = PortablePaths.CoreRoot;
-    private static readonly string CoreRoot = AppRoot;
+    // 新安装使用固定便携目录；旧版 videoenhancer.ini 仅作为外置后端的只读兼容入口。
+    private static readonly string AppRoot = PortablePaths.ApplicationRoot;
+    private static readonly string CoreRoot = PortablePaths.CoreRoot;
 
     private static string PythonExe => Path.Combine(CoreRoot, "python", "python", "python.exe");
     private static string BackendScript => Path.Combine(CoreRoot, "python", "backend", "rve-backend.py");
@@ -7499,10 +7499,11 @@ internal static class Program
         writer.WriteLine("  --image-png / --image-source-format  输出无损 PNG（默认）或保持源扩展格式");
         writer.WriteLine();
         writer.WriteLine("说明");
-        writer.WriteLine("  · 便携目录：CoreRoot 永远是 videoenhancer.exe 所在目录，不能用配置改写；");
-        writer.WriteLine("    python、models、bin、cache、.work 和 .update 均位于该目录内。");
+        writer.WriteLine("  · 便携目录：新安装的 CoreRoot 是 videoenhancer.exe 所在目录；");
+        writer.WriteLine("    旧版 videoenhancer.ini 的 core-path 仅作只读兼容，不再由程序创建或修改。");
+        writer.WriteLine("    cache、.work 和 .update 始终位于 EXE 目录内。");
         writer.WriteLine("  · FFmpeg 优先使用 3FUI EXE 同目录或 PATH 中的 ffmpeg.exe/ffprobe.exe；");
-        writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 EXE 同目录下的 python 与 models；");
+        writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 CoreRoot 下的 python 与 models；");
         writer.WriteLine("    任一缺失会报错并标出缺失项。");
         writer.WriteLine("  · ffmpeg-settings 是“编码参数 + 输出文件”的完整片段，程序会中转给");
         writer.WriteLine("    rve-backend（--custom_encoder 与 -o）。输出路径必须是最后一个参数；");

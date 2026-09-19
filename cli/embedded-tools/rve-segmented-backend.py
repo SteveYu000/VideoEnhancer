@@ -19,37 +19,48 @@ def decode_json(value: str):
     return json.loads(base64.b64decode(value.encode("ascii")).decode("utf-8"))
 
 
-def validate_segments(segments: list[dict], total_frames: int) -> tuple[str, int]:
+MODEL_BACKENDS = {"ncnn", "cuda", "tensorrt", "onnx"}
+
+
+def validate_segments(segments: list[dict], total_frames: int) -> tuple[int, int]:
     if not segments:
         raise ValueError("分段配置为空")
-    backend = str(segments[0].get("backend", "")).lower()
-    scale = int(segments[0].get("scale", 0))
-    if backend not in {"ncnn", "cuda", "tensorrt", "onnx"}:
-        raise ValueError(f"分段超分不支持后端：{backend}")
-    if scale < 1:
-        raise ValueError("第一段模型倍率无效")
     expected_start = 1
+    output_width = 0
+    output_height = 0
     for index, segment in enumerate(segments, 1):
         start = int(segment.get("start", 0))
         end = int(segment.get("end", 0))
-        current_backend = str(segment.get("backend", "")).lower()
-        current_scale = int(segment.get("scale", 0))
+        backend = str(segment.get("backend", "")).strip().lower()
+        model = str(segment.get("model", "")).strip()
+        scale = int(segment.get("scale", 0))
+        current_width = int(segment.get("outputWidth", 0))
+        current_height = int(segment.get("outputHeight", 0))
         if start != expected_start or end < start:
             raise ValueError(
                 f"第 {index} 段必须从第 {expected_start} 帧开始，当前为 {start}-{end}"
             )
-        if current_backend != backend:
-            raise ValueError("所有分段必须使用与第一段相同的后端类别")
-        if current_scale != scale:
-            raise ValueError("所有分段必须使用与第一段相同的放大倍率")
-        if not str(segment.get("model", "")).strip():
-            raise ValueError(f"第 {index} 段没有模型")
+        if backend not in MODEL_BACKENDS:
+            raise ValueError(f"Python 分段模型后端不支持：{backend}")
+        if not model:
+            raise ValueError(f"第 {index} 段没有处理方式")
+        if scale < 1:
+            raise ValueError(f"第 {index} 段模型倍率无效")
+        if current_width <= 0 or current_height <= 0:
+            raise ValueError(f"第 {index} 段输出分辨率无效")
+        if output_width == 0:
+            output_width, output_height = current_width, current_height
+        elif current_width != output_width or current_height != output_height:
+            raise ValueError(
+                f"第 {index} 段输出分辨率 {current_width}x{current_height} "
+                f"与全片 {output_width}x{output_height} 不一致"
+            )
         expected_start = end + 1
-    if segments[-1]["end"] != total_frames:
+    if int(segments[-1]["end"]) != total_frames:
         raise ValueError(
             f"分段必须覆盖全部 {total_frames} 帧，当前最后一帧为 {segments[-1]['end']}"
         )
-    return backend, scale
+    return output_width, output_height
 
 
 def probe_video(ffprobe: Path, source: Path) -> tuple[int, int, int, str]:
@@ -122,14 +133,13 @@ def release_model(model) -> None:
 
 
 def main() -> int:
-    import numpy as np
-
     parser = argparse.ArgumentParser(description="Segmented single-frame video super-resolution")
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--segments-base64", required=True)
     parser.add_argument("--encoder-args-base64", required=True)
     parser.add_argument("--ffmpeg-path", required=True)
+    parser.add_argument("--tile-size", type=int, default=0)
     parser.add_argument("--pause-shm", default="")
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args()
@@ -141,9 +151,9 @@ def main() -> int:
     segments = decode_json(args.segments_base64)
     encoder_args = [str(value) for value in decode_json(args.encoder_args_base64)]
     width, height, total_frames, frame_rate = probe_video(ffprobe, source)
-    backend, scale = validate_segments(segments, total_frames)
-    output_width, output_height = width * scale, height * scale
-    ImageUpscaler = load_image_backend(backend_root)
+    output_width, output_height = validate_segments(segments, total_frames)
+    ImageUpscaler = None
+    np = None
 
     reader_command = [
         str(ffmpeg), "-hide_banner", "-loglevel", "error", "-i", str(source),
@@ -157,15 +167,36 @@ def main() -> int:
         *encoder_args, str(output),
     ]
     print(f"Total Output Frames: {total_frames}", flush=True)
-    print(f"SEGMENTED_INFO|{backend}|{scale}|{len(segments)}|{width}x{height}|{output_width}x{output_height}", flush=True)
+    print(
+        f"SEGMENTED_INFO|mixed|{len(segments)}|"
+        f"{width}x{height}|{output_width}x{output_height}",
+        flush=True,
+    )
 
     reader = subprocess.Popen(reader_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=backend_root)
     writer = subprocess.Popen(writer_command, stdin=subprocess.PIPE, stderr=subprocess.PIPE, cwd=backend_root)
     pause_map = open_pause_map(args.pause_shm)
     current_model = None
-    current_model_path = ""
+    current_processor_key = None
+    current_processor_started_at = None
+    current_processor_start_frame = 0
+    current_processor_backend = ""
     segment_index = 0
     input_size = width * height * 3
+
+    def report_processor_done(last_frame: int) -> None:
+        nonlocal current_processor_started_at
+        if current_processor_started_at is None or current_processor_start_frame <= 0:
+            return
+        elapsed = max(0.000001, time.perf_counter() - current_processor_started_at)
+        frame_count = max(0, last_frame - current_processor_start_frame + 1)
+        print(
+            f"SEGMENTED_PROCESSOR_DONE|{current_processor_backend}|"
+            f"{current_processor_start_frame}|{last_frame}|{frame_count}|"
+            f"{elapsed:.3f}|{frame_count / elapsed:.2f}",
+            flush=True,
+        )
+        current_processor_started_at = None
     try:
         assert reader.stdout is not None and writer.stdin is not None
         for frame_number in range(1, total_frames + 1):
@@ -176,24 +207,59 @@ def main() -> int:
             while frame_number > int(segments[segment_index]["end"]):
                 segment_index += 1
             segment = segments[segment_index]
+            backend = str(segment["backend"]).strip().lower()
             model_path = str(segment["model"])
-            if model_path != current_model_path:
+            multiple = max(1, int(segment.get("inputMultiple", 1)))
+            processor_key = (backend, model_path, multiple)
+            if processor_key != current_processor_key:
                 if current_model is not None:
+                    report_processor_done(frame_number - 1)
                     previous_model, current_model = current_model, None
                     release_model(previous_model)
-                multiple = max(1, int(segment.get("inputMultiple", 1)))
+                print(
+                    f"SEGMENTED_MODEL|{segment_index + 1}|{segment['start']}|"
+                    f"{segment['end']}|{backend}|{model_path}",
+                    flush=True,
+                )
                 os.environ["VIDEOENHANCER_UPSCALE_INPUT_MULTIPLE"] = str(multiple)
                 os.environ["VIDEOENHANCER_ONNX_INPUT_MULTIPLE"] = str(multiple)
-                print(f"SEGMENTED_MODEL|{segment_index + 1}|{segment['start']}|{segment['end']}|{model_path}", flush=True)
-                current_model = ImageUpscaler(backend, Path(model_path), width, height)
-                current_model_path = model_path
-            frame = np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3)
-            result = current_model(frame)
-            expected_shape = (output_height, output_width, 3)
-            if result.shape != expected_shape:
-                raise RuntimeError(f"第 {frame_number} 帧输出尺寸异常：{result.shape}，预期 {expected_shape}")
-            writer.stdin.write(np.ascontiguousarray(result).tobytes())
+                if ImageUpscaler is None:
+                    ImageUpscaler = load_image_backend(backend_root)
+                if np is None:
+                    import numpy as numpy_module
+                    np = numpy_module
+                current_model = ImageUpscaler(
+                    backend, Path(model_path), width, height,
+                    tile_size=max(0, args.tile_size) if backend == "ncnn" else 0,
+                    use_rve_ncnn=backend == "ncnn",
+                )
+                current_processor_key = processor_key
+                current_processor_started_at = time.perf_counter()
+                current_processor_start_frame = frame_number
+                current_processor_backend = backend
+            if current_model is None:
+                raise RuntimeError(f"第 {frame_number} 帧没有可用的模型处理器")
+            if backend == "ncnn" and getattr(current_model, "use_rve_ncnn", False):
+                output_payload = current_model.process_bytes(payload)
+                expected_size = output_width * output_height * 3
+                if len(output_payload) != expected_size:
+                    raise RuntimeError(
+                        f"第 {frame_number} 帧 NCNN 输出字节数异常："
+                        f"{len(output_payload)}，预期 {expected_size}"
+                    )
+            else:
+                frame = np.frombuffer(payload, dtype=np.uint8).reshape(height, width, 3)
+                result = current_model(frame)
+                expected_shape = (output_height, output_width, 3)
+                if result.shape != expected_shape:
+                    raise RuntimeError(
+                        f"第 {frame_number} 帧输出尺寸异常：{result.shape}，预期 {expected_shape}"
+                    )
+                output_payload = np.ascontiguousarray(result).tobytes()
+            writer.stdin.write(output_payload)
             print(f"FPS: 0 Current Frame: {frame_number} ETA: 0:00:00", flush=True)
+        if current_model is not None:
+            report_processor_done(total_frames)
         writer.stdin.close()
         reader_code = reader.wait()
         writer_code = writer.wait()
