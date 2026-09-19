@@ -50,7 +50,7 @@ Namespace videoenhancer
         Public Property RtxQuality As Integer = 3
         ''' <summary>资源管理器“超分辨率”级联菜单中启用的模型。</summary>
         Public Property ShellModels As New Collections.Generic.List(Of ShellUpscaleModel)()
-        ''' <summary>按完整视频路径保存的逐帧分段超分配置。</summary>
+        ''' <summary>按完整视频路径保存的分段超分配置；默认秒级关键帧断点，兼容精确帧。</summary>
         Public Property SegmentedVideos As New Collections.Generic.List(Of SegmentedVideoConfig)()
         Public Property ImageOutput As String = ""
         Public Property ImageOutputOriginal As Boolean = False
@@ -218,6 +218,11 @@ Namespace videoenhancer
     Public Class SegmentedVideoConfig
         Public Property Path As String = ""
         Public Property FrameCount As Long
+        Public Property DurationSeconds As Double
+        Public Property SourceWidth As Integer
+        Public Property SourceHeight As Integer
+        Public Property BoundaryMode As String = ""
+        Public Property AllowMixedModelBackends As Boolean = False
         Public Property Enabled As Boolean
         Public Property Segments As New Collections.Generic.List(Of SegmentedUpscaleRange)()
     End Class
@@ -225,10 +230,14 @@ Namespace videoenhancer
     Public Class SegmentedUpscaleRange
         Public Property Start As Long
         Public Property [End] As Long
+        Public Property StartSeconds As Double
+        Public Property EndSeconds As Double
         Public Property Backend As String = ""
         Public Property Model As String = ""
         Public Property DisplayName As String = ""
         Public Property Scale As Integer
+        Public Property TargetWidth As Integer
+        Public Property TargetHeight As Integer
     End Class
 
 End Namespace

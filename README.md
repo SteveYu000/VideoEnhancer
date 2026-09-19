@@ -13,7 +13,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 支持图片单张推理和图片文件夹处理；FlashVSR 与 BasicVSR++ 通过无损单帧视频桥处理图片。图片超分已独立为专用页，引擎与模型沿用超分工作台的当前选择。
 - 支持 NCNN/Vulkan、CUDA/PyTorch、TensorRT、ONNX、FlashVSR、BasicVSR++ 和 RTX VSR 超分后端。
 - 支持为 Windows 图片文件注册“超分辨率 → 模型”当前用户级联右键菜单，结果固定输出为 PNG。
-- 支持按视频保存“分段超分”配置；分段必须连续覆盖全部帧，第一段会锁定后端类别和放大倍率，每段可选择不同的同类单帧模型。
+- 支持按视频保存“分段超分”配置；默认按秒设置断点并自动吸附附近关键帧，仍可切换到精确帧模式。默认要求 NCNN/CUDA/TensorRT/ONNX 单帧模型保持同一模型后端；跨模型后端混用作为实验功能，需手动开启。FFmpeg 缩放与 Anime4K 可正常参与分段；固定倍率模型存在时由模型倍率统一决定整片输出尺寸。
 - 支持 NCNN、CUDA/PyTorch 和 TensorRT 补帧后端；RIFE TensorRT Engine 会按当前设备自动构建。
 - 支持 `upscale-first` 与 `interp-first` 两种组合顺序；跨后端阶段使用临时无损中间文件。
 - TensorRT Engine 按 GPU、运行时版本、输入尺寸、倍率、分块、精度和转换配置隔离缓存，并在失效时重建。
@@ -98,7 +98,7 @@ TensorRT 不依赖远端预置 Engine。任务启动时会根据当前视频和�
 
 BasicVSR++ 与运动补帧不能同时启用；切换到 BasicVSR++ 时，插件会关闭并禁用补帧开关，切回可组合后端后保持关闭但恢复可操作。
 
-“分段超分”只允许 NCNN、CUDA/PyTorch、TensorRT 和 ONNX 单帧模型，不会列出 FlashVSR、BasicVSR++ 或 RTX VSR。由于同一 FFmpeg 原始帧输入流的尺寸必须固定，第一段选定模型后，后续段同时锁定为相同后端和相同倍率。当前分段模式不与运动补帧、RTX HDR 或 PQ/HLG HDR 输入组合。
+“分段超分”默认使用按秒模式：页面先读取视频时长和关键帧，新增或修改断点时会自动吸附到附近关键帧，并始终自动覆盖完整时长；需要逐帧边界时可切换到精确帧模式。默认情况下，NCNN、CUDA/PyTorch、TensorRT、ONNX 单帧模型之间不得跨模型后端混用；这是为了降低环境依赖和后端切换失败概率。页面提供默认关闭的“测试功能：跨模型后端混用”布尔开关，只有手动开启后才允许跨这些模型后端。FFmpeg 的 Lanczos/Bicubic/Bilinear/Nearest/Area/Spline 等缩放方式和 Anime4K libplacebo 着色器不受该实验门禁影响，可与单一模型后端正常组合。**FFmpeg 硬拉与 Anime4K 由 CLI 直接启动 FFmpeg 处理，不再经 Python 逐帧 rawvideo pipe**：纯自定义任务直接从源视频滤镜到最终编码；混合任务中只有模型段生成无损中间块，自定义段直接从原视频进入最终 `filter_complex`，再与模型块一次 concat/编码。运行日志中的 `SEGMENTED_DIRECT_DONE` / `SEGMENTED_DIRECT_GRAPH` 可用于观察直连 FFmpeg 阶段。若存在 2x/4x 等固定倍率模型，所有固定倍率模型必须倍率一致，且该倍率优先决定整片输出分辨率，FFmpeg/Anime4K 段自动跟随；若全片只使用 FFmpeg/Anime4K，则所有段使用统一的自定义目标宽高。当前分段模式仍不与运动补帧、RTX HDR 或 PQ/HLG HDR 输入组合。
 
 ## 补帧模型
 
