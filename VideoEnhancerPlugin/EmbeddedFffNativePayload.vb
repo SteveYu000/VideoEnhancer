@@ -10,7 +10,7 @@ Friend Module EmbeddedFffNativePayload
     Friend Function EnsureExtracted() As String
         SyncLock _sync
             If Not String.IsNullOrEmpty(_folder) AndAlso File.Exists(Path.Combine(_folder, "FFF.Native.dll")) Then Return Path.Combine(_folder, "FFF.Native.dll")
-            _folder = Path.Combine(Path.GetTempPath(), "videoenhancer.3fui", "fff-native-11")
+            _folder = Path.Combine(PortableRuntime.ApplicationRoot, "bin", "fff-native-11")
             Directory.CreateDirectory(_folder)
             For Each item In Payloads()
                 Dim target = Path.Combine(_folder, item.Key)

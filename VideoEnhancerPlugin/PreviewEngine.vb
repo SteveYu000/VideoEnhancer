@@ -453,6 +453,7 @@ Namespace videoenhancer
                 psi.CreateNoWindow = True
                 psi.RedirectStandardOutput = True
                 psi.StandardOutputEncoding = Encoding.UTF8
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("-v")
                 psi.ArgumentList.Add("error")
                 psi.ArgumentList.Add("-select_streams")
@@ -678,6 +679,7 @@ Namespace videoenhancer
 
         ''' <summary>运行 ffmpeg 并抓取 stdout 的图像字节（mjpeg），超时强制结束，返回克隆位图；失败时带回错误提示。</summary>
         Private Function RunCapture(psi As ProcessStartInfo, ByRef errorText As String) As Image
+            PortableRuntime.ConfigureProcess(psi)
             Using p As New Process()
                 p.StartInfo = psi
                 If Not p.Start() Then
@@ -768,6 +770,7 @@ Private Function EstimateFpsByTime(taskId As String, seconds As Double) As Doubl
                     psi.CreateNoWindow = True
                     psi.RedirectStandardOutput = True
                     psi.StandardOutputEncoding = Encoding.UTF8
+                    PortableRuntime.ConfigureProcess(psi)
                     psi.ArgumentList.Add("-v")
                     psi.ArgumentList.Add("error")
                     psi.ArgumentList.Add("-select_streams")
@@ -835,9 +838,7 @@ Private Function EstimateFpsByTime(taskId As String, seconds As Double) As Doubl
                 If Not String.IsNullOrWhiteSpace(exePath) Then
                     exeDir = Path.GetDirectoryName(exePath)
                 End If
-                If exeDir = "" Then
-                    exeDir = Environment.CurrentDirectory
-                End If
+                If exeDir = "" Then exeDir = PortableRuntime.ApplicationRoot
                 Dim core As String = exeDir
                 Dim ff1 = Path.Combine(core, "bin", "ffmpeg", "ffmpeg.exe")
                 Dim ff2 = Path.Combine(core, "bin", "ffmpeg.exe")

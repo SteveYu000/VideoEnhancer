@@ -451,6 +451,7 @@ internal static class BackendUpdateManager
             RedirectStandardError = true,
             CreateNoWindow = true
         };
+        PortablePaths.ConfigureChildProcess(start);
         start.ArgumentList.Add("--version");
         using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动后端 Python 健康检查");
         if (!process.WaitForExit(15000))

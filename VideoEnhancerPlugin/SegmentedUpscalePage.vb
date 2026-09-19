@@ -254,7 +254,7 @@ Namespace videoenhancer
         Private Async Sub LoadSegmentModelCatalogs()
             EnsureBuiltinSegmentChoices()
             If _segmentModelsLoaded OrElse _segmentModelsLoading Then Return
-            Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+            Dim exePath = PluginConfig.ResolveInstalledExePath()
             If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
                 RenderSegmentRows()
                 Return
@@ -303,7 +303,7 @@ Namespace videoenhancer
                 Dim paths = QueueHook.GetCurrentPrepareFilePaths().
                     Where(Function(path) Not String.IsNullOrWhiteSpace(path) AndAlso File.Exists(path)).
                     Select(Function(filePath) IO.Path.GetFullPath(filePath)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                Dim exePath = PluginConfig.ResolveInstalledExePath(_config.ExePath)
+                Dim exePath = PluginConfig.ResolveInstalledExePath()
                 Dim ffprobe = ResolveSegmentFfprobe(exePath)
                 Dim probed = Await Task.Run(Function()
                     Dim result As New List(Of SegmentVideoProbe)()
@@ -446,6 +446,7 @@ Namespace videoenhancer
                 .StandardOutputEncoding = Encoding.UTF8,
                 .StandardErrorEncoding = Encoding.UTF8
             }
+            PortableRuntime.ConfigureProcess(info)
             For Each argument In arguments
                 info.ArgumentList.Add(argument)
             Next

@@ -169,8 +169,7 @@ Namespace videoenhancer
                 progress As Action(Of Integer)) As Task(Of String)
             ValidateRelativePath(manifest.Package.Path)
             Dim updateDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FFmpegFreeUI", "VideoEnhancer", "updates", manifest.Version)
+                PortableRuntime.UpdateRoot, "packages", manifest.Version)
             Directory.CreateDirectory(updateDirectory)
             Dim fileName = Path.GetFileName(manifest.Package.Path.Replace("/"c, Path.DirectorySeparatorChar))
             Dim destination = Path.Combine(updateDirectory, fileName)
@@ -216,9 +215,12 @@ Namespace videoenhancer
         Public Shared Sub StartUpdate(packagePath As String,
                                       pluginRoot As String, waitPid As Integer,
                                       restartExe As String)
+            Dim canonicalPluginRoot = Path.GetFullPath(PluginConfig.PluginRoot)
+            If Not Path.GetFullPath(pluginRoot).Equals(canonicalPluginRoot, StringComparison.OrdinalIgnoreCase) Then
+                Throw New InvalidOperationException("更新目标必须是当前插件 DLL 所在目录")
+            End If
             Dim updaterDirectory = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FFmpegFreeUI", "VideoEnhancer", "updater", Guid.NewGuid().ToString("N"))
+                PortableRuntime.UpdateRoot, "updater", Guid.NewGuid().ToString("N"))
             Directory.CreateDirectory(updaterDirectory)
             Dim updaterExe = Path.Combine(updaterDirectory, "videoenhancer-updater.exe")
             ' 新 EXE 本身包含最新插件 DLL；用它作为临时更新器，宿主退出后再释放 DLL 并替换本体。
@@ -235,6 +237,7 @@ Namespace videoenhancer
                 .CreateNoWindow = True,
                 .WorkingDirectory = updaterDirectory
             }
+            PortableRuntime.ConfigureProcess(startInfo)
             startInfo.ArgumentList.Add("--apply-update")
             startInfo.ArgumentList.Add("--update-package")
             startInfo.ArgumentList.Add(packagePath)
@@ -244,8 +247,6 @@ Namespace videoenhancer
             startInfo.ArgumentList.Add(waitPid.ToString(Globalization.CultureInfo.InvariantCulture))
             startInfo.ArgumentList.Add("--restart-exe")
             startInfo.ArgumentList.Add(restartExe)
-            startInfo.ArgumentList.Add("--update-result")
-            startInfo.ArgumentList.Add(resultPath)
             Process.Start(startInfo)
         End Sub
 
@@ -255,6 +256,7 @@ Namespace videoenhancer
                 If Not File.Exists(resultPath) Then Return ""
                 Dim value = File.ReadAllText(resultPath, Encoding.UTF8).Trim()
                 File.Delete(resultPath)
+                CleanupCompletedUpdaterCopies()
                 Return value
             Catch
                 Return ""
@@ -386,10 +388,26 @@ Namespace videoenhancer
         End Sub
 
         Private Shared Function GetResultPath() As String
-            Return Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "FFmpegFreeUI", "VideoEnhancer", "update-result.txt")
+            Return Path.Combine(PortableRuntime.UpdateRoot, "update-result.txt")
         End Function
+
+        Private Shared Sub CleanupCompletedUpdaterCopies()
+            Try
+                Dim updaterRoot = Path.Combine(PortableRuntime.UpdateRoot, "updater")
+                If Directory.Exists(updaterRoot) Then
+                    For Each childDirectory As String In Directory.EnumerateDirectories(updaterRoot)
+                        Try
+                            Directory.Delete(childDirectory, True)
+                        Catch
+                        End Try
+                    Next
+                    If Not Directory.EnumerateFileSystemEntries(updaterRoot).Any() Then
+                        Directory.Delete(updaterRoot)
+                    End If
+                End If
+            Catch
+            End Try
+        End Sub
 
     End Class
 

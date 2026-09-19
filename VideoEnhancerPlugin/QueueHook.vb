@@ -1151,6 +1151,7 @@ Namespace videoenhancer
                     .CreateNoWindow = True,
                     .StandardOutputEncoding = Encoding.UTF8
                 }
+                PortableRuntime.ConfigureProcess(psi)
                 psi.ArgumentList.Add("-v")
                 psi.ArgumentList.Add("error")
                 psi.ArgumentList.Add("-show_entries")

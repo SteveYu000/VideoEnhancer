@@ -303,7 +303,10 @@ def main() -> int:
                 rgb = np.asarray(opened.convert("RGB"))
             height, width = rgb.shape[:2]
             if args.backend in ("flashvsr", "basicvsrpp"):
-                with tempfile.TemporaryDirectory(prefix="videoenhancer-image-") as temporary:
+                work_root = os.environ.get("VIDEOENHANCER_WORK_DIR") or None
+                with tempfile.TemporaryDirectory(
+                    prefix="videoenhancer-image-", dir=work_root
+                ) as temporary:
                     value = temporal_upscale(source, args.backend, model_path, ffmpeg, Path(temporary))
             else:
                 key = (width, height)

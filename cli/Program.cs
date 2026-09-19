@@ -64,13 +64,9 @@ internal static class Program
     private static string ModelScopeResolveRoot =>
         "https://www.modelscope.cn/datasets/" + ModelScopeDataset + "/resolve/master/";
 
-    // exe 所在目录：videoenhancer.ini 的查找位置，也是未配置 core-path 时的回退根目录（1.0 布局）
-    private static readonly string AppRoot = AppContext.BaseDirectory.TrimEnd(
-        Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-    // 核心程序根目录：默认 exe 同目录；若 videoenhancer.ini 配置了 core-path="<核心程序路径>"，
-    // 则指向后端分离后的 python / models 所在处。
-    private static string CoreRoot = AppRoot;
+    // 严格便携布局：CoreRoot 永远是当前 videoenhancer.exe 所在目录，不接受配置覆盖。
+    private static readonly string AppRoot = PortablePaths.CoreRoot;
+    private static readonly string CoreRoot = AppRoot;
 
     private static string PythonExe => Path.Combine(CoreRoot, "python", "python", "python.exe");
     private static string BackendScript => Path.Combine(CoreRoot, "python", "backend", "rve-backend.py");
@@ -114,7 +110,7 @@ internal static class Program
         }
         catch
         {
-            // 非标准 core-path 继续按 PATH 与旧版目录解析。
+            // 目录层级异常时继续按 PATH 与旧版目录解析。
         }
         var pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
         foreach (var rawDirectory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
@@ -138,16 +134,9 @@ internal static class Program
         }
         return legacyFallback;
     }
-    private static string InterpolationCapabilityCachePath
-    {
-        get
-        {
-            var basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (string.IsNullOrWhiteSpace(basePath)) basePath = Path.GetTempPath();
-            return Path.Combine(basePath, "VideoEnhancer", "cache",
-                $"interpolation-capabilities-v{InterpolationCapabilityCacheVersion}.json");
-        }
-    }
+    private static string InterpolationCapabilityCachePath =>
+        Path.Combine(PortablePaths.CacheRoot,
+            $"interpolation-capabilities-v{InterpolationCapabilityCacheVersion}.json");
 
     // ── Windows Job Object：CLI 进程被 3fui 停止/退出时，整棵后端进程树（python + ffmpeg）一并终止 ──
 
@@ -389,8 +378,7 @@ internal static class Program
         var useRve = useRegularUpscale || interpModel is not null;
         if (useRve)
         {
-            intermediate = Path.Combine(outputDir,
-                "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-rtx-input-" + Guid.NewGuid().ToString("N") + ".mkv");
+            intermediate = PortablePaths.CreateWorkFilePath("rtx-input", ".mkv");
             // sidecar 只支持 D3D11VA 硬解，FFV1 没有硬件解码器会在解码首包直接失败；
             // 中间文件改用数学无损 HEVC Main10：RVE 输出的 RGB 中间帧落为 10-bit 4:2:0，
             // 相对最终 NVENC Main10 编码没有额外精度损失，且任意 RTX 机器都能硬解。
@@ -614,6 +602,7 @@ internal static class Program
             RedirectStandardInput = true,
             RedirectStandardError = true,
         };
+        PortablePaths.ConfigureChildProcess(start);
         foreach (var value in new[]
         {
             "-hide_banner", "-loglevel", "warning", "-nostats", "-nostdin",
@@ -952,7 +941,6 @@ internal static class Program
         public string UpdateTarget = "";
         public string WaitPid = "0";
         public string RestartExe = "";
-        public string UpdateResult = "";
         public readonly List<string> ImageInputs = new();
         public readonly List<string> ImageFolders = new();
         public string ImageOutput = "";
@@ -981,69 +969,6 @@ internal static class Program
         }
     }
 
-    /// <summary>
-    /// 读取 exe 同目录的 videoenhancer.ini（第一行 core-path="&lt;核心程序路径&gt;"）。
-    /// 返回 null 表示成功；返回字符串为错误信息（找不到对应的库），调用方直接报错退出。
-    /// 未找到配置文件时回退到 exe 同目录布局（1.0 兼容）。
-    /// </summary>
-    private static string? LoadCorePathConfig()
-    {
-        var iniPath = Path.Combine(AppRoot, "videoenhancer.ini");
-        if (!File.Exists(iniPath))
-        {
-            return null;
-        }
-
-        string? corePath = null;
-        try
-        {
-            foreach (var rawLine in File.ReadAllLines(iniPath))
-            {
-                var line = rawLine.Trim();
-                if (line.Length == 0 || line[0] == ';' || line[0] == '#')
-                {
-                    continue;
-                }
-                var eq = line.IndexOf('=');
-                if (eq <= 0)
-                {
-                    continue;
-                }
-                if (!line[..eq].Trim().Equals("core-path", StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-                var value = line[(eq + 1)..].Trim();
-                if (value.Length >= 2 && value[0] == '"' && value[^1] == '"')
-                {
-                    value = value[1..^1].Trim();
-                }
-                corePath = value;
-                break;
-            }
-        }
-        catch (Exception ex)
-        {
-            return "找不到对应的库：无法读取配置文件 " + iniPath + "（" + ex.Message + "）";
-        }
-
-        if (string.IsNullOrWhiteSpace(corePath))
-        {
-            return "找不到对应的库：videoenhancer.ini 未配置 core-path"
-                + "（第 1 行应为 core-path=\"<核心程序路径>\"）";
-        }
-
-        var resolved = Path.IsPathRooted(corePath) ? corePath : Path.Combine(AppRoot, corePath);
-        resolved = Path.GetFullPath(resolved);
-        if (!Directory.Exists(resolved))
-        {
-            return "找不到对应的库：core-path 指向的目录不存在：" + resolved;
-        }
-
-        CoreRoot = resolved.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        return null;
-    }
-
     private static int Run(string[] args)
     {
         if (args.Length == 0)
@@ -1066,7 +991,7 @@ internal static class Program
             return 0;
         }
 
-        // 外部更新器运行在临时目录，不依赖 core-path、模型或推理后端。
+        // 更新器只操作目标 Plugin 目录，不依赖模型或推理后端。
         if (o.ApplyUpdate)
         {
             return ApplyUpdate(o);
@@ -1124,18 +1049,10 @@ internal static class Program
         if (tileSize > 0 && o.Backend is not ("ncnn" or "cuda" or "tensorrt" or "onnx"))
             return Fail("-tile-size 仅支持 NCNN、CUDA/PyTorch、TensorRT 和 ONNX；当前后端 " + o.Backend + " 不使用该参数");
 
-        // 在线列表只读取远端元数据，不依赖本地核心目录。必须在配置校验前处理，
-        // 否则无效的 core-path 会被界面误报为“当前无网络”。
+        // 在线列表只读取远端元数据，不依赖本地核心目录。
         if (o.ListDownloadModels)
         {
             return ListRemoteModels(o.Json);
-        }
-
-        // 读取 videoenhancer.ini（第一行 core-path="<核心程序路径>"）确定核心程序根目录
-        var configError = LoadCorePathConfig();
-        if (configError is not null)
-        {
-            return Fail(configError, 1);
         }
 
         BackendUpdateManager.RecoverPending(CoreRoot);
@@ -1646,7 +1563,8 @@ internal static class Program
                     o.RestartExe = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--update-result":
-                    o.UpdateResult = TakeValue(args, ref i, name, inlineValue);
+                    // 兼容旧更新器调用形状，但不再接受外部结果路径；结果固定写入目标便携目录。
+                    _ = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--debug-split":
                     o.DebugSplit = true;
@@ -1849,7 +1767,10 @@ internal static class Program
         if (!File.Exists(packagePath)) return Fail("更新包不存在：" + packagePath, 1);
         if (!Directory.Exists(pluginRoot)) return Fail("Plugin 目录不存在：" + pluginRoot, 1);
 
-        var workRoot = Path.Combine(Path.GetTempPath(), "VideoEnhancerUpdate", Guid.NewGuid().ToString("N"));
+        var applicationRoot = ApplicationLayoutManager.ApplicationRoot(pluginRoot);
+        var updateRoot = Path.Combine(applicationRoot, ".update");
+        var resultPath = Path.Combine(updateRoot, "update-result.txt");
+        var workRoot = Path.Combine(updateRoot, "transactions", Guid.NewGuid().ToString("N"));
         var stagingDirectory = Path.Combine(workRoot, "staging");
         Directory.CreateDirectory(stagingDirectory);
         var hostExitConfirmed = waitPid == 0;
@@ -1906,12 +1827,12 @@ internal static class Program
                 removeLegacyExe: true);
 
             Console.WriteLine("UPDATE_COMPLETE|" + ToolVersion);
-            WriteUpdateResult(o.UpdateResult, "OK|" + ToolVersion);
+            WriteUpdateResult(resultPath, "OK|" + ToolVersion);
             return 0;
         }
         catch (Exception ex)
         {
-            WriteUpdateResult(o.UpdateResult, "ERROR|" + ex.Message.Replace('\r', ' ').Replace('\n', ' '));
+            WriteUpdateResult(resultPath, "ERROR|" + ex.Message.Replace('\r', ' ').Replace('\n', ' '));
             return Fail("应用更新失败：" + ex.Message, 1);
         }
         finally
@@ -1989,6 +1910,7 @@ internal static class Program
             Console.WriteLine("插件已安装到：" + Path.Combine(pluginDirectory, "videoenhancer.3fui.dll"));
 
             var applicationDirectory = ApplicationLayoutManager.ApplicationRoot(pluginDirectory);
+            var protectedLegacyConfig = LegacyResidueCleaner.MigratePluginConfiguration(applicationDirectory);
             var hasOtherEntries = Directory.EnumerateFileSystemEntries(pluginDirectory)
                 .Any(path => !string.Equals(Path.GetFullPath(path), applicationDirectory, StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(Path.GetFileName(path), ApplicationLayoutManager.PluginDllName, StringComparison.OrdinalIgnoreCase));
@@ -2000,13 +1922,20 @@ internal static class Program
             if (!ReadYes())
             {
                 Console.WriteLine("插件安装完成；已跳过核心目录初始化。");
-                return 0;
+            }
+            else
+            {
+                Directory.CreateDirectory(Path.Combine(applicationDirectory, "models"));
+                Directory.CreateDirectory(Path.Combine(applicationDirectory, "python"));
+                Directory.CreateDirectory(Path.Combine(applicationDirectory, "bin"));
+                Console.WriteLine("安装完成。核心目录已准备好。");
             }
 
-            Directory.CreateDirectory(Path.Combine(applicationDirectory, "models"));
-            Directory.CreateDirectory(Path.Combine(applicationDirectory, "python"));
-            Directory.CreateDirectory(Path.Combine(applicationDirectory, "bin"));
-            Console.WriteLine("安装完成。核心目录已准备好。");
+            Console.Write("是否清理旧版本遗留的 AppData 配置/状态、内置工具副本、更新器副本和废弃 INI？选择\"是(Y)\"：");
+            if (ReadYes())
+                LegacyResidueCleaner.Clean(pluginDirectory, protectedLegacyConfig);
+            else
+                Console.WriteLine("已保留旧配置残留。");
             return 0;
         }
         catch (Exception ex)
@@ -2097,7 +2026,8 @@ internal static class Program
 
         var targetExe = ApplicationLayoutManager.ExecutablePath(targetDirectory);
         var sourceIsTarget = sourceExe.Equals(Path.GetFullPath(targetExe), StringComparison.OrdinalIgnoreCase);
-        var workRoot = Path.Combine(Path.GetTempPath(), "VideoEnhancerInstall", Guid.NewGuid().ToString("N"));
+        var workRoot = Path.Combine(targetDirectory,
+            ".videoenhancer-install-transaction-" + Guid.NewGuid().ToString("N"));
         var stagingDirectory = Path.Combine(workRoot, "staging");
         Directory.CreateDirectory(stagingDirectory);
 
@@ -2872,9 +2802,7 @@ internal static class Program
 
     private static string EnsureEmbeddedTool(string resourceName, string fileName)
     {
-        var basePath = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrWhiteSpace(basePath)) basePath = Path.GetTempPath();
-        var directory = Path.Combine(basePath, "VideoEnhancer", "tools", ToolVersion);
+        var directory = PortablePaths.EmbeddedToolsRoot(ToolVersion);
         Directory.CreateDirectory(directory);
         var path = Path.Combine(directory, fileName);
         using var resource = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
@@ -3304,6 +3232,7 @@ internal static class Program
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
+            PortablePaths.ConfigureChildProcess(start);
             foreach (var argument in new[]
             {
                 "--allow-overwrite=true", "--auto-file-renaming=false", "--continue=true",
@@ -3359,6 +3288,7 @@ internal static class Program
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8
             };
+            PortablePaths.ConfigureChildProcess(start);
             start.ArgumentList.Add("x");
             start.ArgumentList.Add(archive);
             start.ArgumentList.Add("-o" + outputDirectory);
@@ -3454,6 +3384,7 @@ internal static class Program
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        PortablePaths.ConfigureChildProcess(start);
         start.Environment["PYTHONUTF8"] = "1";
         start.Environment["PYTHONIOENCODING"] = "utf-8";
         start.Environment["VIDEOENHANCER_UPSCALE_PRECISION"] =
@@ -4344,8 +4275,7 @@ internal static class Program
         {
             if (File.Exists(source) && IsModelArchive(source))
             {
-                extractionRoot = Path.Combine(Path.GetTempPath(), "videoenhancer-model-import-" + Guid.NewGuid().ToString("N"));
-                Directory.CreateDirectory(extractionRoot);
+                extractionRoot = PortablePaths.CreateWorkDirectory("model-import");
                 if (ExtractWith7Zip(source, extractionRoot, printComplete: false) != 0)
                     return 1;
                 source = extractionRoot;
@@ -4448,6 +4378,7 @@ internal static class Program
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8
         };
+        PortablePaths.ConfigureChildProcess(start);
         start.Environment["PYTHONUTF8"] = "1";
         start.Environment["PYTHONIOENCODING"] = "utf-8";
         foreach (var arg in new[]
@@ -5718,11 +5649,7 @@ internal static class Program
                 processOrder: processOrder);
         }
 
-        var outputDir = Path.GetDirectoryName(outputFile);
-        if (string.IsNullOrWhiteSpace(outputDir)) outputDir = Environment.CurrentDirectory;
-        Directory.CreateDirectory(outputDir);
-        var intermediate = Path.Combine(outputDir,
-            "." + Path.GetFileNameWithoutExtension(outputFile) + ".videoenhancer-" + Guid.NewGuid().ToString("N") + ".mkv");
+        var intermediate = PortablePaths.CreateWorkFilePath("pipeline", ".mkv");
         var intermediatePixelFormat = hdrMode ? "gbrp16le" : "gbrp10le";
         var losslessEncoder = "-c:v ffv1 -level 3 -coder 1 -context 1 -g 1 -pix_fmt " +
             intermediatePixelFormat + " -c:a copy -c:s copy";
@@ -5844,6 +5771,7 @@ internal static class Program
                 RedirectStandardError = true,
                 CreateNoWindow = true,
             };
+            PortablePaths.ConfigureChildProcess(psi);
             using var p = Process.Start(psi);
             if (p is null)
             {
@@ -5924,6 +5852,7 @@ internal static class Program
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
+            PortablePaths.ConfigureChildProcess(psi);
             foreach (var argument in new[]
                      {
                          "-v", "error", "-select_streams", "v:0", "-count_frames",
@@ -6163,6 +6092,7 @@ internal static class Program
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        PortablePaths.ConfigureChildProcess(psi);
         psi.Environment["PYTHONUTF8"] = "1";
         psi.Environment["PYTHONIOENCODING"] = "utf-8";
         // 先超后补的同后端包装器需要导入核心后端目录中的 src 包。
@@ -6610,6 +6540,7 @@ internal static class Program
             StandardOutputEncoding = Encoding.UTF8,
             StandardErrorEncoding = Encoding.UTF8,
         };
+        PortablePaths.ConfigureChildProcess(start);
         start.Environment["PYTHONUTF8"] = "1";
         start.Environment["PYTHONIOENCODING"] = "utf-8";
         start.ArgumentList.Add(TensorRTConverterScript);
@@ -6969,6 +6900,7 @@ internal static class Program
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
+            PortablePaths.ConfigureChildProcess(psi);
             psi.Environment["PYTHONUTF8"] = "1";
             psi.Environment["PYTHONIOENCODING"] = "utf-8";
             foreach (var a in args)
@@ -7567,11 +7499,10 @@ internal static class Program
         writer.WriteLine("  --image-png / --image-source-format  输出无损 PNG（默认）或保持源扩展格式");
         writer.WriteLine();
         writer.WriteLine("说明");
-        writer.WriteLine("  · 配置：exe 同目录的 videoenhancer.ini 第一行写入 core-path=\"<核心程序路径>\"，");
-        writer.WriteLine("    指向 python、models 所在的根目录（后端分离部署时使用）；");
-        writer.WriteLine("    未配置时回退到 exe 同目录布局，任一路径缺失会报错并标出缺失项。");
+        writer.WriteLine("  · 便携目录：CoreRoot 永远是 videoenhancer.exe 所在目录，不能用配置改写；");
+        writer.WriteLine("    python、models、bin、cache、.work 和 .update 均位于该目录内。");
         writer.WriteLine("  · FFmpeg 优先使用 3FUI EXE 同目录或 PATH 中的 ffmpeg.exe/ffprobe.exe；");
-        writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 core-path 下的 python 与 models；");
+        writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 EXE 同目录下的 python 与 models；");
         writer.WriteLine("    任一缺失会报错并标出缺失项。");
         writer.WriteLine("  · ffmpeg-settings 是“编码参数 + 输出文件”的完整片段，程序会中转给");
         writer.WriteLine("    rve-backend（--custom_encoder 与 -o）。输出路径必须是最后一个参数；");
