@@ -771,13 +771,20 @@ Namespace videoenhancer
                 Dim effectiveHdr = cfg.RtxHdrEnabled
                 If segmentConfig IsNot Nothing Then
                     segmentsBase64 = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(segmentConfig.Segments))
-                    effectiveBackend = segmentConfig.Segments(0).Backend
+                    Dim modelSegment = segmentConfig.Segments.FirstOrDefault(
+                        Function(segment)
+                            Dim backend = If(segment.Backend, "").Trim().ToLowerInvariant()
+                            Return backend = "ncnn" OrElse backend = "cuda" OrElse
+                                backend = "tensorrt" OrElse backend = "onnx"
+                        End Function)
+                    effectiveBackend = If(modelSegment Is Nothing, "ncnn", modelSegment.Backend)
                     effectiveModel = ""
                     effectiveUpscale = True
                     effectiveInterp = False
                     effectiveHdr = False
                 End If
-                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64, cfg.RtxHdrContrast, cfg.RtxHdrSaturation, cfg.RtxHdrMiddleGray, cfg.RtxHdrMaxLuminance)
+                Dim allowMixedSegmentBackends = segmentConfig IsNot Nothing AndAlso segmentConfig.AllowMixedModelBackends
+                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64, cfg.RtxHdrContrast, cfg.RtxHdrSaturation, cfg.RtxHdrMiddleGray, cfg.RtxHdrMaxLuminance, allowMixedSegmentBackends)
                 AddQueueTask(args, Path.GetFileName(input), output, input)
                 added += 1
             Next
@@ -808,33 +815,77 @@ Namespace videoenhancer
         End Function
 
         Private Shared Function ValidateSegmentedConfig(config As SegmentedVideoConfig) As String
-            If config.FrameCount <= 0 Then Return "尚未取得有效帧数"
             If config.Segments Is Nothing OrElse config.Segments.Count = 0 Then Return "至少需要一个分段"
-            Dim expectedStart As Long = 1
-            Dim backend = ""
-            Dim scale As Integer = 0
+            Dim secondsMode = String.Equals(config.BoundaryMode, "seconds", StringComparison.OrdinalIgnoreCase)
+            If secondsMode AndAlso config.DurationSeconds <= 0 Then Return "尚未取得有效视频时长"
+            If Not secondsMode AndAlso config.FrameCount <= 0 Then Return "尚未取得有效帧数"
+            Dim expectedFrame As Long = 1
+            Dim expectedSeconds As Double = 0
+            Dim fixedScale As Integer = 0
+            Dim firstModelBackend As String = ""
+            Dim customWidth As Integer = 0
+            Dim customHeight As Integer = 0
             For index = 0 To config.Segments.Count - 1
                 Dim segment = config.Segments(index)
-                If segment.Start <> expectedStart OrElse segment.[End] < segment.Start Then
-                    Return $"第 {index + 1} 段必须从第 {expectedStart} 帧开始"
+                If secondsMode Then
+                    If Math.Abs(segment.StartSeconds - expectedSeconds) > 0.002 OrElse
+                       segment.EndSeconds <= segment.StartSeconds Then
+                        Return $"第 {index + 1} 段秒级边界不连续"
+                    End If
+                    expectedSeconds = segment.EndSeconds
+                Else
+                    If segment.Start <> expectedFrame OrElse segment.[End] < segment.Start Then
+                        Return $"第 {index + 1} 段必须从第 {expectedFrame} 帧开始"
+                    End If
+                    expectedFrame = segment.[End] + 1
                 End If
-                If String.IsNullOrWhiteSpace(segment.Model) Then Return $"第 {index + 1} 段尚未选择模型"
+                If String.IsNullOrWhiteSpace(segment.Model) Then Return $"第 {index + 1} 段尚未选择处理方式"
                 Dim currentBackend = If(segment.Backend, "").Trim().ToLowerInvariant()
-                If currentBackend <> "ncnn" AndAlso currentBackend <> "cuda" AndAlso currentBackend <> "tensorrt" AndAlso currentBackend <> "onnx" Then
-                    Return $"第 {index + 1} 段不是单帧后端"
+                Dim modelBackend = currentBackend = "ncnn" OrElse currentBackend = "cuda" OrElse
+                    currentBackend = "tensorrt" OrElse currentBackend = "onnx"
+                If Not modelBackend AndAlso currentBackend <> "ffmpeg" AndAlso currentBackend <> "anime4k" Then
+                    Return $"第 {index + 1} 段处理后端不受支持"
                 End If
-                If index = 0 Then
-                    backend = currentBackend
-                    scale = segment.Scale
-                ElseIf currentBackend <> backend Then
-                    Return "所有分段必须与第一段使用同一后端类别"
-                ElseIf segment.Scale <> scale Then
-                    Return "所有分段必须与第一段使用同一放大倍率"
+                If modelBackend Then
+                    If segment.Scale <= 0 Then Return $"第 {index + 1} 段模型倍率无效"
+                    If firstModelBackend.Length = 0 Then
+                        firstModelBackend = currentBackend
+                    ElseIf Not config.AllowMixedModelBackends AndAlso
+                           Not String.Equals(currentBackend, firstModelBackend, StringComparison.OrdinalIgnoreCase) Then
+                        Return "跨 NCNN / CUDA / TensorRT / ONNX 混用是测试功能，请先手动开启跨模型后端混用开关"
+                    End If
+                    If fixedScale = 0 Then
+                        fixedScale = segment.Scale
+                    ElseIf segment.Scale <> fixedScale Then
+                        Return "所有固定倍率模型必须使用相同放大倍率"
+                    End If
+                ElseIf fixedScale = 0 AndAlso segment.TargetWidth > 0 AndAlso segment.TargetHeight > 0 Then
+                    If customWidth = 0 Then
+                        customWidth = segment.TargetWidth
+                        customHeight = segment.TargetHeight
+                    ElseIf segment.TargetWidth <> customWidth OrElse segment.TargetHeight <> customHeight Then
+                        Return "仅使用 FFmpeg / Anime4K 时所有分段必须使用相同目标分辨率"
+                    End If
                 End If
-                expectedStart = segment.[End] + 1
             Next
-            If config.Segments(0).Start <> 1 OrElse config.Segments(config.Segments.Count - 1).[End] <> config.FrameCount Then
+            If secondsMode Then
+                If Math.Abs(config.Segments(0).StartSeconds) > 0.002 OrElse
+                   Math.Abs(config.Segments(config.Segments.Count - 1).EndSeconds - config.DurationSeconds) > 0.002 Then
+                    Return $"必须完整覆盖 0 到 {config.DurationSeconds:0.###} 秒"
+                End If
+            ElseIf config.Segments(0).Start <> 1 OrElse
+                   config.Segments(config.Segments.Count - 1).[End] <> config.FrameCount Then
                 Return $"必须完整覆盖第 1 到第 {config.FrameCount} 帧"
+            End If
+            If fixedScale = 0 Then
+                If customWidth <= 0 OrElse customHeight <= 0 Then
+                    Return "仅使用 FFmpeg / Anime4K 时必须设置统一目标分辨率"
+                End If
+                For Each segment In config.Segments
+                    If segment.TargetWidth <> customWidth OrElse segment.TargetHeight <> customHeight Then
+                        Return "仅使用 FFmpeg / Anime4K 时所有分段必须使用相同目标分辨率"
+                    End If
+                Next
             End If
             Return ""
         End Function
@@ -928,7 +979,7 @@ Namespace videoenhancer
         ' ────────────────────────── 命令构建 ──────────────────────────
 
         ''' <summary>构建 videoenhancer.exe 的参数：-i / -modelpath / -ffmpeg-settings / -pause-shm / -stop-shm / -interp-model / -no-upscale。</summary>
-        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "", Optional rtxHdrContrast As Integer = 100, Optional rtxHdrSaturation As Integer = 100, Optional rtxHdrMiddleGray As Integer = 44, Optional rtxHdrMaxLuminance As Integer = 1000) As String
+        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "", Optional rtxHdrContrast As Integer = 100, Optional rtxHdrSaturation As Integer = 100, Optional rtxHdrMiddleGray As Integer = 44, Optional rtxHdrMaxLuminance As Integer = 1000, Optional allowMixedSegmentBackends As Boolean = False) As String
             Dim sb As New StringBuilder()
             sb.Append("-i ").Append(Arg(input))
             If upscaleOn AndAlso Not String.IsNullOrWhiteSpace(model) Then
@@ -977,6 +1028,7 @@ Namespace videoenhancer
             End If
             If Not String.IsNullOrWhiteSpace(segmentsBase64) Then
                 sb.Append(" --segments-base64 ").Append(Arg(segmentsBase64))
+                If allowMixedSegmentBackends Then sb.Append(" --allow-mixed-segment-backends")
             End If
             If interpOn Then
                 sb.Append(" -interp-precision ").Append(If(interpHalfPrecision, "auto", "float32"))

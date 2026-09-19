@@ -166,6 +166,12 @@ internal static class Program
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr hObject);
 
+    [DllImport("ntdll.dll")]
+    private static extern uint NtSuspendProcess(IntPtr processHandle);
+
+    [DllImport("ntdll.dll")]
+    private static extern uint NtResumeProcess(IntPtr processHandle);
+
     [DllImport("kernel32.dll")]
     private static extern IntPtr GetConsoleWindow();
 
@@ -898,6 +904,7 @@ internal static class Program
         public string RtxHdrMiddleGray = "44";
         public string RtxHdrMaxLuminance = "1000";
         public string SegmentsBase64 = "";
+        public bool AllowMixedSegmentBackends;
         public bool ListInterpModels;
         public string Backend = "ncnn";
         public bool HasBackend;
@@ -1289,9 +1296,10 @@ internal static class Program
         }
         // 停止共享内存在此处就创建并持有（进程结束自动释放），插件点击“停止”时按名打开写入 1 即可触发
         var stopWatcher = o.HasStopShm ? new StopWatcher(o.StopShm) : null;
+        var segmentedUpscale = !string.IsNullOrWhiteSpace(o.SegmentsBase64);
 
         // 1. 环境检测（ffmpeg / python 库 / 模型库）
-        if (!RunCheck(verbose: false, backend: o.Backend))
+        if (!segmentedUpscale && !RunCheck(verbose: false, backend: o.Backend))
         {
             return 1;
         }
@@ -1311,14 +1319,13 @@ internal static class Program
             return Fail("输入视频不存在：" + input);
         }
 
-        var segmentedUpscale = !string.IsNullOrWhiteSpace(o.SegmentsBase64);
         if (segmentedUpscale && o.NoUpscale)
         {
             return Fail("分段超分不能与 -no-upscale 同时使用");
         }
         if (segmentedUpscale && (o.HasInterpModel || o.RtxHdr))
         {
-            return Fail("分段超分当前只执行逐帧超分，不能同时启用运动补帧或 RTX HDR");
+            return Fail("分段超分当前不能同时启用运动补帧或 RTX HDR");
         }
         var useUpscale = !o.NoUpscale;
         // TensorRT Engine 与输入 profile 绑定，先探测尺寸再解析/构建模型。
@@ -1720,6 +1727,9 @@ internal static class Program
                     break;
                 case "--segments-base64":
                     o.SegmentsBase64 = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "--allow-mixed-segment-backends":
+                    o.AllowMixedSegmentBackends = true;
                     break;
                 case "--list-interp-models":
                 case "--search-interp-models":
@@ -4724,18 +4734,34 @@ internal static class Program
     {
         public long Start { get; set; }
         public long End { get; set; }
+        public double StartSeconds { get; set; }
+        public double EndSeconds { get; set; }
         public string Backend { get; set; } = "";
         public string Model { get; set; } = "";
+        public int TargetWidth { get; set; }
+        public int TargetHeight { get; set; }
     }
 
     private sealed class PreparedSegment
     {
         public long Start { get; set; }
         public long End { get; set; }
+        public double StartSeconds { get; set; }
+        public double EndSeconds { get; set; }
         public string Backend { get; set; } = "";
         public string Model { get; set; } = "";
         public int Scale { get; set; }
         public int InputMultiple { get; set; } = 1;
+        public int OutputWidth { get; set; }
+        public int OutputHeight { get; set; }
+    }
+
+    private sealed class HybridSegmentPart
+    {
+        public PreparedSegment? CustomSegment { get; set; }
+        public string ModelChunkPath { get; set; } = "";
+        public long Start { get; set; }
+        public long End { get; set; }
     }
 
     private static string EncodePreparedSegments(IEnumerable<PreparedSegment> segments)
@@ -4753,6 +4779,8 @@ internal static class Program
                 writer.WriteString("model", segment.Model);
                 writer.WriteNumber("scale", segment.Scale);
                 writer.WriteNumber("inputMultiple", segment.InputMultiple);
+                writer.WriteNumber("outputWidth", segment.OutputWidth);
+                writer.WriteNumber("outputHeight", segment.OutputHeight);
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
@@ -4804,6 +4832,576 @@ internal static class Program
         return cleaned;
     }
 
+    private static bool IsSegmentModelBackend(string backend) =>
+        backend is "ncnn" or "cuda" or "tensorrt" or "onnx";
+
+    private static bool ScriptSupportsArgument(string script, string argument)
+    {
+        try
+        {
+            return File.ReadAllText(script).Contains(argument, StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static int RunDirectFfmpeg(
+        string title, IReadOnlyList<string> arguments, StopWatcher? stopWatcher,
+        out TimeSpan elapsed, string pauseShm = "")
+    {
+        Console.WriteLine("[分段直连] " + title);
+        var start = new ProcessStartInfo
+        {
+            FileName = FfmpegExe,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
+        };
+        foreach (var argument in arguments) start.ArgumentList.Add(argument);
+
+        using var process = new Process { StartInfo = start };
+        var stderr = new StringBuilder();
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (string.IsNullOrWhiteSpace(e.Data)) return;
+            lock (stderr) stderr.AppendLine(e.Data);
+        };
+        var timer = Stopwatch.StartNew();
+        try
+        {
+            if (!process.Start())
+            {
+                elapsed = timer.Elapsed;
+                return Fail("无法启动 FFmpeg：" + title, 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            elapsed = timer.Elapsed;
+            return Fail("无法启动 FFmpeg（" + title + "）：" + ex.Message, 1);
+        }
+        process.BeginErrorReadLine();
+        var suspended = false;
+        while (!process.HasExited)
+        {
+            var shouldPause = !string.IsNullOrWhiteSpace(pauseShm) && ReadShmByte(pauseShm) == 1;
+            if (shouldPause && !suspended)
+            {
+                try
+                {
+                    if (NtSuspendProcess(process.Handle) == 0)
+                        suspended = true;
+                }
+                catch
+                {
+                    // 暂停能力失败时继续执行，避免影响正常处理。
+                }
+            }
+            else if (!shouldPause && suspended)
+            {
+                try { NtResumeProcess(process.Handle); } catch { }
+                suspended = false;
+            }
+            if (stopWatcher?.IsStopRequested() == true)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                elapsed = timer.Elapsed;
+                return 130;
+            }
+            Thread.Sleep(100);
+        }
+        process.WaitForExit();
+        timer.Stop();
+        elapsed = timer.Elapsed;
+        if (process.ExitCode == 0) return 0;
+
+        string detail;
+        lock (stderr) detail = stderr.ToString().Trim();
+        Console.Error.WriteLine($"[分段直连失败] {title}；FFmpeg 退出码 {process.ExitCode}");
+        if (!string.IsNullOrWhiteSpace(detail)) Console.Error.WriteLine(detail);
+        return process.ExitCode;
+    }
+
+    private static string ResolveAnime4kShaderForFfmpeg(string requested)
+    {
+        if (Path.IsPathRooted(requested) && File.Exists(requested))
+            return Path.GetFullPath(requested);
+        var name = Path.GetFileName(requested);
+        var roots = new List<string>();
+        var configured = Environment.GetEnvironmentVariable("VIDEOENHANCER_ANIME4K_DIR");
+        if (!string.IsNullOrWhiteSpace(configured)) roots.Add(configured);
+        var ffmpegDirectory = Path.GetDirectoryName(FfmpegExe) ?? "";
+        roots.Add(Path.Combine(ffmpegDirectory, "libplacebo"));
+        var parent = Directory.GetParent(ffmpegDirectory)?.FullName;
+        if (!string.IsNullOrWhiteSpace(parent)) roots.Add(Path.Combine(parent, "libplacebo"));
+        foreach (var root in roots)
+        {
+            var candidate = Path.Combine(root, name);
+            if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+        }
+        return "";
+    }
+
+    private static string EscapeFfmpegFilterPath(string path) =>
+        Path.GetFullPath(path).Replace("\\", "/", StringComparison.Ordinal)
+            .Replace(":", "\\:", StringComparison.Ordinal)
+            .Replace("'", "\\'", StringComparison.Ordinal);
+
+    private static string BuildDirectCustomFilter(PreparedSegment segment)
+    {
+        if (segment.Backend == "ffmpeg")
+            return $"scale={segment.OutputWidth}:{segment.OutputHeight}:flags={segment.Model}";
+        var shader = ResolveAnime4kShaderForFfmpeg(segment.Model);
+        if (shader.Length == 0)
+            throw new FileNotFoundException("找不到 Anime4K 着色器：" + segment.Model);
+        return $"libplacebo=w={segment.OutputWidth}:h={segment.OutputHeight}:"
+               + $"custom_shader_path='{EscapeFfmpegFilterPath(shader)}'";
+    }
+
+    private static List<string> RebaseMetadataArguments(
+        IReadOnlyList<string> arguments, int sourceInputIndex)
+    {
+        var result = arguments.ToList();
+        for (var index = 0; index + 1 < result.Count; index++)
+        {
+            if (result[index] is not ("-map_metadata" or "-map_chapters")) continue;
+            var value = result[index + 1];
+            if (!value.StartsWith('1')) continue;
+            result[index + 1] = sourceInputIndex.ToString(CultureInfo.InvariantCulture) + value[1..];
+            index++;
+        }
+        return result;
+    }
+
+    private static int RunDirectCustomSegment(
+        string input, string output, PreparedSegment segment, VideoProbeInfo video,
+        bool secondsMode, bool finalOutput, IReadOnlyList<string> finalEncoderArguments,
+        bool overwrite, StopWatcher? stopWatcher, string pauseShm)
+    {
+        var expectedFrames = segment.End - segment.Start + 1;
+        string filter;
+        try
+        {
+            filter = BuildDirectCustomFilter(segment);
+        }
+        catch (Exception ex)
+        {
+            return Fail(ex.Message, 1);
+        }
+
+        var args = new List<string> { "-hide_banner", "-loglevel", "error", overwrite ? "-y" : "-n" };
+        if (secondsMode)
+        {
+            if (segment.StartSeconds > 0.000001)
+            {
+                args.Add("-ss");
+                args.Add(segment.StartSeconds.ToString("0.########", CultureInfo.InvariantCulture));
+            }
+            args.Add("-i");
+            args.Add(input);
+            filter = "setpts=PTS-STARTPTS," + filter;
+        }
+        else
+        {
+            args.Add("-i");
+            args.Add(input);
+            var startFrame = segment.Start - 1;
+            var endFrame = segment.End - 1;
+            var rate = video.FrameRate.ToString("0.########", CultureInfo.InvariantCulture);
+            filter =
+                $"select=between(n\\,{startFrame.ToString(CultureInfo.InvariantCulture)}\\,{endFrame.ToString(CultureInfo.InvariantCulture)}),"
+                + $"setpts=N/{rate}/TB,{filter}";
+        }
+
+        args.Add("-map");
+        args.Add("0:v:0");
+        if (finalOutput)
+        {
+            args.Add("-map");
+            args.Add("0:a?");
+            args.Add("-map");
+            args.Add("0:s?");
+        }
+        args.Add("-vf");
+        args.Add(filter);
+        args.Add("-frames:v");
+        args.Add(expectedFrames.ToString(CultureInfo.InvariantCulture));
+        args.Add("-fps_mode");
+        args.Add("passthrough");
+        if (finalOutput)
+        {
+            args.AddRange(RebaseMetadataArguments(finalEncoderArguments, 0));
+        }
+        else
+        {
+            args.AddRange(new[] { "-an", "-sn", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "rgb24" });
+        }
+        args.Add(output);
+
+        var exit = RunDirectFfmpeg(
+            $"{segment.Backend} {segment.Start}-{segment.End} 帧直接处理",
+            args, stopWatcher, out var elapsed, pauseShm);
+        if (exit != 0) return exit;
+        var result = ProbeGeneratedVideoFast(output);
+        if (result is null
+            || result.Width != segment.OutputWidth
+            || result.Height != segment.OutputHeight
+            || result.Frames != expectedFrames)
+        {
+            return Fail(
+                $"直接 {segment.Backend} 分段输出校验失败："
+                + $"{result?.Width ?? 0}x{result?.Height ?? 0}, {result?.Frames ?? 0} 帧；"
+                + $"预期 {segment.OutputWidth}x{segment.OutputHeight}, {expectedFrames} 帧",
+                1);
+        }
+        var fps = expectedFrames / Math.Max(0.000001, elapsed.TotalSeconds);
+        Console.WriteLine(
+            $"SEGMENTED_DIRECT_DONE|{segment.Backend}|{segment.Start}|{segment.End}|"
+            + $"{expectedFrames}|{elapsed.TotalSeconds:0.000}|{fps:0.00}");
+        return 0;
+    }
+
+    private static int ExtractModelSegmentGroup(
+        string input, string output, PreparedSegment first, PreparedSegment last,
+        VideoProbeInfo video, bool secondsMode, StopWatcher? stopWatcher, string pauseShm)
+    {
+        var expectedFrames = last.End - first.Start + 1;
+        if (secondsMode)
+        {
+            var copyArgs = new List<string> { "-hide_banner", "-loglevel", "error", "-y" };
+            if (first.StartSeconds > 0.000001)
+            {
+                copyArgs.Add("-ss");
+                copyArgs.Add(first.StartSeconds.ToString("0.########", CultureInfo.InvariantCulture));
+            }
+            copyArgs.AddRange(new[]
+            {
+                "-i", input,
+                "-t", Math.Max(0.000001, last.EndSeconds - first.StartSeconds)
+                    .ToString("0.########", CultureInfo.InvariantCulture),
+                "-map", "0:v:0", "-an", "-sn", "-c:v", "copy",
+                "-avoid_negative_ts", "make_zero", output,
+            });
+            var copyExit = RunDirectFfmpeg(
+                $"模型段关键帧快速切片 {first.StartSeconds:0.###}-{last.EndSeconds:0.###}s",
+                copyArgs, stopWatcher, out _, pauseShm);
+            if (copyExit == 130) return 130;
+            var copied = copyExit == 0 ? ProbeGeneratedVideoFast(output) : null;
+            if (copied is not null && copied.Frames == expectedFrames)
+            {
+                Console.WriteLine($"[分段直连] 模型段 stream-copy 校验通过：{expectedFrames} 帧。");
+                return 0;
+            }
+            try { if (File.Exists(output)) File.Delete(output); } catch { }
+            Console.WriteLine(
+                $"[分段直连] 模型段 stream-copy 帧数不匹配（{copied?.Frames ?? 0}/{expectedFrames}），"
+                + "回退到精确重编码切片。");
+        }
+
+        var args = new List<string> { "-hide_banner", "-loglevel", "error", "-y" };
+        string? selectFilter = null;
+        if (secondsMode)
+        {
+            if (first.StartSeconds > 0.000001)
+            {
+                args.Add("-ss");
+                args.Add(first.StartSeconds.ToString("0.########", CultureInfo.InvariantCulture));
+            }
+            args.Add("-i");
+            args.Add(input);
+        }
+        else
+        {
+            args.Add("-i");
+            args.Add(input);
+            var rate = video.FrameRate.ToString("0.########", CultureInfo.InvariantCulture);
+            selectFilter =
+                $"select=between(n\\,{(first.Start - 1).ToString(CultureInfo.InvariantCulture)}\\,{(last.End - 1).ToString(CultureInfo.InvariantCulture)}),"
+                + $"setpts=N/{rate}/TB";
+        }
+        args.AddRange(new[] { "-map", "0:v:0" });
+        if (selectFilter is not null)
+        {
+            args.Add("-vf");
+            args.Add(selectFilter);
+        }
+        args.Add("-frames:v");
+        args.Add(expectedFrames.ToString(CultureInfo.InvariantCulture));
+        args.AddRange(new[]
+        {
+            "-an", "-sn", "-c:v", "ffv1", "-level", "3", "-pix_fmt", "rgb24",
+            "-r", video.FrameRate.ToString("0.########", CultureInfo.InvariantCulture),
+            output,
+        });
+        var exit = RunDirectFfmpeg("模型段精确源切片", args, stopWatcher, out _, pauseShm);
+        if (exit != 0) return exit;
+        var exact = ProbeGeneratedVideoFast(output);
+        return exact is not null && exact.Frames == expectedFrames
+            ? 0
+            : Fail($"模型段源切片帧数异常：{exact?.Frames ?? 0}/{expectedFrames}", 1);
+    }
+
+    private static int RunModelSegmentGroup(
+        string sourceClip, string outputClip, IReadOnlyList<PreparedSegment> group,
+        long absoluteStart, string pauseShm, StopWatcher? stopWatcher, int tileSize,
+        string segmentedPrecision)
+    {
+        var rebased = group.Select(segment => new PreparedSegment
+        {
+            Start = segment.Start - absoluteStart + 1,
+            End = segment.End - absoluteStart + 1,
+            Backend = segment.Backend,
+            Model = segment.Model,
+            Scale = segment.Scale,
+            InputMultiple = segment.InputMultiple,
+            OutputWidth = segment.OutputWidth,
+            OutputHeight = segment.OutputHeight,
+        }).ToList();
+        var segmentPayload = EncodePreparedSegments(rebased);
+        var encoderPayload = EncodeStringList(new[]
+        {
+            "-c:v", "ffv1", "-level", "3", "-pix_fmt", "rgb24", "-an", "-sn",
+        });
+        var script = EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
+        var arguments = new List<string>
+        {
+            script,
+            "--input", sourceClip,
+            "--output", outputClip,
+            "--segments-base64", segmentPayload,
+            "--encoder-args-base64", encoderPayload,
+            "--ffmpeg-path", FfmpegExe,
+            "--overwrite",
+        };
+        if (ScriptSupportsArgument(script, "--tile-size"))
+        {
+            arguments.Add("--tile-size");
+            arguments.Add(tileSize.ToString(CultureInfo.InvariantCulture));
+        }
+        if (!string.IsNullOrWhiteSpace(pauseShm))
+        {
+            arguments.Add("--pause-shm");
+            arguments.Add(pauseShm);
+        }
+        var distinctBackends = group.Select(segment => segment.Backend).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var backend = distinctBackends.Count == 1 ? distinctBackends[0] : "mixed";
+        var model = distinctBackends.Count == 1 ? group[0].Model : "";
+        var exit = LaunchBackend(
+            arguments, sourceClip, model, outputClip,
+            "-c:v ffv1 -level 3 -pix_fmt rgb24 -an -sn",
+            stopWatcher, null, null, backend, pauseShm,
+            "分段模型组", isFinalStage: false, upscalePrecision: segmentedPrecision);
+        if (exit != 0) return exit;
+        var expectedFrames = group[^1].End - group[0].Start + 1;
+        var result = ProbeGeneratedVideoFast(outputClip);
+        return result is not null
+               && result.Width == group[0].OutputWidth
+               && result.Height == group[0].OutputHeight
+               && result.Frames == expectedFrames
+            ? 0
+            : Fail(
+                $"模型分段组输出校验失败：{result?.Width ?? 0}x{result?.Height ?? 0}, "
+                + $"{result?.Frames ?? 0} 帧；预期 {group[0].OutputWidth}x{group[0].OutputHeight}, {expectedFrames} 帧",
+                1);
+    }
+
+    private static int FinalizeHybridSegments(
+        IReadOnlyList<HybridSegmentPart> parts, string originalInput, string outputFile,
+        IReadOnlyList<string> encoderArguments, bool overwrite, StopWatcher? stopWatcher,
+        VideoProbeInfo sourceVideo, bool secondsMode, int outputWidth, int outputHeight,
+        string pauseShm)
+    {
+        var args = new List<string>
+        {
+            "-hide_banner", "-loglevel", "error", overwrite ? "-y" : "-n",
+            "-i", originalInput,
+        };
+        var modelInputIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var part in parts.Where(part => part.CustomSegment is null))
+        {
+            if (modelInputIndex.ContainsKey(part.ModelChunkPath)) continue;
+            var inputIndex = modelInputIndex.Count + 1;
+            modelInputIndex[part.ModelChunkPath] = inputIndex;
+            args.Add("-i");
+            args.Add(part.ModelChunkPath);
+        }
+
+        var graph = new StringBuilder();
+        var customParts = parts.Where(part => part.CustomSegment is not null).ToList();
+        var customLabels = new Dictionary<HybridSegmentPart, string>();
+        if (customParts.Count > 1)
+        {
+            graph.Append("[0:v]split=").Append(customParts.Count);
+            for (var index = 0; index < customParts.Count; index++)
+            {
+                var label = $"customsrc{index}";
+                customLabels[customParts[index]] = label;
+                graph.Append('[').Append(label).Append(']');
+            }
+            graph.Append(';');
+        }
+        else if (customParts.Count == 1)
+        {
+            customLabels[customParts[0]] = "0:v";
+        }
+
+        var customFrames = 0L;
+        for (var index = 0; index < parts.Count; index++)
+        {
+            var part = parts[index];
+            var outputLabel = $"segment{index}";
+            if (part.CustomSegment is not null)
+            {
+                var segment = part.CustomSegment;
+                var sourceLabel = customLabels[part];
+                graph.Append('[').Append(sourceLabel).Append(']');
+                if (secondsMode)
+                {
+                    graph.Append("trim=start=")
+                        .Append(segment.StartSeconds.ToString("0.########", CultureInfo.InvariantCulture))
+                        .Append(":end=")
+                        .Append(segment.EndSeconds.ToString("0.########", CultureInfo.InvariantCulture));
+                }
+                else
+                {
+                    graph.Append("trim=start_frame=")
+                        .Append(segment.Start - 1)
+                        .Append(":end_frame=")
+                        .Append(segment.End);
+                }
+                graph.Append(",setpts=PTS-STARTPTS,")
+                    .Append(BuildDirectCustomFilter(segment))
+                    .Append(",setsar=1,format=rgb24[")
+                    .Append(outputLabel)
+                    .Append("];");
+                customFrames += segment.End - segment.Start + 1;
+            }
+            else
+            {
+                var inputIndex = modelInputIndex[part.ModelChunkPath];
+                graph.Append('[').Append(inputIndex).Append(":v]")
+                    .Append("setpts=PTS-STARTPTS,setsar=1,format=rgb24[")
+                    .Append(outputLabel)
+                    .Append("];");
+            }
+        }
+        for (var index = 0; index < parts.Count; index++)
+            graph.Append("[segment").Append(index).Append(']');
+        graph.Append("concat=n=").Append(parts.Count).Append(":v=1:a=0[vout]");
+
+        args.Add("-filter_complex");
+        args.Add(graph.ToString());
+        args.AddRange(new[] { "-map", "[vout]", "-map", "0:a?", "-map", "0:s?" });
+        args.AddRange(RebaseMetadataArguments(encoderArguments, 0));
+        args.Add(outputFile);
+        var exit = RunDirectFfmpeg(
+            "FFmpeg 直连自定义段 + 模型段拼接 + 最终编码",
+            args, stopWatcher, out var elapsed, pauseShm);
+        if (exit != 0) return exit;
+        if (customFrames > 0)
+        {
+            var fps = customFrames / Math.Max(0.000001, elapsed.TotalSeconds);
+            Console.WriteLine(
+                $"SEGMENTED_DIRECT_GRAPH|{customParts.Count}|{customFrames}|"
+                + $"{elapsed.TotalSeconds:0.000}|{fps:0.00}");
+        }
+        var result = ProbeGeneratedVideoFast(outputFile);
+        return result is not null
+               && result.Width == outputWidth
+               && result.Height == outputHeight
+               && result.Frames == sourceVideo.Frames
+            ? 0
+            : Fail(
+                $"分段最终输出校验失败：{result?.Width ?? 0}x{result?.Height ?? 0}, "
+                + $"{result?.Frames ?? 0} 帧；预期 {outputWidth}x{outputHeight}, {sourceVideo.Frames} 帧",
+                1);
+    }
+
+    private static int RunHybridSegmentedVideo(
+        string input, string outputFile, IReadOnlyList<PreparedSegment> prepared,
+        VideoProbeInfo video, bool secondsMode, IReadOnlyList<string> encoderArguments,
+        bool overwrite, string pauseShm, StopWatcher? stopWatcher, int tileSize,
+        string segmentedPrecision)
+    {
+        if (prepared.Count == 1 && !IsSegmentModelBackend(prepared[0].Backend))
+        {
+            Console.WriteLine("[分段超分] 单一 FFmpeg/Anime4K 段直接进入最终 FFmpeg 编码，不经过 Python。");
+            return RunDirectCustomSegment(
+                input, outputFile, prepared[0], video, secondsMode, true,
+                encoderArguments, overwrite, stopWatcher, pauseShm);
+        }
+
+        var outputDirectory = Path.GetDirectoryName(outputFile);
+        if (string.IsNullOrWhiteSpace(outputDirectory)) outputDirectory = Environment.CurrentDirectory;
+        Directory.CreateDirectory(outputDirectory);
+        var workDirectory = Path.Combine(
+            outputDirectory,
+            "." + Path.GetFileNameWithoutExtension(outputFile)
+            + ".videoenhancer-direct-segments-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDirectory);
+        var parts = new List<HybridSegmentPart>();
+        try
+        {
+            var index = 0;
+            while (index < prepared.Count)
+            {
+                if (stopWatcher?.IsStopRequested() == true) return 130;
+                var current = prepared[index];
+                if (!IsSegmentModelBackend(current.Backend))
+                {
+                    parts.Add(new HybridSegmentPart
+                    {
+                        CustomSegment = current,
+                        Start = current.Start,
+                        End = current.End,
+                    });
+                    index++;
+                    continue;
+                }
+
+                var end = index;
+                while (end + 1 < prepared.Count && IsSegmentModelBackend(prepared[end + 1].Backend))
+                    end++;
+                var group = prepared.Skip(index).Take(end - index + 1).ToList();
+                var sourceClip = Path.Combine(workDirectory, $"model-{parts.Count + 1:D3}-source.mkv");
+                var processedClip = Path.Combine(workDirectory, $"chunk-{parts.Count + 1:D3}-model.mkv");
+                var extractExit = ExtractModelSegmentGroup(
+                    input, sourceClip, group[0], group[^1], video, secondsMode, stopWatcher, pauseShm);
+                if (extractExit != 0) return extractExit;
+                var processExit = RunModelSegmentGroup(
+                    sourceClip, processedClip, group, group[0].Start,
+                    pauseShm, stopWatcher, tileSize, segmentedPrecision);
+                if (processExit != 0) return processExit;
+                parts.Add(new HybridSegmentPart
+                {
+                    ModelChunkPath = processedClip,
+                    Start = group[0].Start,
+                    End = group[^1].End,
+                });
+                index = end + 1;
+            }
+            return FinalizeHybridSegments(
+                parts, input, outputFile, encoderArguments, overwrite, stopWatcher,
+                video, secondsMode, prepared[0].OutputWidth, prepared[0].OutputHeight, pauseShm);
+        }
+        finally
+        {
+            try
+            {
+                if (Directory.Exists(workDirectory)) Directory.Delete(workDirectory, recursive: true);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[警告] 分段直连临时目录清理失败：" + ex.Message);
+            }
+        }
+    }
+
     private static int RunSegmentedVideo(
         Options options, string input, string outputFile, string customEncoder, bool overwrite,
         string pauseShm, StopWatcher? stopWatcher, int tileSize)
@@ -4819,10 +5417,14 @@ internal static class Program
             {
                 requested.Add(new SegmentRequest
                 {
-                    Start = item.GetProperty("Start").GetInt64(),
-                    End = item.GetProperty("End").GetInt64(),
-                    Backend = item.GetProperty("Backend").GetString() ?? "",
-                    Model = item.GetProperty("Model").GetString() ?? "",
+                    Start = item.TryGetProperty("Start", out var start) && start.TryGetInt64(out var startValue) ? startValue : 0,
+                    End = item.TryGetProperty("End", out var end) && end.TryGetInt64(out var endValue) ? endValue : 0,
+                    StartSeconds = item.TryGetProperty("StartSeconds", out var startSeconds) && startSeconds.TryGetDouble(out var startSecondsValue) ? startSecondsValue : 0,
+                    EndSeconds = item.TryGetProperty("EndSeconds", out var endSeconds) && endSeconds.TryGetDouble(out var endSecondsValue) ? endSecondsValue : 0,
+                    Backend = item.TryGetProperty("Backend", out var backendValue) ? backendValue.GetString() ?? "" : "",
+                    Model = item.TryGetProperty("Model", out var modelValue) ? modelValue.GetString() ?? "" : "",
+                    TargetWidth = item.TryGetProperty("TargetWidth", out var targetWidth) && targetWidth.TryGetInt32(out var targetWidthValue) ? targetWidthValue : 0,
+                    TargetHeight = item.TryGetProperty("TargetHeight", out var targetHeight) && targetHeight.TryGetInt32(out var targetHeightValue) ? targetHeightValue : 0,
                 });
             }
         }
@@ -4835,61 +5437,182 @@ internal static class Program
 
         var video = ProbeVideoOutput(input);
         if (video is null)
-            return Fail("无法准确检测视频帧数，不能执行分段超分");
+            return Fail("无法检测视频尺寸、帧数、帧率或时长，不能执行分段超分");
+
+        var secondsMode = requested.Any(segment => segment.EndSeconds > 0.000001);
+        var modelBackends = new HashSet<string>(new[] { "ncnn", "cuda", "tensorrt", "onnx" }, StringComparer.OrdinalIgnoreCase);
+        var requestedModelBackends = requested
+            .Select(segment => segment.Backend.Trim().ToLowerInvariant())
+            .Where(modelBackends.Contains)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (requestedModelBackends.Count > 1 && !options.AllowMixedSegmentBackends)
+        {
+            return Fail(
+                "跨 NCNN / CUDA / TensorRT / ONNX 分段混用是测试功能；"
+                + "请在插件中手动开启“跨模型后端混用”，或显式传入 --allow-mixed-segment-backends");
+        }
+        var ffmpegScalers = new HashSet<string>(new[]
+        {
+            "fast_bilinear", "bilinear", "bicubic", "neighbor",
+            "area", "bicublin", "lanczos", "spline",
+        }, StringComparer.OrdinalIgnoreCase);
+        var checkedBackends = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        string NormaliseFfmpegScaler(string value)
+        {
+            var name = value.Trim().ToLowerInvariant().Replace(' ', '_');
+            if (name is "nearest" or "nearest_neighbour" or "nearest_neighbor" or "nearest-neighbour" or "nearest-neighbor")
+                name = "neighbor";
+            return ffmpegScalers.Contains(name) ? name : "";
+        }
+
         var expectedStart = 1L;
+        var expectedStartSeconds = 0.0;
         var prepared = new List<PreparedSegment>();
-        string? lockedBackend = null;
-        var lockedScale = 0;
+        var fixedScale = 0;
         var segmentedPrecision = options.UpscalePrecision;
+
         for (var index = 0; index < requested.Count; index++)
         {
             var segment = requested[index];
-            var backend = segment.Backend.Trim().ToLowerInvariant();
-            if (backend is not ("ncnn" or "cuda" or "tensorrt" or "onnx"))
-                return Fail($"第 {index + 1} 段使用了流式或不支持的后端：{segment.Backend}");
-            if (segment.Start != expectedStart || segment.End < segment.Start)
-                return Fail($"第 {index + 1} 段必须从第 {expectedStart} 帧开始，当前为 {segment.Start}-{segment.End}");
-            var model = ResolveModel(segment.Model, backend);
-            if (model.Length == 0) return 1;
-            var scaleText = DetectScale(model);
-            if (!int.TryParse(scaleText, NumberStyles.Integer, CultureInfo.InvariantCulture, out var modelScale) || modelScale < 1)
-                return Fail($"第 {index + 1} 段无法识别模型倍率：{segment.Model}");
-            if (lockedBackend is null)
+            long rangeStart;
+            long rangeEnd;
+            if (secondsMode)
             {
-                lockedBackend = backend;
-                lockedScale = modelScale;
+                if (Math.Abs(segment.StartSeconds - expectedStartSeconds) > 0.002
+                    || segment.EndSeconds <= segment.StartSeconds)
+                {
+                    return Fail($"第 {index + 1} 段秒级边界不连续：{segment.StartSeconds:0.###}-{segment.EndSeconds:0.###} 秒");
+                }
+                rangeStart = expectedStart;
+                if (index == requested.Count - 1)
+                {
+                    rangeEnd = video.Frames;
+                }
+                else
+                {
+                    rangeEnd = (long)Math.Round(
+                        segment.EndSeconds * video.FrameRate,
+                        MidpointRounding.AwayFromZero);
+                    rangeEnd = Math.Min(rangeEnd, video.Frames - 1);
+                    if (rangeEnd < rangeStart)
+                        return Fail($"第 {index + 1} 段太短，按当前帧率无法形成独立帧范围");
+                }
+                expectedStartSeconds = segment.EndSeconds;
             }
-            else if (!backend.Equals(lockedBackend, StringComparison.OrdinalIgnoreCase))
-                return Fail($"第 {index + 1} 段后端为 {backend}；第一段已锁定为 {lockedBackend}");
-            else if (modelScale != lockedScale)
-                return Fail($"第 {index + 1} 段倍率为 {modelScale}x；第一段已锁定为 {lockedScale}x");
+            else
+            {
+                rangeStart = segment.Start;
+                rangeEnd = segment.End;
+                if (rangeStart != expectedStart || rangeEnd < rangeStart)
+                    return Fail($"第 {index + 1} 段必须从第 {expectedStart} 帧开始，当前为 {rangeStart}-{rangeEnd}");
+            }
 
+            var backend = segment.Backend.Trim().ToLowerInvariant();
+            var model = segment.Model.Trim();
+            var modelScale = 0;
             var inputMultiple = 1;
-            if (ModelCapabilityCatalog.TryGet(model, ModelsDir, out var capability))
-                inputMultiple = Math.Max(1, capability.InputMultiple);
-            if (backend == "tensorrt")
+
+            if (modelBackends.Contains(backend))
             {
-                var engineWidth = (video.Width + inputMultiple - 1) / inputMultiple * inputMultiple;
-                var engineHeight = (video.Height + inputMultiple - 1) / inputMultiple * inputMultiple;
-                model = EnsureTensorRtEngine(model, engineWidth, engineHeight, stopWatcher, tileSize, modelScale,
-                    options.UpscalePrecision);
-                if (model.Length == 0) return stopWatcher?.IsStopRequested() == true ? 130 : 1;
+                if (checkedBackends.Add(backend) && !RunCheck(verbose: false, backend: backend))
+                    return 1;
+                model = ResolveModel(model, backend);
+                if (model.Length == 0) return 1;
+                var scaleText = DetectScale(model);
+                if (!int.TryParse(scaleText, NumberStyles.Integer, CultureInfo.InvariantCulture, out modelScale) || modelScale < 1)
+                    return Fail($"第 {index + 1} 段无法识别模型倍率：{segment.Model}");
+                if (fixedScale == 0)
+                    fixedScale = modelScale;
+                else if (fixedScale != modelScale)
+                    return Fail($"第 {index + 1} 段模型倍率为 {modelScale}x；分段中已有固定倍率 {fixedScale}x。固定倍率模型必须一致");
+
+                if (ModelCapabilityCatalog.TryGet(model, ModelsDir, out var capability))
+                    inputMultiple = Math.Max(1, capability.InputMultiple);
+                if (backend == "tensorrt")
+                {
+                    var engineWidth = (video.Width + inputMultiple - 1) / inputMultiple * inputMultiple;
+                    var engineHeight = (video.Height + inputMultiple - 1) / inputMultiple * inputMultiple;
+                    model = EnsureTensorRtEngine(model, engineWidth, engineHeight, stopWatcher, tileSize, modelScale,
+                        options.UpscalePrecision);
+                    if (model.Length == 0) return stopWatcher?.IsStopRequested() == true ? 130 : 1;
+                }
+                if (ResolveUpscalePrecision(model, backend, options.UpscalePrecision) == "float32")
+                    segmentedPrecision = "float32";
             }
-            if (ResolveUpscalePrecision(model, backend, options.UpscalePrecision) == "float32")
-                segmentedPrecision = "float32";
+            else if (backend == "ffmpeg")
+            {
+                model = NormaliseFfmpegScaler(model);
+                if (model.Length == 0)
+                    return Fail($"第 {index + 1} 段使用了不支持的 FFmpeg 缩放算法：{segment.Model}");
+            }
+            else if (backend == "anime4k")
+            {
+                if (model.Length == 0)
+                    return Fail($"第 {index + 1} 段尚未选择 Anime4K 着色器");
+            }
+            else
+            {
+                return Fail($"第 {index + 1} 段使用了不支持的处理后端：{segment.Backend}");
+            }
+
             prepared.Add(new PreparedSegment
             {
-                Start = segment.Start,
-                End = segment.End,
+                Start = rangeStart,
+                End = rangeEnd,
+                StartSeconds = secondsMode
+                    ? segment.StartSeconds
+                    : (rangeStart - 1) / video.FrameRate,
+                EndSeconds = secondsMode
+                    ? segment.EndSeconds
+                    : (index == requested.Count - 1 ? video.DurationSeconds : rangeEnd / video.FrameRate),
                 Backend = backend,
                 Model = model,
                 Scale = modelScale,
                 InputMultiple = inputMultiple,
+                OutputWidth = segment.TargetWidth,
+                OutputHeight = segment.TargetHeight,
             });
-            expectedStart = segment.End + 1;
+            expectedStart = rangeEnd + 1;
         }
-        if (prepared[0].Start != 1 || prepared[^1].End != video.Frames)
-            return Fail($"分段必须从第 1 帧连续覆盖到第 {video.Frames} 帧；当前最后一帧为 {prepared[^1].End}");
+
+        if (secondsMode)
+        {
+            var durationTolerance = Math.Max(0.1, 2.0 / video.FrameRate);
+            if (Math.Abs(expectedStartSeconds - video.DurationSeconds) > durationTolerance)
+            {
+                return Fail(
+                    $"秒级分段必须覆盖完整时长 {video.DurationSeconds:0.###} 秒；"
+                    + $"当前结束于 {expectedStartSeconds:0.###} 秒");
+            }
+        }
+        if (prepared[0].Start != 1 || prepared[^1].End != video.Frames || expectedStart != video.Frames + 1)
+            return Fail($"分段必须连续覆盖到第 {video.Frames} 帧；当前最后一帧为 {prepared[^1].End}");
+
+        int outputWidth;
+        int outputHeight;
+        if (fixedScale > 0)
+        {
+            outputWidth = checked(video.Width * fixedScale);
+            outputHeight = checked(video.Height * fixedScale);
+        }
+        else
+        {
+            var firstWidth = prepared[0].OutputWidth;
+            var firstHeight = prepared[0].OutputHeight;
+            if (firstWidth <= 0 || firstHeight <= 0)
+                return Fail("仅使用 FFmpeg / Anime4K 时必须设置自定义目标宽度和高度");
+            if (prepared.Any(segment => segment.OutputWidth != firstWidth || segment.OutputHeight != firstHeight))
+                return Fail("仅使用 FFmpeg / Anime4K 时，所有分段必须使用相同的目标分辨率");
+            outputWidth = firstWidth;
+            outputHeight = firstHeight;
+        }
+        foreach (var segment in prepared)
+        {
+            segment.OutputWidth = outputWidth;
+            segment.OutputHeight = outputHeight;
+        }
 
         List<string> encoderArguments;
         try
@@ -4900,6 +5623,22 @@ internal static class Program
         {
             return Fail(ex.Message);
         }
+        var modeText = secondsMode ? "按秒（关键帧断点）" : "精确帧";
+        var sizeRule = fixedScale > 0
+            ? $"固定倍率模型优先：{fixedScale}x -> {outputWidth}x{outputHeight}"
+            : $"自定义统一输出：{outputWidth}x{outputHeight}";
+        Console.WriteLine($"[分段超分] {modeText}；{prepared.Count} 段连续覆盖全片；{sizeRule}。");
+
+        if (prepared.Any(segment => !IsSegmentModelBackend(segment.Backend)))
+        {
+            Console.WriteLine(
+                "[分段超分] FFmpeg / Anime4K 段使用 FFmpeg 直接读取源视频并处理；"
+                + "不再进入 Python 逐帧 pipe。连续模型段仍复用优化模型后端。");
+            return RunHybridSegmentedVideo(
+                input, outputFile, prepared, video, secondsMode, encoderArguments,
+                overwrite, pauseShm, stopWatcher, tileSize, segmentedPrecision);
+        }
+
         var segmentPayload = EncodePreparedSegments(prepared);
         var encoderPayload = EncodeStringList(encoderArguments);
         var script = EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
@@ -4912,6 +5651,11 @@ internal static class Program
             "--encoder-args-base64", encoderPayload,
             "--ffmpeg-path", FfmpegExe,
         };
+        if (ScriptSupportsArgument(script, "--tile-size"))
+        {
+            arguments.Add("--tile-size");
+            arguments.Add(tileSize.ToString(CultureInfo.InvariantCulture));
+        }
         if (!string.IsNullOrWhiteSpace(pauseShm))
         {
             arguments.Add("--pause-shm");
@@ -4919,9 +5663,8 @@ internal static class Program
         }
         if (overwrite) arguments.Add("--overwrite");
 
-        Console.WriteLine($"[分段超分] 已验证 {prepared.Count} 段连续覆盖 1-{video.Frames} 帧；后端 {lockedBackend}，倍率 {lockedScale}x。");
-        return LaunchBackend(arguments, input, prepared[0].Model, outputFile, customEncoder, stopWatcher,
-            null, null, lockedBackend!, pauseShm, "分段逐帧超分", isFinalStage: true,
+        return LaunchBackend(arguments, input, "", outputFile, customEncoder, stopWatcher,
+            null, null, "mixed", pauseShm, "分段超分", isFinalStage: true,
             upscalePrecision: segmentedPrecision);
     }
 
@@ -5148,7 +5891,22 @@ internal static class Program
         return "30/1";
     }
 
-    private sealed record VideoProbeInfo(int Width, int Height, long Frames);
+    private sealed record VideoProbeInfo(
+        int Width, int Height, long Frames, double FrameRate, double DurationSeconds);
+
+    private static double ParseFfprobeRate(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return 0;
+        var parts = value.Split('/', 2);
+        if (parts.Length == 2
+            && double.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var numerator)
+            && double.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var denominator)
+            && denominator != 0)
+            return numerator / denominator;
+        return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var direct)
+            ? direct
+            : 0;
+    }
 
     /// <summary>用 ffprobe 严格读取视频尺寸和可解码帧数；任何字段缺失都视为探测失败。</summary>
     private static VideoProbeInfo? ProbeVideoOutput(string path)
@@ -5169,7 +5927,7 @@ internal static class Program
             foreach (var argument in new[]
                      {
                          "-v", "error", "-select_streams", "v:0", "-count_frames",
-                         "-show_entries", "stream=width,height,nb_read_frames,nb_frames",
+                         "-show_entries", "stream=width,height,nb_read_frames,nb_frames,avg_frame_rate,r_frame_rate,duration:format=duration",
                          "-of", "json", path,
                      })
             {
@@ -5194,13 +5952,121 @@ internal static class Program
                 if (value.ValueKind == JsonValueKind.String
                     && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out frames)) break;
             }
-            return width > 0 && height > 0 && frames > 0
-                ? new VideoProbeInfo(width, height, frames)
+            var rateText = stream.TryGetProperty("avg_frame_rate", out var avgRate)
+                ? avgRate.GetString()
+                : null;
+            if (ParseFfprobeRate(rateText) <= 0 && stream.TryGetProperty("r_frame_rate", out var realRate))
+                rateText = realRate.GetString();
+            var frameRate = ParseFfprobeRate(rateText);
+            double duration = 0;
+            if (stream.TryGetProperty("duration", out var streamDuration))
+            {
+                var durationText = streamDuration.ValueKind == JsonValueKind.String
+                    ? streamDuration.GetString()
+                    : streamDuration.GetRawText();
+                double.TryParse(durationText, NumberStyles.Float, CultureInfo.InvariantCulture, out duration);
+            }
+            if (duration <= 0 && document.RootElement.TryGetProperty("format", out var format)
+                && format.TryGetProperty("duration", out var formatDuration))
+            {
+                var durationText = formatDuration.ValueKind == JsonValueKind.String
+                    ? formatDuration.GetString()
+                    : formatDuration.GetRawText();
+                double.TryParse(durationText, NumberStyles.Float, CultureInfo.InvariantCulture, out duration);
+            }
+            if (duration <= 0 && frameRate > 0 && frames > 0)
+                duration = frames / frameRate;
+            return width > 0 && height > 0 && frames > 0 && frameRate > 0 && duration > 0
+                ? new VideoProbeInfo(width, height, frames, frameRate, duration)
                 : null;
         }
         catch
         {
             return null;
+        }
+    }
+
+    /// <summary>
+    /// 对程序自己生成的中间/最终视频做轻量校验。使用 packet 数避免 -count_frames
+    /// 把高分辨率成品完整解码第二遍；packet 计数不可用时才回退到严格帧探测。
+    /// </summary>
+    private static VideoProbeInfo? ProbeGeneratedVideoFast(string path)
+    {
+        if (!File.Exists(FfprobeExe) || !File.Exists(path)) return null;
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = FfprobeExe,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
+            };
+            foreach (var argument in new[]
+                     {
+                         "-v", "error", "-select_streams", "v:0", "-count_packets",
+                         "-show_entries", "stream=width,height,nb_read_packets,nb_frames,avg_frame_rate,r_frame_rate,duration:format=duration",
+                         "-of", "json", path,
+                     })
+            {
+                psi.ArgumentList.Add(argument);
+            }
+            using var process = Process.Start(psi);
+            if (process is null) return ProbeVideoOutput(path);
+            var output = process.StandardOutput.ReadToEnd();
+            _ = process.StandardError.ReadToEnd();
+            if (!process.WaitForExit(30000) || process.ExitCode != 0)
+                return ProbeVideoOutput(path);
+
+            using var document = JsonDocument.Parse(output);
+            var stream = document.RootElement.GetProperty("streams").EnumerateArray().FirstOrDefault();
+            if (stream.ValueKind != JsonValueKind.Object) return ProbeVideoOutput(path);
+            var width = stream.GetProperty("width").GetInt32();
+            var height = stream.GetProperty("height").GetInt32();
+            long frames = 0;
+            foreach (var propertyName in new[] { "nb_read_packets", "nb_frames" })
+            {
+                if (!stream.TryGetProperty(propertyName, out var value)) continue;
+                if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out frames)) break;
+                if (value.ValueKind == JsonValueKind.String
+                    && long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out frames)) break;
+            }
+            if (frames <= 0) return ProbeVideoOutput(path);
+
+            var rateText = stream.TryGetProperty("avg_frame_rate", out var avgRate)
+                ? avgRate.GetString()
+                : null;
+            if (ParseFfprobeRate(rateText) <= 0 && stream.TryGetProperty("r_frame_rate", out var realRate))
+                rateText = realRate.GetString();
+            var frameRate = ParseFfprobeRate(rateText);
+            double duration = 0;
+            if (stream.TryGetProperty("duration", out var streamDuration))
+            {
+                var durationText = streamDuration.ValueKind == JsonValueKind.String
+                    ? streamDuration.GetString()
+                    : streamDuration.GetRawText();
+                double.TryParse(durationText, NumberStyles.Float, CultureInfo.InvariantCulture, out duration);
+            }
+            if (duration <= 0 && document.RootElement.TryGetProperty("format", out var format)
+                && format.TryGetProperty("duration", out var formatDuration))
+            {
+                var durationText = formatDuration.ValueKind == JsonValueKind.String
+                    ? formatDuration.GetString()
+                    : formatDuration.GetRawText();
+                double.TryParse(durationText, NumberStyles.Float, CultureInfo.InvariantCulture, out duration);
+            }
+            if (duration <= 0 && frameRate > 0)
+                duration = frames / frameRate;
+            return width > 0 && height > 0 && frameRate > 0 && duration > 0
+                ? new VideoProbeInfo(width, height, frames, frameRate, duration)
+                : ProbeVideoOutput(path);
+        }
+        catch
+        {
+            return ProbeVideoOutput(path);
         }
     }
 
@@ -5254,7 +6120,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("[阶段] " + stageTitle);
         Console.WriteLine("[信息] 输入视频 : " + input);
-        Console.WriteLine("[信息] 推理后端 : " + (backend == "basicvsrpp" ? "BasicVSR++（时序视频）" : backend == "flashvsr" ? "FlashVSR（时序视频）" : backend == "cuda" ? "CUDA（PyTorch）" : backend == "tensorrt" ? "TensorRT（NVIDIA）" : backend == "onnx" ? "ONNX Runtime" : "NCNN（Vulkan）"));
+        Console.WriteLine("[信息] 推理后端 : " + (backend == "mixed" ? "分段混合处理" : backend == "basicvsrpp" ? "BasicVSR++（时序视频）" : backend == "flashvsr" ? "FlashVSR（时序视频）" : backend == "cuda" ? "CUDA（PyTorch）" : backend == "tensorrt" ? "TensorRT（NVIDIA）" : backend == "onnx" ? "ONNX Runtime" : "NCNN（Vulkan）"));
         if (string.IsNullOrEmpty(model))
         {
             Console.WriteLine("[信息] 放大模型 : （未使用，仅补帧）");
@@ -6656,7 +7522,8 @@ internal static class Program
         writer.WriteLine("  -rtx-hdr-middle-gray <10-100>   RTX HDR 中灰度，默认 44，可输入范围内任意整数");
         writer.WriteLine("  -rtx-hdr-max-luminance <400-2000> RTX HDR 最大亮度（nit），默认 1000，可输入范围内任意整数");
         writer.WriteLine("  --segments-base64 <Base64 JSON>");
-        writer.WriteLine("        按帧段选择单帧超分模型；所有段必须连续覆盖全片，并锁定同一后端与倍率");
+        writer.WriteLine("        分段配置；默认禁止 NCNN/CUDA/TensorRT/ONNX 跨模型后端混用，FFmpeg/Anime4K 不受此限制");
+        writer.WriteLine("  --allow-mixed-segment-backends  实验功能：显式允许分段跨 NCNN/CUDA/TensorRT/ONNX 混用");
         writer.WriteLine("  -no-upscale         不放大（可用于仅补帧或仅 RTX HDR）");
         writer.WriteLine("  -pause-shm <ID>     暂停共享内存名（透传给 rve-backend --pause_shared_memory_id）");
         writer.WriteLine("  -stop-shm <ID>      停止共享内存名：字节变 1 时优雅停止，已处理部分写入输出文件");
