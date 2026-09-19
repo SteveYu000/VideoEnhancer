@@ -1,24 +1,37 @@
 # Project Status
 
-Last updated: 2026-09-16 14:01
+Last updated: 2026-09-19 22:13
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-16 14:01): 按用户授权将 `v1.3.3` 远端版本覆盖为 ModelScope 首选更新包下载修订；版本清单检查仍保持 GitHub 首选、ModelScope 兜底。GitHub Release、ModelScope Releases 和 Models 备用资产已同步覆盖。
-- Latest files/Git: `PluginUpdater.vb` 调整下载顺序；README、发布流程、ModelScope 镜像说明、发布说明和更新顺序回归断言同步更新。`v1.3.3` 标签指向发布代码 `7b3c46b`，收尾记录提交 `10f69af` 已推送 `fork/main`。
-- Latest verification: 正式解决方案发布构建 0 警告/0 错误；Python 30/30；安装器/更新器门禁通过；静态检查确认版本清单仍 GitHub→ModelScope、更新包下载为 ModelScope→GitHub；`git diff --check` 通过。GitHub 与 ModelScope 三份本体资产及 Models 备用 EXE 已逐字节回读一致。
-- Latest deployment: 覆盖远端资产后再次部署本机 EXE/DLL；备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remote-overwrite-deploy-20260916-140628`；DLL 源/目标 SHA-256 均为 `6B27A41CEBCEE7261F7EB3C4D29B6DE16A0AC569E6EB22639063D82CA2EF05E4`，EXE 源/目标 SHA-256 均为 `A2A390E3E2065A89BF7DB61CE47DB9B287080013C8C03FC55F6E8FB7C830137E`；安装版 EXE `--version` 为 1.3.3，未残留相关进程。
-- Latest remaining issue/research: 需要用户重启 3FUI 后确认更新检查/下载路径；本次已按授权覆盖 `v1.3.3`，后续无需再移动标签，除非出现新的用户授权修订。
+- Latest objective/state (2026-09-19 22:13): PR #4、#5 已安全合并；1.3.4 与 Backend 2026.09.19.1 正式发布候选已完成全量本地验证，待提交推送后按标准顺序发布 Backend、GitHub Release 与 ModelScope Releases。
+- Latest files/Git: 插件/CLI 版本已递增到 1.3.4，发布说明和版本记录已更新。Backend 候选严格基于线上 2026.09.12.1 完整包，仅替换 `rve-image-backend.py`、`rve-segmented-backend.py`；完整包与增量包已生成。
+- Latest verification: 解决方案 build/publish 0 警告/0 错误；Python 31/31；发布门禁 5/5、安装器 5 场景、更新器 7 场景、Backend 更新器 6/6；Backend 全量包解压后 29,710 文件与候选逐文件一致，差异审计为 +0/~2/-0；`git diff --check` 通过。
+- Latest deployment: 本地正式候选 EXE 16,988,806 bytes / `8F5E1F618D85AC0AF031287DC3E52F585C7A303464947330C22C66B473C25400`；手动 ZIP 14,002,905 bytes / `C4F8A28E4B7DEC59CA4F9653EA333446C2F4811B90459BB98F85AEF2ED262341`。尚未发布远端，尚未覆盖本机 EXE/DLL。
+- Latest remaining issue/research: 完成发布提交、远端上传与逐源回读后，再备份并部署本机 EXE/DLL；新增分段 UI 的长视频与完整鼠标流程仍需用户发布后重启 3FUI 实机验收。
 
-- Current objective: 保持既有 RTX/GIMM 管线正确性的同时，完成 3FUI 6.2.20 下 HDR 参数传递、队列任务控制、预览兼容性、HDR 数字框启动显示和双源更新顺序修复，并在本机版本上完成用户验收。
+- Current objective: 在保持 RTX/HDR、更新器与旧安装兼容性的前提下，完成 PR #4 便携目录与 PR #5 分段超分增强的真实 3FUI 验收。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
 - Likely next agent: user / ZCode / Codex
-- Next recommended step: 用户重启 3FUI，确认更新检查仍先访问 GitHub、更新包先访问 ModelScope，并继续验收 HDR 输入/滚动/RTX 任务；后续新增功能按递增补丁版本发布。
+- Next recommended step: 用户从当前 `main` 构建/部署候选版本，在真实 3FUI 中重点验收分段页面、关键帧断点、Anime4K、暂停/停止和长视频音画同步；确认后再按递增版本发布。
 
 ## Active TODO
+
+- [ ] Task: 正式发布 1.3.4 与 Backend 2026.09.19.1。
+  - Owner: Codex
+  - Status: 本地候选及全部门禁已通过，待提交推送、按完整包→增量包→channel→GitHub Release→ModelScope Releases 顺序上传并回读。
+  - Backend audit: 线上 2026.09.12.1 基线包大小 2,790,833,001，SHA-256 `E607456F2384F3339F90E28E7C4965CCCACC40F591AB250276E276ECF01636F1`；候选完整包大小 2,645,812,004，SHA-256 `42A90717B30CCFE80E5ED3016AD9BD66F0FD59265363397342F3F0B1267DE97C`；差异 +0/~2/-0。
+  - Remaining: 远端发布、回读、安装部署、最终记录和工作树清洁检查。
+
+- [x] Task: 评估并安全合并 PR #4、#5。
+  - Owner: Codex
+  - Status: 两项 PR 已合并并推送；PR #5 合并提交 `637914a`，PR #4 合并提交 `15bfdc5`，兼容修复提交 `9194450`。
+  - Risk fixes: PR #4 原样会使自动更新用户丢失旧 AppData 设置并取消外置 `core-path`；已增加插件首次加载迁移和只读旧路径兼容。PR #5 原提交缺少跨后端 Python 增量；已从用户提供的 `backend.7z` 选择性合入两个脚本并保留便携临时目录修复。
+  - Verification: 解决方案发布构建 0/0、Python 31/31、安装器/更新器/后端更新器门禁全部通过；真实 NCNN→CUDA 4 帧输出 128×128、4/4 帧。
+  - Remaining: 未部署 EXE/DLL、未发布新版本；真实宿主 UI 与长视频验收仍待用户执行。
 
 - [x] Task: 审查并整合 GitHub PR #3，同时保留候选 1.3.3 修复。
   - Owner: Codex
@@ -2124,3 +2137,24 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Deployment follow-up: 远端 `v1.3.3` 覆盖完成后，确认 3FUI、插件、FFmpeg 和 RTX 相关进程均未运行，备份旧本机文件后覆盖最新 EXE/DLL。
 - Verification: 本机 DLL 源/目标 SHA-256 `6b27a41cebcee7261f7eb3c4d29b6de16a0ac569e6eb22639063d82ca2ef05e4`，EXE 源/目标 SHA-256 `a2a390e3e2065a89bf7db61ce47db9b287080013c8c03fc55f6e8fb7c830137e`；EXE `--version` 返回 1.3.3，相关进程数 0。
 - Backup: `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.3-before-remote-overwrite-deploy-20260916-140628`。
+
+### 2026-09-19 17:22 - Codex
+
+- Request: 用户要求评估 PR #4、#5 是否可安全合并、是否造成现有功能回退，并在审查后安全合并；随后确认 `C:\Users\maxzr\Downloads\backend.7z` 是 PR #5 的配套增量后端。
+- Orientation/Git: 已读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md`、HandShake 2.1.0-beta 及冲突流程；启动时 `git pull --ff-only` 为 Already up to date，基线 `7f27068`，工作树干净。
+- Review: PR #4 基于旧提交 `615875d` 且与主线冲突，原样会让自动更新用户因便携配置不存在而恢复默认，并有意移除 `core-path`；PR #5 基于当前主线且可自动合并，但提交未包含跨模型后端所需 Python 增量，现有脚本会拒绝不同后端。
+- Integration: 先合并 PR #5 为 `637914a`，再解决 PR #4 的 `PluginConfig.vb`、`SegmentedUpscalePage.vb` 冲突并形成 `15bfdc5`。增加旧 AppData 配置首次加载迁移、旧 `videoenhancer.ini core-path` 只读兼容，并修复遗漏的 `ResolveInstalledExePath` 调用。
+- Backend: `backend.7z` 为 779,888 bytes，SHA-256 `E306D81770863A16619EC157879AACE84354462BF053751A5AF712545403A70B`，404 文件、无路径穿越。与已安装后端比较仅 4 个文件不同，其中两个 inspector 仅行尾不同；选择性合入 `rve-image-backend.py`、`rve-segmented-backend.py`，未纳入 `__pycache__`、日志或整套旧文件。兼容修复提交为 `9194450`。
+- Verification: PR 原始分支分别构建 0/0、Python 24/24 与 30/30；组合版发布构建 0/0、Python 31/31、安装器 5 场景、更新器 7 场景、后端更新器 6/6、`git diff --check` 通过。旧 AppData 配置反射探针生成便携 JSON 且移除 `ExePath`；旧 `core-path` 指向本机后端的 `--check -backend ncnn` 全通过。PR #5 的 32 帧 FFmpeg 两段直连输出 640×360、32/32 包并保留音频；真实 NCNN→CUDA 4 帧混合任务输出 128×128、4/4 帧并成功退出。
+- Local side effect: `core-path` 探针按既有自同步逻辑更新了本机安装后端的两个辅助脚本；未覆盖 EXE/DLL。旧脚本恢复副本位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-before-pr5-backend-sync-20260919`。
+- Git/remote: `main` 与 `fork/main` 均为 `9194450c75c7e588f72e26433004d33ed569305c`；GitHub PR #4、#5 均显示 MERGED。未改版本号、标签或发布资产。记录更新后需追加收尾提交并推送，最终核对工作树。
+
+### 2026-09-19 22:13 - Codex
+
+- Request: 用户要求在验证通过后按正式流程发布 1.3.4 Release。
+- Backend baseline: 从 ModelScope 稳定通道下载并验证已发布 2026.09.12.1 完整包，2,790,833,001 bytes，SHA-256 `E607456F2384F3339F90E28E7C4965CCCACC40F591AB250276E276ECF01636F1`；未误用本机同名但哈希不同的下载归档。
+- Backend candidate: 首轮审计发现 4 个替换，其中两个 inspector 仅行尾不同；正式候选从已发布基线构造，仅叠加 `rve-image-backend.py`、`rve-segmented-backend.py`，最终审计 +0/~2/-0。完整包 2,645,812,004 bytes / `42A90717B30CCFE80E5ED3016AD9BD66F0FD59265363397342F3F0B1267DE97C`，增量包 8,296 bytes / `10FD29A868877584F355120C92A8E7421B18A3A3D26DFD80BB69034D54B9D7F9`。
+- Version/build: `PluginVersion.vb` 与 CLI csproj 递增到 1.3.4，更新正式 Release Notes。解决方案 build/publish 均为 0 警告/0 错误；正式 EXE 报告 1.3.4。
+- Verification: Python 31/31，发布门禁 5/5，安装器 5 场景，更新器 7 场景，Backend 更新器 6/6，`git diff --check` 均通过；完整包已重新解压并与 29,710 文件候选逐文件核对一致。
+- Artifacts: EXE 16,988,806 bytes / `8F5E1F618D85AC0AF031287DC3E52F585C7A303464947330C22C66B473C25400`；手动 ZIP 14,002,905 bytes / `C4F8A28E4B7DEC59CA4F9653EA333446C2F4811B90459BB98F85AEF2ED262341`；stable.json SHA-256 `B77B662136A9F275DE547A12E4ED8A030CDBAEC2623BA7F45F4F7463BF787AC6`。
+- Git/next: 当前尚未发布远端；下一步提交并推送发布源，然后按 Backend 完整包、增量包、channel、GitHub Release、ModelScope Releases 顺序发布并回读。
