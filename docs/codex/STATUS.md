@@ -1,15 +1,15 @@
 # Project Status
 
-Last updated: 2026-09-19 22:13
+Last updated: 2026-09-19 22:36
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-19 22:13): PR #4、#5 已安全合并；1.3.4 与 Backend 2026.09.19.1 正式发布候选已完成全量本地验证，待提交推送后按标准顺序发布 Backend、GitHub Release 与 ModelScope Releases。
-- Latest files/Git: 插件/CLI 版本已递增到 1.3.4，发布说明和版本记录已更新。Backend 候选严格基于线上 2026.09.12.1 完整包，仅替换 `rve-image-backend.py`、`rve-segmented-backend.py`；完整包与增量包已生成。
-- Latest verification: 解决方案 build/publish 0 警告/0 错误；Python 31/31；发布门禁 5/5、安装器 5 场景、更新器 7 场景、Backend 更新器 6/6；Backend 全量包解压后 29,710 文件与候选逐文件一致，差异审计为 +0/~2/-0；`git diff --check` 通过。
-- Latest deployment: 本地正式候选 EXE 16,988,806 bytes / `8F5E1F618D85AC0AF031287DC3E52F585C7A303464947330C22C66B473C25400`；手动 ZIP 14,002,905 bytes / `C4F8A28E4B7DEC59CA4F9653EA333446C2F4811B90459BB98F85AEF2ED262341`。尚未发布远端，尚未覆盖本机 EXE/DLL。
-- Latest remaining issue/research: 完成发布提交、远端上传与逐源回读后，再备份并部署本机 EXE/DLL；新增分段 UI 的长视频与完整鼠标流程仍需用户发布后重启 3FUI 实机验收。
+- Latest objective/state (2026-09-19 22:36): PR #4、#5 已安全合并；1.3.4 与 Backend 2026.09.19.1 已完成正式发布、双源回读和本机部署，标签 `v1.3.4` 指向 `68dd75e`。
+- Latest files/Git: 插件/CLI 1.3.4、发布说明与版本记录已进入主线。Backend 2026.09.19.1 严格基于线上 2026.09.12.1，仅替换 `rve-image-backend.py`、`rve-segmented-backend.py`，审计 +0/~2/-0。
+- Latest verification: 解决方案 build/publish 0/0；Python 31/31；发布门禁 5/5、安装器 5 场景、更新器 7 场景、Backend 更新器 6/6；Backend 全量包 29,710 文件逐文件一致。GitHub 与 ModelScope 本体资产实际下载回读一致，Backend 服务端 LFS 哈希及 channel/patch 实际下载回读一致。
+- Latest deployment: 本机 EXE/DLL 已备份并覆盖；EXE 16,988,813 bytes / `75517B1B8F2DA9281CB9690AE1C2BD5D88A58AFE26AC51C9A99A0666B620357A`，DLL 4,666,880 bytes / `B1BE973D5C0C0E7AC67E03150075452181A88C9BC7774FDDDDB4814080A4393D`，EXE 返回 1.3.4；Backend 增量更新后状态为 current 2026.09.19.1。
+- Latest remaining issue/research: 用户重启 3FUI 后实机验收秒/帧切换、关键帧吸附、Anime4K shader、暂停/停止与长视频音画同步；源码/远端发布无已知阻塞。
 
 - Current objective: 在保持 RTX/HDR、更新器与旧安装兼容性的前提下，完成 PR #4 便携目录与 PR #5 分段超分增强的真实 3FUI 验收。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
@@ -20,11 +20,11 @@ Updated by: Codex
 
 ## Active TODO
 
-- [ ] Task: 正式发布 1.3.4 与 Backend 2026.09.19.1。
+- [x] Task: 正式发布 1.3.4 与 Backend 2026.09.19.1。
   - Owner: Codex
-  - Status: 本地候选及全部门禁已通过，待提交推送、按完整包→增量包→channel→GitHub Release→ModelScope Releases 顺序上传并回读。
+  - Status: 已按完整包→增量包→channel→GitHub Release→ModelScope Releases 顺序发布并完成独立回读；本机也已部署并通过 Backend 增量更新。
   - Backend audit: 线上 2026.09.12.1 基线包大小 2,790,833,001，SHA-256 `E607456F2384F3339F90E28E7C4965CCCACC40F591AB250276E276ECF01636F1`；候选完整包大小 2,645,812,004，SHA-256 `42A90717B30CCFE80E5ED3016AD9BD66F0FD59265363397342F3F0B1267DE97C`；差异 +0/~2/-0。
-  - Remaining: 远端发布、回读、安装部署、最终记录和工作树清洁检查。
+  - Remaining: 仅待用户重启 3FUI 后完成真实窗口与长视频体验验收。
 
 - [x] Task: 评估并安全合并 PR #4、#5。
   - Owner: Codex
@@ -2158,3 +2158,13 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: Python 31/31，发布门禁 5/5，安装器 5 场景，更新器 7 场景，Backend 更新器 6/6，`git diff --check` 均通过；完整包已重新解压并与 29,710 文件候选逐文件核对一致。
 - Artifacts: EXE 16,988,806 bytes / `8F5E1F618D85AC0AF031287DC3E52F585C7A303464947330C22C66B473C25400`；手动 ZIP 14,002,905 bytes / `C4F8A28E4B7DEC59CA4F9653EA333446C2F4811B90459BB98F85AEF2ED262341`；stable.json SHA-256 `B77B662136A9F275DE547A12E4ED8A030CDBAEC2623BA7F45F4F7463BF787AC6`。
 - Git/next: 当前尚未发布远端；下一步提交并推送发布源，然后按 Backend 完整包、增量包、channel、GitHub Release、ModelScope Releases 顺序发布并回读。
+
+### 2026-09-19 22:36 - Codex
+
+- Release: 发布提交 `68dd75e` 已推送；GitHub Release `v1.3.4` 已创建且标签精确指向该提交。按完整包、增量包、channel 顺序发布 Backend 2026.09.19.1 后，再发布 GitHub 与 ModelScope 本体资产。
+- Final artifacts: EXE 16,988,813 bytes / `75517B1B8F2DA9281CB9690AE1C2BD5D88A58AFE26AC51C9A99A0666B620357A`；手动 ZIP 14,002,992 bytes / `5F9942B6278A9FECF4AEEA702AAD2BAE7DEA61E470C113D346214C06E64547D5`；stable.json 973 bytes / `B4D48B4FAA84C2083C95E801EA3E782CF66820E7AA7CDCD71265FE1F91DF3630`。
+- Backend: 完整包 2,645,812,004 bytes / `42A90717B30CCFE80E5ED3016AD9BD66F0FD59265363397342F3F0B1267DE97C`；增量包 8,292 bytes / `12CCD23C450A773890E501C4615C8B1E2D30445A489E9064340A6AB5D975BFDC`；channel.json 780 bytes / `ACD1EAB32290CEED002D1058FCE29FBB8F284078F9F6CAE76584A04F5D1D0B28`。
+- Remote verification: GitHub 三资产 API 摘要与实际下载均匹配；ModelScope Releases 三资产、Models 备用 EXE、Backend channel/patch 实际下载匹配；Backend 全量包由服务端 LFS Size/SHA-256 回读匹配。
+- Local deployment: 无相关进程运行时备份并覆盖 EXE/DLL；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.4-before-final-release-deploy-20260919-223501`。EXE 返回 1.3.4，DLL/EXE 源目标哈希一致；正式通道 Backend 增量更新成功，最终状态 current 2026.09.19.1，NCNN 环境检查全部通过。
+- Catalog: 安装版下载清单 96 项，`Plugin/videoenhancer.exe` 恰好 1 项，`PotPlayer.7z` 为 0 项。
+- Remaining: 用户重启 3FUI 后验收新增分段 UI、Anime4K、暂停/停止和长视频音画同步；记录提交推送后核对工作树干净。
