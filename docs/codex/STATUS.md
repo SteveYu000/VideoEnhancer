@@ -1,15 +1,15 @@
 # Project Status
 
-Last updated: 2026-09-20 10:30
+Last updated: 2026-09-20 10:50
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-20 10:30): 用户授权按正式流程发布 1.3.5；版本源、Release Notes、版本记录和正式候选资产已准备，全套门禁通过，下一步创建发布提交并同步 GitHub/ModelScope。
-- Latest files/Git: 分段页面高 DPI 列宽、开关比例、刷新按钮列宽与对齐修复已纳入 1.3.5；`PluginVersion.vb` 和 CLI csproj 已统一为 1.3.5，1.3.4 已归档到版本历史。当前尚未提交或上传。
-- Latest verification: 正式发布构建 0 警告/0 错误；Python 31/31、发布门禁 5/5、安装器五场景、更新器七场景、Backend 更新器 6/6；Backend 2026.09.19.1 审计 +0/~0/-0。
-- Latest deployment: 1.3.5 候选 EXE 16,989,148 bytes / `B006FC7BE01E49053480262FFAD8A16EFE97EA2A19C4ACC548D1111B9187D4FF`；手动 ZIP 14,003,722 bytes / `A447296BDD6210D0DB9FE55775ED0B2CAA6D27078F18442CE7C0CEC7EDD311D9`；stable.json 621 bytes / `F2DFE44881166BC3A12FB4DDFE8E7E60E682CBE977B5F46CFA8F47A9509405F3`。本机安装仍是 1.3.4 DLL 热修版。
-- Latest remaining issue/research: 创建并推送发布提交、发布 GitHub `v1.3.5`、同步 ModelScope Releases/Models、远端下载回读、本机最终部署和记录收尾。
+- Latest objective/state (2026-09-20 10:50): 1.3.5 已按正式流程发布完成；GitHub、ModelScope Releases、Models 备用 EXE、标签、远端分支和本机部署均已核验。
+- Latest files/Git: 分段页面高 DPI 列宽、开关比例、刷新按钮列宽与对齐修复已由发布提交 `070cd8b` 推送；`v1.3.5` 精确指向该提交。当前只剩本次发布收尾记录待提交。
+- Latest verification: 正式发布构建 0 警告/0 错误；Python 31/31、发布门禁 5/5、安装器五场景、更新器七场景、Backend 更新器 6/6；Backend 2026.09.19.1 审计 +0/~0/-0。GitHub 与 ModelScope 三资产实际下载及 Models 备用 EXE 哈希全部一致。
+- Latest deployment: 最终 EXE 16,989,156 bytes / `38C606EC69B59E3B8E620280753BEE632A3D25BF56155E94C1A048AF291F910E`；手动 ZIP 14,003,730 bytes / `B6893EB0C73791767EF1121868FBD9A430DDDD3D7182182D81B812C831896B74`；stable.json 621 bytes / `032B4502993A5BACBF1DEDA49BEC91C9950D08744CF6A202C1FA12A07DD0A6A2`。本机 EXE/DLL 已部署，EXE 返回 1.3.5；备份位于 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.5-before-final-release-deploy-20260920-104937`。
+- Latest remaining issue/research: 用户重启 3FUI 后继续目视确认分段页面在当前 DPI/窗口宽度下的最终效果；无发布阻塞。
 
 - Current objective: 完成 1.3.4 分段超分页的高 DPI 布局修复和真实 3FUI 视觉验收，同时保持处理逻辑与已发布资产不变。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
@@ -20,11 +20,11 @@ Updated by: Codex
 
 ## Active TODO
 
-- [ ] Task: 正式发布 1.3.5。
+- [x] Task: 正式发布 1.3.5。
   - Owner: Codex
-  - Status: 候选构建与全部门禁已通过，等待提交、双源发布、远端回读和本机最终部署。
-  - Verification: EXE/ZIP/stable.json 哈希已记录；Backend 2026.09.19.1 审计无变化，不发布新 Backend。
-  - Remaining: 推送发布提交与标签，上传 GitHub/ModelScope，逐项回读核验并收尾。
+  - Status: 发布提交 `070cd8b`、GitHub `v1.3.5`、ModelScope Releases/Models 和本机最终部署均完成。
+  - Verification: EXE/ZIP/stable.json 双源实际下载哈希一致；标签与远端 main 均指向 `070cd8b`；Backend 2026.09.19.1 审计无变化且未重复发布。
+  - Remaining: 仅待用户重启 3FUI 做最终视觉确认。
 
 - [ ] Task: 修复 1.3.4 分段超分页高 DPI 布局。
   - Owner: Codex / user
@@ -2198,3 +2198,13 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Verification: 分段专项测试 8/8、Python 全量 31/31；解决方案 Release 构建 0 警告/0 错误；`git diff --check` 通过。
 - Deployment: 确认相关进程数为 0 后备份并覆盖本机插件 DLL，源/目标 SHA-256 `CA53879719A714983A3E6C361C78681908A8DB702EA5C01CCF948EE571C6AEF4`，大小 4,667,392 bytes；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.4-before-segmented-refresh-align-20260920-101801`。
 - Git/next: 仍为源码、测试及两份 HandShake 记录 4 个未提交修改；用户重启 3FUI 确认按钮宽度和对齐后建议提交，不改写已发布 `v1.3.4`。
+
+### 2026-09-20 10:50 - Codex
+
+- Request: 用户授权按发布流程正式发布 1.3.5。
+- Version/build: `PluginVersion.vb` 与 CLI csproj 统一递增到 1.3.5；Release Notes 仅包含分段页面高 DPI 列宽、开关比例和刷新按钮对齐三项修复；1.3.4 已归档到历史版本。正式发布构建 0 警告/0 错误。
+- Gates: Python 31/31、发布门禁 5/5、安装器五场景、更新器七场景、Backend 更新器 6/6、`git diff --check` 均通过。Backend 2026.09.19.1 使用同目录基线/候选审计，结果 +0/~0/-0，因此未上传 Backend 资产或 channel。
+- Git/release: 发布提交 `070cd8b37d509f9f594c57f7968ca62a4b34ca63` 已推送 `fork/main`；GitHub 正式 Release `v1.3.5` 已创建，标签精确指向该提交；ModelScope Releases 和 Models 备用 EXE 已同步。
+- Remote verification: 最终 EXE 16,989,156 bytes / `38C606EC69B59E3B8E620280753BEE632A3D25BF56155E94C1A048AF291F910E`；手动 ZIP 14,003,730 bytes / `B6893EB0C73791767EF1121868FBD9A430DDDD3D7182182D81B812C831896B74`；stable.json 621 bytes / `032B4502993A5BACBF1DEDA49BEC91C9950D08744CF6A202C1FA12A07DD0A6A2`。GitHub API 摘要及实际下载、ModelScope Releases 三项实际下载、Models 备用 EXE 均一致。
+- Local deployment: 相关进程数为 0 时备份并覆盖本机 EXE/DLL；EXE 返回 1.3.5，DLL SHA-256 `9A7C658C68C921199323FF9030DAFC56CFDAD094D968299BD218243238299C63`；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.5-before-final-release-deploy-20260920-104937`。
+- Git/next: 下一步提交并推送本条发布记录，随后核对工作树干净；用户重启 3FUI 后做最终视觉验收。
