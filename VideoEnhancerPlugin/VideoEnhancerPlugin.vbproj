@@ -1,13 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
+  <PropertyGroup Label="Project">
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
+    <AssemblyName>videoenhancer</AssemblyName>
+    <RootNamespace />
+    <Version>1.3.5</Version>
     <IsPublishable>false</IsPublishable>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Compiler">
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
-    <AssemblyName>videoenhancer</AssemblyName>
-    <RootNamespace></RootNamespace>
     <OptionStrict>On</OptionStrict>
     <OptionExplicit>On</OptionExplicit>
     <OptionInfer>On</OptionInfer>
@@ -15,20 +19,25 @@
     <DisableImplicitNamespaceImports>true</DisableImplicitNamespaceImports>
     <NoWarn>$(NoWarn);WFO1000</NoWarn>
     <Deterministic>true</Deterministic>
-    <VideoEnhancerRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VideoEnhancerRepositoryRoot>
-    <PluginArtifactDirectory>$(MSBuildThisFileDirectory)obj\plugin-artifact\</PluginArtifactDirectory>
-    <PluginArtifactPath>$(PluginArtifactDirectory)videoenhancer.3fui.dll</PluginArtifactPath>
   </PropertyGroup>
 
-  <PropertyGroup>
-    <AdjacentHostRelease>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\FFmpegFreeUI\FFmpegFreeUI\bin\Release\net10.0-windows10.0.26100.0'))</AdjacentHostRelease>
-    <AdjacentHostDebug>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\..\FFmpegFreeUI\FFmpegFreeUI\bin\Debug\net10.0-windows10.0.26100.0'))</AdjacentHostDebug>
-    <HostBin Condition="'$(HostBin)' == '' and '$(VIDEOENHANCER_HOST_BIN)' != ''">$(VIDEOENHANCER_HOST_BIN)</HostBin>
-    <HostBin Condition="'$(HostBin)' == '' and Exists('$(AdjacentHostRelease)\FFmpegFreeUI.dll') and Exists('$(AdjacentHostRelease)\LakeUI.dll')">$(AdjacentHostRelease)</HostBin>
-    <HostBin Condition="'$(HostBin)' == '' and Exists('$(AdjacentHostDebug)\FFmpegFreeUI.dll') and Exists('$(AdjacentHostDebug)\LakeUI.dll')">$(AdjacentHostDebug)</HostBin>
+  <PropertyGroup Label="Paths">
+    <VideoEnhancerRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..'))\</VideoEnhancerRepositoryRoot>
+    <LayoutResourcePath>$(VideoEnhancerRepositoryRoot)videoenhancer-layout.json</LayoutResourcePath>
+    <PluginArtifactFileName>videoenhancer.3fui.dll</PluginArtifactFileName>
+    <PluginArtifactDirectory>$(MSBuildProjectDirectory)\obj\plugin-artifact\</PluginArtifactDirectory>
+    <PluginArtifactPath>$(PluginArtifactDirectory)$(PluginArtifactFileName)</PluginArtifactPath>
   </PropertyGroup>
 
-  <ItemGroup>
+  <PropertyGroup Label="Host discovery">
+    <AdjacentHostRelease>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\FFmpegFreeUI\FFmpegFreeUI\bin\Release\net10.0-windows10.0.26100.0'))</AdjacentHostRelease>
+    <AdjacentHostDebug>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..\..\FFmpegFreeUI\FFmpegFreeUI\bin\Debug\net10.0-windows10.0.26100.0'))</AdjacentHostDebug>
+    <HostBin Condition="'$(HostBin)' == '' And '$(VIDEOENHANCER_HOST_BIN)' != ''">$(VIDEOENHANCER_HOST_BIN)</HostBin>
+    <HostBin Condition="'$(HostBin)' == '' And Exists('$(AdjacentHostRelease)\FFmpegFreeUI.dll') And Exists('$(AdjacentHostRelease)\LakeUI.dll')">$(AdjacentHostRelease)</HostBin>
+    <HostBin Condition="'$(HostBin)' == '' And Exists('$(AdjacentHostDebug)\FFmpegFreeUI.dll') And Exists('$(AdjacentHostDebug)\LakeUI.dll')">$(AdjacentHostDebug)</HostBin>
+  </PropertyGroup>
+
+  <ItemGroup Label="Host references">
     <Reference Include="FFmpegFreeUI">
       <HintPath>$(HostBin)\FFmpegFreeUI.dll</HintPath>
       <Private>false</Private>
@@ -39,25 +48,29 @@
       <Private>false</Private>
       <ExternallyResolved>true</ExternallyResolved>
     </Reference>
-    <EmbeddedResource Include="$(VideoEnhancerRepositoryRoot)videoenhancer-layout.json"
+  </ItemGroup>
+
+  <ItemGroup Label="Resources">
+    <EmbeddedResource Include="$(LayoutResourcePath)"
                       LogicalName="videoenhancer-layout.json" />
   </ItemGroup>
 
-  <Target Name="ValidateHostAssemblies" BeforeTargets="ResolveAssemblyReferences">
+  <Target Name="ValidateHostAssemblies"
+          BeforeTargets="ResolveAssemblyReferences">
     <Error Condition="'$(HostBin)' == ''"
            Text="未找到 3FUI 宿主程序集。请传入 -p:HostBin=&lt;目录&gt;，或设置 VIDEOENHANCER_HOST_BIN；目录内必须包含 FFmpegFreeUI.dll 和 LakeUI.dll。" />
     <Error Condition="!Exists('$(HostBin)\FFmpegFreeUI.dll')"
            Text="HostBin 中缺少 FFmpegFreeUI.dll：$(HostBin)" />
     <Error Condition="!Exists('$(HostBin)\LakeUI.dll')"
            Text="HostBin 中缺少 LakeUI.dll：$(HostBin)" />
-    <Error Condition="!Exists('$(VideoEnhancerRepositoryRoot)videoenhancer-layout.json')"
-           Text="缺少布局资源：$(VideoEnhancerRepositoryRoot)videoenhancer-layout.json" />
+    <Error Condition="!Exists('$(LayoutResourcePath)')"
+           Text="缺少布局资源：$(LayoutResourcePath)" />
 
     <GetAssemblyIdentity AssemblyFiles="$(HostBin)\LakeUI.dll"
                          Condition="Exists('$(HostBin)\LakeUI.dll')">
       <Output TaskParameter="Assemblies" ItemName="_LakeUIIdentity" />
     </GetAssemblyIdentity>
-    <Error Condition="'@(_LakeUIIdentity)' != '' and ($([MSBuild]::VersionLessThan('%(_LakeUIIdentity.Version)', '5.1.0.0')) or $([MSBuild]::VersionGreaterThanOrEquals('%(_LakeUIIdentity.Version)', '6.0.0.0')))"
+    <Error Condition="'@(_LakeUIIdentity)' != '' And ($([MSBuild]::VersionLessThan('%(_LakeUIIdentity.Version)', '5.1.0.0')) Or $([MSBuild]::VersionGreaterThanOrEquals('%(_LakeUIIdentity.Version)', '6.0.0.0')))"
            Text="需要 LakeUI 5.1 或更新的 5.x 版本；当前为 %(_LakeUIIdentity.Version)：$(HostBin)\LakeUI.dll" />
     <Message Importance="high"
              Text="3FUI HostBin: $(HostBin)；LakeUI: %(_LakeUIIdentity.Version)" />
@@ -73,11 +86,11 @@
     <MakeDir Directories="$(PluginInstallDir)"
              Condition="'$(PluginInstallDir)' != ''" />
     <Copy SourceFiles="$(TargetPath)"
-          DestinationFiles="$(PluginInstallDir)\videoenhancer.3fui.dll"
+          DestinationFiles="$(PluginInstallDir)\$(PluginArtifactFileName)"
           SkipUnchangedFiles="true"
           Condition="'$(PluginInstallDir)' != ''" />
     <Message Importance="high"
-             Text="插件已安装到：$(PluginInstallDir)\videoenhancer.3fui.dll"
+             Text="插件已安装到：$(PluginInstallDir)\$(PluginArtifactFileName)"
              Condition="'$(PluginInstallDir)' != ''" />
   </Target>
 

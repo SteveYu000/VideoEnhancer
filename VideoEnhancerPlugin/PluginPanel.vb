@@ -660,12 +660,12 @@ Namespace videoenhancer
                 Dim manifest = Await PluginUpdater.FetchLatestManifestAsync()
                 If Not PluginUpdater.HasUpdate(manifest,
                     PluginConfig.ResolveInstalledExePath()) Then
-                    If Not silent Then ShowStatus("当前已是最新稳定版 v" & PluginVersion.Current, False)
+                    If Not silent Then ShowStatus("当前已是最新稳定版 v" & PluginUpdater.CurrentVersion, False)
                     Return
                 End If
 
                 Dim message = "VideoEnhancer " & manifest.Version & " 可用" &
-                    Environment.NewLine & "当前版本：" & PluginVersion.Current &
+                    Environment.NewLine & "当前版本：" & PluginUpdater.CurrentVersion &
                     Environment.NewLine & "更新包：" & FormatDownloadSize(manifest.Package.Size)
                 message &= Environment.NewLine & Environment.NewLine &
                     "下载完成并校验后会再次询问是否关闭并重启 3FUI。" & Environment.NewLine &
@@ -2447,7 +2447,7 @@ Namespace videoenhancer
             _lblStatus.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleLeft
             _lblStatus.Text = "<font color=#888888>就绪</font>"
             sectionStatus.AddAt(_lblStatus, 0, 0)
-            _btnCheckUpdates.Text = "检查更新 v" & PluginVersion.Current
+            _btnCheckUpdates.Text = "检查更新 v" & PluginUpdater.CurrentVersion
             _btnCheckUpdates.Dock = DockStyle.Fill
             _btnCheckUpdates.AutoSize = False
             _btnCheckUpdates.Margin = New Padding(12, 4, 0, 4)

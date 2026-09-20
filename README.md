@@ -3,7 +3,7 @@
 VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、RTX VSR / RTX Video HDR、图片推理和批处理能力。
 原作者：[user-wing](https://github.com/user-Wing/VideoEnhancer)
 
-当前版本：**1.3.2（2026-09-14 已发布）**
+当前稳定版本及发行日期以 [GitHub Releases](https://github.com/SteveYu000/VideoEnhancer/releases) 为准。
 
 ## 功能概览
 

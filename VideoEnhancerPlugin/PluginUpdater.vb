@@ -6,6 +6,7 @@ Imports System.Linq
 Imports System.Net
 Imports System.Net.Http
 Imports System.Net.Http.Headers
+Imports System.Reflection
 Imports System.Security.Cryptography
 Imports System.Text
 Imports System.Text.Json
@@ -57,9 +58,24 @@ Namespace videoenhancer
         Private Shared ReadOnly JsonOptions As New JsonSerializerOptions With {
             .PropertyNameCaseInsensitive = True
         }
+        ''' <summary>由 VideoEnhancerPlugin.vbproj 的 Version 生成程序集元数据后读取。</summary>
+        Public Shared ReadOnly Property CurrentVersion As String = ResolveCurrentVersion()
 
         Private Sub New()
         End Sub
+
+        Private Shared Function ResolveCurrentVersion() As String
+            Dim assembly = GetType(PluginUpdater).Assembly
+            Dim informational = assembly.
+                GetCustomAttribute(Of AssemblyInformationalVersionAttribute)()?.InformationalVersion
+            If Not String.IsNullOrWhiteSpace(informational) Then
+                ' SDK 可能附加 "+提交哈希"；更新清单只使用纯版本号。
+                Dim plus = informational.IndexOf("+"c)
+                Return If(plus > 0, informational.Substring(0, plus), informational)
+            End If
+            Dim assemblyVersion = assembly.GetName().Version
+            Return If(assemblyVersion Is Nothing, "0.0.0", assemblyVersion.ToString(3))
+        End Function
 
         ''' <summary>优先读取 GitHub 最新 Release；GitHub 不可达时读取 ModelScope stable.json。</summary>
         Public Shared Async Function FetchLatestManifestAsync() As Task(Of UpdateManifest)
@@ -143,12 +159,12 @@ Namespace videoenhancer
 
         Public Shared Function HasUpdate(manifest As UpdateManifest,
                                          Optional installedExePath As String = "") As Boolean
-            Dim currentVersion As Version = Nothing
+            Dim installedVersion As Version = Nothing
             Dim remoteVersion As Version = Nothing
-            If Not Version.TryParse(PluginVersion.Current, currentVersion) OrElse
+            If Not Version.TryParse(CurrentVersion, installedVersion) OrElse
                 Not Version.TryParse(manifest.Version, remoteVersion) Then Return False
-            If remoteVersion > currentVersion Then Return True
-            If remoteVersion < currentVersion OrElse manifest.Package Is Nothing OrElse
+            If remoteVersion > installedVersion Then Return True
+            If remoteVersion < installedVersion OrElse manifest.Package Is Nothing OrElse
                 String.IsNullOrWhiteSpace(installedExePath) OrElse Not File.Exists(installedExePath) Then Return False
 
             ' 同版本覆盖发布时，旧构建也必须能收到更新；新构建安装后哈希一致，不会循环提示。
@@ -325,13 +341,13 @@ Namespace videoenhancer
 
         Private Shared Function CreateClient(timeout As TimeSpan) As HttpClient
             Dim client As New HttpClient With {.Timeout = timeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("VideoEnhancer/" & PluginVersion.Current)
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("VideoEnhancer/" & CurrentVersion)
             Return client
         End Function
 
         Private Shared Function CreateGithubClient(timeout As TimeSpan) As HttpClient
             Dim client As New HttpClient With {.Timeout = timeout}
-            client.DefaultRequestHeaders.UserAgent.ParseAdd("VideoEnhancer/" & PluginVersion.Current)
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("VideoEnhancer/" & CurrentVersion)
             client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json")
             ' 私有仓库或需要提高 API 限频时使用；公开仓库不需要。
             Dim token = Environment.GetEnvironmentVariable("VIDEOENHANCER_UPDATE_GITHUB_TOKEN")

@@ -1,5 +1,5 @@
 ﻿param(
-    # 留空时自动读取 VideoEnhancerPlugin\PluginVersion.vb 的 Current（版本唯一人工维护点）。
+    # 留空时自动读取 VideoEnhancerPlugin.vbproj 的 Version。
     [string]$Version = '',
     # 留空时由 vbproj 读取 VIDEOENHANCER_HOST_BIN 或自动发现相邻 FFmpegFreeUI 输出。
     [string]$HostBin = '',
@@ -28,9 +28,19 @@ $ErrorActionPreference = 'Stop'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 $root = Split-Path -Parent $PSScriptRoot
 $artifactsRoot = Join-Path $root 'Artifacts'
-$pluginVersionFile = Join-Path $root 'VideoEnhancerPlugin\PluginVersion.vb'
+$pluginProject = Join-Path $root 'VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj'
 $cliProject = Join-Path $root 'cli\VideoEnhancer.csproj'
 $solution = Join-Path $root 'VideoEnhancer.slnx'
+
+function Get-ProjectVersion([string]$projectPath) {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.Load($projectPath)
+    $nodes = @($document.SelectNodes('/Project/PropertyGroup/Version'))
+    if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
+        throw "项目必须声明且只能声明一个 Version：$projectPath"
+    }
+    return $nodes[0].InnerText.Trim()
+}
 
 if (-not [string]::IsNullOrWhiteSpace($NotesFile)) {
     if (-not (Test-Path -LiteralPath $NotesFile -PathType Leaf)) {
@@ -86,19 +96,15 @@ if ($ValidateOnly) {
     exit 0
 }
 
-$pluginVersionText = [System.IO.File]::ReadAllText($pluginVersionFile, [System.Text.Encoding]::UTF8)
-if ($pluginVersionText -notmatch 'Public Const Current As String = "([^"]+)"') {
-    throw '无法从 PluginVersion.vb 读取 Current 版本号'
-}
-$sourceVersion = $Matches[1]
+$sourceVersion = Get-ProjectVersion $pluginProject
+$cliSourceVersion = Get-ProjectVersion $cliProject
 if (-not $Version) { $Version = $sourceVersion }
 
-$projectText = [System.IO.File]::ReadAllText($cliProject, [System.Text.Encoding]::UTF8)
-if ($pluginVersionText -notmatch ('Public Const Current As String = "' + [regex]::Escape($Version) + '"')) {
-    throw "PluginVersion.Current 为 $sourceVersion，与显式传入的发布版本 $Version 不一致"
+if ($sourceVersion -ne $Version) {
+    throw "VideoEnhancerPlugin.vbproj 的 Version 为 $sourceVersion，与发布版本 $Version 不一致"
 }
-if ($projectText -notmatch ('<Version>' + [regex]::Escape($Version) + '</Version>')) {
-    throw "VideoEnhancer.csproj 与发布版本 $Version 不一致；CLI 版本唯一来源是 csproj 的 <Version>"
+if ($cliSourceVersion -ne $Version) {
+    throw "VideoEnhancer.csproj 的 Version 为 $cliSourceVersion，与发布版本 $Version 不一致"
 }
 
 $publishArguments = @('publish', $solution, '-c', 'Release')

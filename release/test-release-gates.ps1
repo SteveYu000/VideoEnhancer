@@ -84,7 +84,7 @@ try {
         -BaseRoot $changedBase -TargetRoot $changedTarget `
         -BaseVersion 'base-1' -TargetVersion 'target-2' `
         -FullArchive $badArchive -OutputRoot (Join-Path $testRoot 'bad-output') `
-        -SentinelPaths 'backend/stable.py' 2>&1
+        -SentinelPaths 'backend/stable.py' -SevenZip $SevenZip 2>&1
     Assert-True ($LASTEXITCODE -ne 0) '与候选目录不一致的完整包必须被拒绝'
     Assert-True (($badOutput -join "`n").Contains('完整后端包')) '完整包拒绝原因不明确'
 

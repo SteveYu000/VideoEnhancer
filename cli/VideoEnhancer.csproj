@@ -1,17 +1,20 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
+  <PropertyGroup Label="Project">
     <TargetFramework>net10.0-windows</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
+    <OutputType>Exe</OutputType>
     <AssemblyName>videoenhancer</AssemblyName>
     <RootNamespace>VideoEnhancer</RootNamespace>
     <Version>1.3.5</Version>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Publish">
     <!-- 单文件自包含发布：双击后安装到 3FUI\Plugin\videoenhancer 子目录 -->
-    <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>true</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
     <!-- 压缩并裁剪未使用的 .NET 运行库；保留完全自包含，无需用户安装 .NET。 -->
     <PublishTrimmed>true</PublishTrimmed>
     <TrimMode>full</TrimMode>
@@ -24,20 +27,31 @@
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
-    <VideoEnhancerRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\'))</VideoEnhancerRepositoryRoot>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Paths">
+    <VideoEnhancerRepositoryRoot>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\..'))\</VideoEnhancerRepositoryRoot>
     <ArtifactsDirectory>$(VideoEnhancerRepositoryRoot)Artifacts\</ArtifactsDirectory>
-    <PluginArtifactPath>$(VideoEnhancerRepositoryRoot)VideoEnhancerPlugin\obj\plugin-artifact\videoenhancer.3fui.dll</PluginArtifactPath>
+    <PluginProjectPath>$(VideoEnhancerRepositoryRoot)VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj</PluginProjectPath>
+    <!-- 安装布局的固定文件名；运行时代码也以这两个名称定位便携组件。 -->
+    <PluginArtifactFileName>videoenhancer.3fui.dll</PluginArtifactFileName>
+    <InstalledExecutableFileName>videoenhancer.exe</InstalledExecutableFileName>
+    <PluginArtifactPath>$(VideoEnhancerRepositoryRoot)VideoEnhancerPlugin\obj\plugin-artifact\$(PluginArtifactFileName)</PluginArtifactPath>
+    <ManualInstallReadmePath>$(MSBuildProjectDirectory)\manual-install-readme.txt</ManualInstallReadmePath>
     <InstallerArtifactPath>$(ArtifactsDirectory)VideoEnhancerInstaller.exe</InstallerArtifactPath>
     <ManualPackagePath>$(ArtifactsDirectory)VideoEnhancer.zip</ManualPackagePath>
   </PropertyGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj"
+  <ItemGroup Label="Project references">
+    <ProjectReference Include="$(PluginProjectPath)"
                       ReferenceOutputAssembly="false"
                       PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup Label="Embedded resources">
     <!-- 双击安装时释放到所选 FFmpegFreeUI 程序旁的 plugin 目录。 -->
     <EmbeddedResource Include="$(PluginArtifactPath)"
-                      LogicalName="VideoEnhancer.Embedded.videoenhancer.3fui.dll" />
+                      LogicalName="VideoEnhancer.Embedded.$(PluginArtifactFileName)" />
     <EmbeddedResource Include="embedded-tools\aria2-next.exe"
                       LogicalName="VideoEnhancer.Embedded.aria2-next.exe" />
     <EmbeddedResource Include="embedded-tools\7za.exe"
@@ -58,8 +72,19 @@
                       LogicalName="VideoEnhancer.Embedded.model-capabilities.json" />
   </ItemGroup>
 
-  <Target Name="ValidateEmbeddedPlugin" BeforeTargets="CoreCompile"
+  <Target Name="ValidateEmbeddedPlugin"
+          BeforeTargets="CoreCompile"
           Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(PluginProjectPath)')"
+           Text="插件项目不存在：$(PluginProjectPath)" />
+    <XmlPeek XmlInputPath="$(PluginProjectPath)"
+             Query="/Project/PropertyGroup/Version/text()">
+      <Output TaskParameter="Result" ItemName="_PluginProjectVersion" />
+    </XmlPeek>
+    <Error Condition="'@(_PluginProjectVersion)' == ''"
+           Text="插件项目未声明 Version：$(PluginProjectPath)" />
+    <Error Condition="'@(_PluginProjectVersion)' != '$(Version)'"
+           Text="插件版本 @(_PluginProjectVersion) 与 CLI 版本 $(Version) 不一致；请同步修改两个项目文件的 Version。" />
     <Error Condition="!Exists('$(PluginArtifactPath)')"
            Text="插件产物不存在：$(PluginArtifactPath)。项目引用本应先构建 VideoEnhancerPlugin；请检查 HostBin 配置。" />
   </Target>
@@ -75,8 +100,8 @@
            Text="发布产物不存在：$(PublishedExecutable)" />
     <Error Condition="!Exists('$(PluginArtifactPath)')"
            Text="手动安装包缺少插件 DLL：$(PluginArtifactPath)" />
-    <Error Condition="!Exists('$(MSBuildThisFileDirectory)manual-install-readme.txt')"
-           Text="手动安装说明不存在：$(MSBuildThisFileDirectory)manual-install-readme.txt" />
+    <Error Condition="!Exists('$(ManualInstallReadmePath)')"
+           Text="手动安装说明不存在：$(ManualInstallReadmePath)" />
     <MakeDir Directories="$(ArtifactsDirectory)" />
     <Copy SourceFiles="$(PublishedExecutable)"
           DestinationFiles="$(InstallerArtifactPath)"
@@ -86,10 +111,10 @@
     <RemoveDir Directories="$(ManualPackageStage)" />
     <MakeDir Directories="$(ManualPackageStage)plugin\videoenhancer" />
     <Copy SourceFiles="$(PluginArtifactPath)"
-          DestinationFiles="$(ManualPackageStage)plugin\videoenhancer.3fui.dll" />
+          DestinationFiles="$(ManualPackageStage)plugin\$(PluginArtifactFileName)" />
     <Copy SourceFiles="$(PublishedExecutable)"
-          DestinationFiles="$(ManualPackageStage)plugin\videoenhancer\videoenhancer.exe" />
-    <Copy SourceFiles="$(MSBuildThisFileDirectory)manual-install-readme.txt"
+          DestinationFiles="$(ManualPackageStage)plugin\videoenhancer\$(InstalledExecutableFileName)" />
+    <Copy SourceFiles="$(ManualInstallReadmePath)"
           DestinationFiles="$(ManualPackageStage)手动安装说明.txt" />
     <ZipDirectory SourceDirectory="$(ManualPackageStage)"
                   DestinationFile="$(ManualPackagePath)"

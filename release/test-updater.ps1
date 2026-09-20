@@ -1,5 +1,5 @@
 param(
-    # 留空时自动读取 PluginVersion.vb 的当前版本。
+    # 留空时自动读取 VideoEnhancerPlugin.vbproj 的 Version。
     [string]$Version = '',
     # 开发阶段可显式传入刚构建的单文件 EXE；正式发布默认读取版本目录资产。
     [string]$Package = ''
@@ -7,10 +7,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Version) {
-    $text = [System.IO.File]::ReadAllText((Join-Path $root 'VideoEnhancerPlugin\PluginVersion.vb'), [System.Text.Encoding]::UTF8)
-    if ($text -notmatch 'Public Const Current As String = "([^"]+)"') { throw '无法从 PluginVersion.vb 读取版本号' }
-    $Version = $Matches[1]
+
+function Get-ProjectVersion([string]$projectPath) {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.Load($projectPath)
+    $nodes = @($document.SelectNodes('/Project/PropertyGroup/Version'))
+    if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
+        throw "项目必须声明且只能声明一个 Version：$projectPath"
+    }
+    return $nodes[0].InnerText.Trim()
+}
+
+$pluginVersion = Get-ProjectVersion (Join-Path $root 'VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj')
+$cliVersion = Get-ProjectVersion (Join-Path $root 'cli\VideoEnhancer.csproj')
+if (-not $Version) { $Version = $pluginVersion }
+if ($pluginVersion -ne $Version -or $cliVersion -ne $Version) {
+    throw "项目版本不一致：插件=$pluginVersion，CLI=$cliVersion，测试版本=$Version"
 }
 $artifactsRoot = Join-Path $root 'Artifacts'
 $updater = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'

@@ -1,15 +1,29 @@
 ﻿# 一键发布：把 outputs 中的产物发布到版本存档目录 + 各运行目录
 # 规则：每个版本更新都发布到 C:\Users\ARXChem\Documents\LakeUI-2\videoenhancer.3fui\<版本>\
 param(
-    # 留空时自动读取 PluginVersion.vb 的当前版本。
+    # 留空时自动读取 VideoEnhancerPlugin.vbproj 的 Version。
     [string]$Version = ''
 )
 $ErrorActionPreference = 'Stop'
 $base = Split-Path -Parent $MyInvocation.MyCommand.Path
-if (-not $Version) {
-    $text = [System.IO.File]::ReadAllText((Join-Path $base 'VideoEnhancerPlugin\PluginVersion.vb'), [System.Text.Encoding]::UTF8)
-    if ($text -notmatch 'Public Const Current As String = "([^"]+)"') { throw '无法从 PluginVersion.vb 读取版本号' }
-    $Version = $Matches[1]
+
+function Get-ProjectVersion([string]$projectPath) {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.Load($projectPath)
+    $nodes = @($document.SelectNodes('/Project/PropertyGroup/Version'))
+    if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
+        throw "项目必须声明且只能声明一个 Version：$projectPath"
+    }
+    return $nodes[0].InnerText.Trim()
+}
+
+$pluginProject = Join-Path $base 'VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj'
+$cliProject = Join-Path $base 'cli\VideoEnhancer.csproj'
+$pluginVersion = Get-ProjectVersion $pluginProject
+$cliVersion = Get-ProjectVersion $cliProject
+if (-not $Version) { $Version = $pluginVersion }
+if ($pluginVersion -ne $Version -or $cliVersion -ne $Version) {
+    throw "项目版本不一致：插件=$pluginVersion，CLI=$cliVersion，部署版本=$Version"
 }
 $archiveRoot = 'C:\Users\ARXChem\Documents\LakeUI-2\videoenhancer.3fui'
 $archive = Join-Path $archiveRoot $Version
