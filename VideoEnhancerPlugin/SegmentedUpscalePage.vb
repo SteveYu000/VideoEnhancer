@@ -91,6 +91,22 @@ Namespace videoenhancer
             Return value = "ffmpeg" OrElse value = "anime4k"
         End Function
 
+        ' 分段表头与数据行共用同一组宽度，避免高 DPI 下标题换行或输入值被裁切。
+        Private Const SegmentBoundaryColumnWidth As Single = 156.0F
+        Private Const SegmentTargetSizeColumnWidth As Single = 116.0F
+        Private Const SegmentActionColumnWidth As Single = 86.0F
+        Private Const SegmentColumnGap As Single = 12.0F
+
+        Private Shared Function CreateSegmentGridPanel() As ModernHorizontalPanel
+            Return New ModernHorizontalPanel(
+                SegmentBoundaryColumnWidth, SegmentColumnGap,
+                SegmentBoundaryColumnWidth, SegmentColumnGap,
+                -1.0F, SegmentColumnGap,
+                SegmentTargetSizeColumnWidth, SegmentColumnGap,
+                SegmentTargetSizeColumnWidth, SegmentColumnGap,
+                SegmentActionColumnWidth)
+        End Function
+
         Private Sub BuildOfficialSegmentedPage()
             _pageSegmented.Dock = DockStyle.Fill
             _pageSegmented.LayoutMode = ModernPanel.LayoutModeEnum.Absolute
@@ -118,11 +134,30 @@ Namespace videoenhancer
             Dim videoField = CreateOfficialField("视频", _cmbSegmentVideo)
             ConfigureSecondaryButton(_btnSegmentRefresh)
             _btnSegmentRefresh.Text = "刷新视频列表"
-            _btnSegmentRefresh.Dock = DockStyle.Fill
-            _btnSegmentRefresh.Margin = New Padding(0, 6, 0, 6)
+            _btnSegmentRefresh.Dock = DockStyle.None
+            _btnSegmentRefresh.Anchor = AnchorStyles.Left Or AnchorStyles.Right Or AnchorStyles.Bottom
+            _btnSegmentRefresh.Margin = Padding.Empty
             AddHandler _btnSegmentRefresh.Click, Sub(sender, e) RefreshSegmentedVideos()
-            AddWorkbenchControl(root, videoField, 70, 76, 0.0F, 0.78F, 0, -12)
-            AddWorkbenchControl(root, _btnSegmentRefresh, 70, 76, 0.78F, 1.0F)
+            Dim refreshField As New ModernPanel With {
+                .Margin = Padding.Empty,
+                .Padding = Padding.Empty,
+                .BackColor = Color.Transparent,
+                .BackColor1 = Color.Transparent,
+                .BorderSize = 0
+            }
+            refreshField.Controls.Add(_btnSegmentRefresh)
+            Dim arrangeRefresh =
+                Sub()
+                    ' 与左侧字段编辑器共用 31px 标题占位，确保按钮上下边缘和文件框对齐。
+                    _btnSegmentRefresh.SetBounds(0, 31, refreshField.ClientSize.Width,
+                        Math.Max(32, refreshField.ClientSize.Height - 34))
+                End Sub
+            AddHandler refreshField.Layout, Sub(sender, e) arrangeRefresh()
+            arrangeRefresh()
+            Dim videoRow As New ModernHorizontalPanel(-1.0F, 12.0F, 180.0F)
+            videoRow.AddColumn(videoField, 0)
+            videoRow.AddColumn(refreshField, 2)
+            AddWorkbenchRow(root, videoRow, 70, 76)
 
             ConfigureCombo(_cmbSegmentMode)
             _cmbSegmentMode.Items.Add("按秒（默认，断点自动吸附关键帧）")
@@ -134,17 +169,24 @@ Namespace videoenhancer
             AddHandler _switchSegmented.CheckedChanged, AddressOf OnSegmentedSwitchChanged
             _lblSegmentedSwitch.AutoSize = False
             _lblSegmentedSwitch.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleLeft
-            Dim switchRow As New ModernHorizontalPanel(150.0F, 12.0F, 60.0F, 16.0F, -1.0F, 12.0F, 150.0F)
             Dim switchCaption = CreateOfficialCaption("分段总开关")
             switchCaption.Dock = DockStyle.Fill
             switchCaption.TextAlign = ContentAlignment.MiddleLeft
+            Dim switchCaptionWidth = Math.Max(132,
+                TextRenderer.MeasureText(switchCaption.Text, switchCaption.Font).Width + 12)
+            Dim switchRow As New ModernHorizontalPanel(
+                CSng(switchCaptionWidth), 10.0F, 42.0F, 14.0F, -1.0F, 12.0F, 150.0F)
             _switchSegmented.Dock = DockStyle.None
-            _switchSegmented.Anchor = AnchorStyles.Left
-            _switchSegmented.Margin = New Padding(0, 16, 0, 0)
+            _switchSegmented.Anchor = AnchorStyles.None
+            _switchSegmented.Margin = Padding.Empty
+            _lblSegmentedSwitch.Dock = DockStyle.Fill
+            _lblSegmentedSwitch.Margin = Padding.Empty
             ConfigurePrimaryButton(_btnSegmentAdd)
             _btnSegmentAdd.Text = "＋ 添加断点"
-            _btnSegmentAdd.Dock = DockStyle.Fill
-            _btnSegmentAdd.Margin = New Padding(0, 6, 0, 6)
+            _btnSegmentAdd.Dock = DockStyle.None
+            _btnSegmentAdd.Anchor = AnchorStyles.None
+            _btnSegmentAdd.Size = New Size(138, 38)
+            _btnSegmentAdd.Margin = Padding.Empty
             AddHandler _btnSegmentAdd.Click, AddressOf OnAddSegment
             switchRow.AddColumn(switchCaption, 0)
             switchRow.AddColumn(_switchSegmented, 2)
@@ -156,19 +198,24 @@ Namespace videoenhancer
             AddHandler _switchMixedSegmentBackends.CheckedChanged, AddressOf OnMixedSegmentBackendsChanged
             _lblMixedSegmentBackends.AutoSize = False
             _lblMixedSegmentBackends.TextAlign = HtmlColorLabel.TextAlignEnum.MiddleLeft
-            Dim mixedBackendRow As New ModernHorizontalPanel(210.0F, 12.0F, 60.0F, 16.0F, -1.0F)
             Dim mixedBackendCaption = CreateOfficialCaption("测试功能：跨模型后端混用")
             mixedBackendCaption.Dock = DockStyle.Fill
             mixedBackendCaption.TextAlign = ContentAlignment.MiddleLeft
+            Dim mixedBackendCaptionWidth = Math.Max(230,
+                TextRenderer.MeasureText(mixedBackendCaption.Text, mixedBackendCaption.Font).Width + 12)
+            Dim mixedBackendRow As New ModernHorizontalPanel(
+                CSng(mixedBackendCaptionWidth), 10.0F, 42.0F, 14.0F, -1.0F)
             _switchMixedSegmentBackends.Dock = DockStyle.None
-            _switchMixedSegmentBackends.Anchor = AnchorStyles.Left
-            _switchMixedSegmentBackends.Margin = New Padding(0, 16, 0, 0)
+            _switchMixedSegmentBackends.Anchor = AnchorStyles.None
+            _switchMixedSegmentBackends.Margin = Padding.Empty
+            _lblMixedSegmentBackends.Dock = DockStyle.Fill
+            _lblMixedSegmentBackends.Margin = Padding.Empty
             mixedBackendRow.AddColumn(mixedBackendCaption, 0)
             mixedBackendRow.AddColumn(_switchMixedSegmentBackends, 2)
             mixedBackendRow.AddColumn(_lblMixedSegmentBackends, 4)
             AddWorkbenchRow(root, mixedBackendRow, 290, 54)
 
-            Dim header As New ModernHorizontalPanel(90.0F, 10.0F, 90.0F, 10.0F, -1.0F, 10.0F, 90.0F, 10.0F, 90.0F, 10.0F, 74.0F)
+            Dim header = CreateSegmentGridPanel()
             For Each caption In New String() {"入点（秒/帧）", "出点（秒/帧）", "处理方式", "目标宽", "目标高", "操作"}
                 Dim label = CreateOfficialCaption(caption)
                 label.Dock = DockStyle.Fill
@@ -849,12 +896,11 @@ Namespace videoenhancer
                     deleteButton.Tag = index
                     AddHandler deleteButton.Click, AddressOf OnDeleteSegment
 
-                    Dim rowPanel As New ModernHorizontalPanel(90.0F, 10.0F, 90.0F, 10.0F, -1.0F, 10.0F, 90.0F, 10.0F, 90.0F, 10.0F, 74.0F) With {
-                        .Location = New Point(8, 8 + index * 58),
-                        .Height = 54,
-                        .Width = Math.Max(720, _segmentRowsPanel.ClientSize.Width - 24),
-                        .Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
-                    }
+                    Dim rowPanel = CreateSegmentGridPanel()
+                    rowPanel.SetBounds(
+                        8, 8 + index * 58,
+                        Math.Max(720, _segmentRowsPanel.ClientSize.Width - 24), 54)
+                    rowPanel.Anchor = AnchorStyles.Top Or AnchorStyles.Left Or AnchorStyles.Right
                     For Each textBox In New ModernTextBox() {row.StartBox, row.EndBox, row.WidthBox, row.HeightBox}
                         textBox.Dock = DockStyle.Fill
                         textBox.Margin = New Padding(0, 6, 0, 6)

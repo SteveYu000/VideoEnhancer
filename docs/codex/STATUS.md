@@ -1,17 +1,17 @@
 # Project Status
 
-Last updated: 2026-09-19 22:36
+Last updated: 2026-09-20 10:30
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest objective/state (2026-09-19 22:36): PR #4、#5 已安全合并；1.3.4 与 Backend 2026.09.19.1 已完成正式发布、双源回读和本机部署，标签 `v1.3.4` 指向 `68dd75e`。
-- Latest files/Git: 插件/CLI 1.3.4、发布说明与版本记录已进入主线。Backend 2026.09.19.1 严格基于线上 2026.09.12.1，仅替换 `rve-image-backend.py`、`rve-segmented-backend.py`，审计 +0/~2/-0。
-- Latest verification: 解决方案 build/publish 0/0；Python 31/31；发布门禁 5/5、安装器 5 场景、更新器 7 场景、Backend 更新器 6/6；Backend 全量包 29,710 文件逐文件一致。GitHub 与 ModelScope 本体资产实际下载回读一致，Backend 服务端 LFS 哈希及 channel/patch 实际下载回读一致。
-- Latest deployment: 本机 EXE/DLL 已备份并覆盖；EXE 16,988,813 bytes / `75517B1B8F2DA9281CB9690AE1C2BD5D88A58AFE26AC51C9A99A0666B620357A`，DLL 4,666,880 bytes / `B1BE973D5C0C0E7AC67E03150075452181A88C9BC7774FDDDDB4814080A4393D`，EXE 返回 1.3.4；Backend 增量更新后状态为 current 2026.09.19.1。
-- Latest remaining issue/research: 用户重启 3FUI 后实机验收秒/帧切换、关键帧吸附、Anime4K shader、暂停/停止与长视频音画同步；源码/远端发布无已知阻塞。
+- Latest objective/state (2026-09-20 10:30): 用户授权按正式流程发布 1.3.5；版本源、Release Notes、版本记录和正式候选资产已准备，全套门禁通过，下一步创建发布提交并同步 GitHub/ModelScope。
+- Latest files/Git: 分段页面高 DPI 列宽、开关比例、刷新按钮列宽与对齐修复已纳入 1.3.5；`PluginVersion.vb` 和 CLI csproj 已统一为 1.3.5，1.3.4 已归档到版本历史。当前尚未提交或上传。
+- Latest verification: 正式发布构建 0 警告/0 错误；Python 31/31、发布门禁 5/5、安装器五场景、更新器七场景、Backend 更新器 6/6；Backend 2026.09.19.1 审计 +0/~0/-0。
+- Latest deployment: 1.3.5 候选 EXE 16,989,148 bytes / `B006FC7BE01E49053480262FFAD8A16EFE97EA2A19C4ACC548D1111B9187D4FF`；手动 ZIP 14,003,722 bytes / `A447296BDD6210D0DB9FE55775ED0B2CAA6D27078F18442CE7C0CEC7EDD311D9`；stable.json 621 bytes / `F2DFE44881166BC3A12FB4DDFE8E7E60E682CBE977B5F46CFA8F47A9509405F3`。本机安装仍是 1.3.4 DLL 热修版。
+- Latest remaining issue/research: 创建并推送发布提交、发布 GitHub `v1.3.5`、同步 ModelScope Releases/Models、远端下载回读、本机最终部署和记录收尾。
 
-- Current objective: 在保持 RTX/HDR、更新器与旧安装兼容性的前提下，完成 PR #4 便携目录与 PR #5 分段超分增强的真实 3FUI 验收。
+- Current objective: 完成 1.3.4 分段超分页的高 DPI 布局修复和真实 3FUI 视觉验收，同时保持处理逻辑与已发布资产不变。
 - Current state: 原矩阵两个 GIMM FAIL_EXIT 已定位为 DAT2/AniToon-RPLKSRL CUDA FP16 超分 NaN 并以 FP32 规则修复，两个组合各 7 帧哈希不同。RTX sidecar 现通过命名管道输出 NV12/P010/X2BGR10 原始帧，宿主 FFmpeg 执行用户 `ffmpeg-settings`；失败会清理零字节/部分输出；低分辨率输入自动走软件解码上传 D3D11。1.3.1、模型补全和手动安装包均已发布。
 - Current verification: sidecar 单测 89/89；模型规则单测 5/5；RTX 编码专项 8/8（HQ/UHQ×MKV/MP4、libx264、libx265、libsvtav1、精确 map、H.264/P010 门禁）通过；RTX VSR 专项 18/18、HDR 相 15/15 通过。最终安装版用《缎带英雄》1080p 真实 72 帧样本按 p7/uhq/vbr/cq28/P010 原参数输出 3840x2160 HEVC Main10 yuv420p10le、72/72 帧，日志确认最终 FFmpeg 为 PATH 中的 8.1.2 full build。
 - Last active agent: Codex
@@ -19,6 +19,18 @@ Updated by: Codex
 - Next recommended step: 用户从当前 `main` 构建/部署候选版本，在真实 3FUI 中重点验收分段页面、关键帧断点、Anime4K、暂停/停止和长视频音画同步；确认后再按递增版本发布。
 
 ## Active TODO
+
+- [ ] Task: 正式发布 1.3.5。
+  - Owner: Codex
+  - Status: 候选构建与全部门禁已通过，等待提交、双源发布、远端回读和本机最终部署。
+  - Verification: EXE/ZIP/stable.json 哈希已记录；Backend 2026.09.19.1 审计无变化，不发布新 Backend。
+  - Remaining: 推送发布提交与标签，上传 GitHub/ModelScope，逐项回读核验并收尾。
+
+- [ ] Task: 修复 1.3.4 分段超分页高 DPI 布局。
+  - Owner: Codex / user
+  - Status: 两轮源码修复、自动化验证和本机 DLL 部署已完成；第二轮将刷新按钮列加宽至 180px，并用与左侧文件框相同的编辑区坐标和高度对齐。
+  - Verification: Release 构建 0/0，专项 8/8、Python 31/31；本机 144 DPI 探针已确认上一轮表格与开关尺寸，本轮按钮与文件框共用 `Y=31`、`Height=max(32, ClientHeight-34)`。
+  - Remaining: 用户重启 3FUI 视觉验收刷新按钮；通过后提交，若对外发布则使用高于 1.3.4 的新补丁版本。
 
 - [x] Task: 正式发布 1.3.4 与 Backend 2026.09.19.1。
   - Owner: Codex
@@ -2168,3 +2180,21 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Local deployment: 无相关进程运行时备份并覆盖 EXE/DLL；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.4-before-final-release-deploy-20260919-223501`。EXE 返回 1.3.4，DLL/EXE 源目标哈希一致；正式通道 Backend 增量更新成功，最终状态 current 2026.09.19.1，NCNN 环境检查全部通过。
 - Catalog: 安装版下载清单 96 项，`Plugin/videoenhancer.exe` 恰好 1 项，`PotPlayer.7z` 为 0 项。
 - Remaining: 用户重启 3FUI 后验收新增分段 UI、Anime4K、暂停/停止和长视频音画同步；记录提交推送后核对工作树干净。
+
+### 2026-09-20 09:53 - Codex
+
+- Request: 用户在 3FUI 截图中标出分段超分页四处问题：刷新视频列表按钮过大、跨模型后端标题列不足、入/出点等表格列宽不足、开关比例应与超分工作台 DPI 缩放一致。
+- Orientation/Git: 按 HandShake 2.1.0-beta 读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md` 与完整协议；`git pull --ff-only` 为 Already up to date，起始 `main`/`fork/main` 均为 `60cd313`，工作树干净。本次为同工具发布后续作，不覆写 `v1.3.4`。
+- Implementation: 视频选择行改为弹性主列、12px 间距、150px 操作列，刷新按钮固定 138×38 并居中；分段总开关和跨后端开关改为与 `BuildOfficialModeHeader` 相同的 42px 开关列、居中锚定和空 Margin；标题列按实际字体测量并留 12px；表头与数据行共用 `CreateSegmentGridPanel`，入/出点 156px、目标宽高 116px、操作 86px、间距 12px。
+- Verification: `dotnet build VideoEnhancer.slnx -c Release -p:HostBin=...` 0 警告/0 错误；分段相关契约测试 8/8、全量 Python 31/31；本机 LakeUI 5.9 运行时布局探针在 144 DPI 下确认表头全部容纳、处理方式弹性列 710px、刷新按钮 138×38、开关 42×30；`git diff --check` 通过。
+- Deployment: 相关进程数 0 时备份并覆盖本机 `videoenhancer.3fui.dll`，源/目标 SHA-256 `AB8640BC80E669D69568790D24223BFDBBB25ED43B33800DEE7839B9A9C64238`，EXE 保持 1.3.4；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.4-before-segmented-layout-fix-20260920-095313`。
+- Git/next: 当前源码、测试及两份 HandShake 记录尚未提交/推送；用户重启 3FUI 视觉验收后再提交，若发布必须递增版本，不能覆盖 `v1.3.4`。
+
+### 2026-09-20 10:18 - Codex
+
+- Request: 用户第二张实机截图指出刷新视频列表按钮列仍偏窄，且按钮应与左侧视频文件框对齐。
+- Orientation/Git: 继续按 HandShake 2.1.0-beta 读取完整技能、协议、`docs/codex/INDEX.md` 与 `STATUS.md`；`git pull --ff-only` 为 Already up to date，保留上一轮 4 个预期未提交文件。
+- Implementation: 视频行操作列由 150px 扩至 180px；增加透明 `refreshField` 容器，并让按钮使用与 `CreateOfficialField` 编辑器完全相同的 `Y=31` 和 `Height=max(32, ClientHeight-34)`，消除此前在整行垂直居中导致的上移。
+- Verification: 分段专项测试 8/8、Python 全量 31/31；解决方案 Release 构建 0 警告/0 错误；`git diff --check` 通过。
+- Deployment: 确认相关进程数为 0 后备份并覆盖本机插件 DLL，源/目标 SHA-256 `CA53879719A714983A3E6C361C78681908A8DB702EA5C01CCF948EE571C6AEF4`，大小 4,667,392 bytes；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.4-before-segmented-refresh-align-20260920-101801`。
+- Git/next: 仍为源码、测试及两份 HandShake 记录 4 个未提交修改；用户重启 3FUI 确认按钮宽度和对齐后建议提交，不改写已发布 `v1.3.4`。
