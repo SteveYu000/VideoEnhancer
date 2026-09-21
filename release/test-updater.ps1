@@ -41,7 +41,7 @@ function Invoke-BurnLayout([string]$installer, [string]$layoutRoot, [string]$hos
     $startInfo.RedirectStandardError = $true
     foreach ($argument in @(
             '-quiet', '-norestart', '-layout', $layoutRoot,
-            "INSTALLFOLDER=$hostRoot", 'SKIPLEGACYCLEANUP=1')) {
+            "InstallFolder=$hostRoot", 'SKIPLEGACYCLEANUP=1')) {
         $startInfo.ArgumentList.Add($argument)
     }
     $process = [System.Diagnostics.Process]::Start($startInfo)
@@ -85,7 +85,7 @@ $msi = Get-Content -Raw -Encoding UTF8 $msiPath
 Assert-Contains $updater @(
     'Return remoteVersion > installedVersion',
     '.UseShellExecute = True',
-    'startInfo.ArgumentList.Add("INSTALLFOLDER=" & hostRoot)',
+    'startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)',
     'Path.GetExtension(installer).Equals(".exe"',
     'SHA256.HashData(stream)') '插件更新器'
 Assert-NotContains $updater @(
@@ -103,11 +103,11 @@ Assert-NotContains $program @(
     '--wait-pid',
     '--restart-exe') 'CLI'
 Assert-Contains $bundle @(
-    'Name="INSTALLFOLDER"',
+    'Name="InstallFolder"',
     'Persisted="yes"',
     'bal:Overridable="yes"',
     '<MsiProperty Name="THREEFUIROOT"',
-    'Value="[INSTALLFOLDER]"') 'Burn Bundle'
+    'Value="[InstallFolder]"') 'Burn Bundle'
 Assert-Contains $msi @(
     'Name="InstallRoot"',
     'Value="[THREEFUIROOT]"',
@@ -127,7 +127,7 @@ try {
     $selectedHost = Join-Path $resolvedTest 'FFmpegFreeUI with spaces'
     New-Item -ItemType Directory -Force -Path $layoutRoot, $selectedHost | Out-Null
     $exitCode = Invoke-BurnLayout $Package $layoutRoot $selectedHost
-    if ($exitCode -ne 0) { throw "带 INSTALLFOLDER 的 Burn layout 失败，退出码：$exitCode" }
+    if ($exitCode -ne 0) { throw "带 InstallFolder 的 Burn layout 失败，退出码：$exitCode" }
     $laidOutPackage = Join-Path $layoutRoot ([System.IO.Path]::GetFileName($Package))
     if (-not (Test-Path -LiteralPath $laidOutPackage -PathType Leaf)) {
         throw "Burn 更新安装器没有生成布局输出：$laidOutPackage"

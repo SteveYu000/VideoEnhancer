@@ -105,13 +105,30 @@ class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
         package = (ROOT / "installer" / "Package" / "Package.wxs").read_text(
             encoding="utf-8-sig"
         )
+        theme = (ROOT / "installer" / "Bundle" / "VideoEnhancerTheme.xml").read_text(
+            encoding="utf-8-sig"
+        )
+        localization = (
+            ROOT / "installer" / "Bundle" / "VideoEnhancerTheme.zh-CN.wxl"
+        ).read_text(encoding="utf-8-sig")
         program = (CLI / "Program.cs").read_text(encoding="utf-8-sig")
         self.assertIn("Return remoteVersion > installedVersion", updater)
         self.assertIn(".UseShellExecute = True", updater)
         self.assertIn(
-            'startInfo.ArgumentList.Add("INSTALLFOLDER=" & hostRoot)', updater
+            'startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)', updater
         )
-        self.assertIn('Name="INSTALLFOLDER"', bundle)
+        self.assertIn('Name="InstallFolder"', bundle)
+        self.assertNotIn('[ProgramFiles64Folder]FFmpegFreeUI', bundle)
+        self.assertIn('Variable="InstallFolder"', bundle)
+        self.assertIn('Value="InstallRoot"', bundle)
+        self.assertIn('Value=""', bundle)
+        self.assertIn('Condition="NOT InstallFolder"', bundle)
+        self.assertIn('VisibleCondition="InstallFolder"', theme)
+        self.assertIn(
+            '<BrowseDirectoryAction VariableName="InstallFolder"', theme
+        )
+        self.assertIn('Culture="zh-CN" Language="2052"', localization)
+        self.assertIn("首次安装必须先选择包含 FFmpegFreeUI.exe", localization)
         self.assertIn('Persisted="yes"', bundle)
         self.assertIn('bal:Overridable="yes"', bundle)
         self.assertIn('<MsiProperty Name="THREEFUIROOT"', bundle)

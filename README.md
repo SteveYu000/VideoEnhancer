@@ -54,7 +54,7 @@ stable.json
 
 1. 安装或准备可运行的 3FUI。
 2. 从 GitHub Release 下载 `VideoEnhancer-<version>-win-x64.exe`，无需手动改名或移动。
-3. 双击版本化 EXE，先打开“选项（Options）”，选择包含 3FUI 主程序的目录，再开始安装；安装器会创建 `Plugin\videoenhancer`，安装固定名称 `videoenhancer.exe` 和独立下载组件，并将插件 DLL 放在 `Plugin` 根目录。
+3. 双击版本化 EXE。首次安装不预设固定目录，“安装”按钮会保持隐藏；点击“选择目录”，选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录后才能安装。安装器会创建 `Plugin\videoenhancer`，安装固定名称 `videoenhancer.exe` 和独立下载组件，并将插件 DLL 放在 `Plugin` 根目录。后续安装会从项目注册表键回填上次选择的位置，正常卸载会删除该记录。
 4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 
@@ -171,7 +171,7 @@ AerithDream/VideoEnhancer-Models
 2. GitHub 检查失败时，从 ModelScope `AerithDream/VideoEnhancer-Releases` 读取 `stable.json`。
 3. 下载更新包时优先使用 ModelScope 镜像，失败后使用 GitHub Release 资产。
 4. 下载完成后校验 EXE 大小和 SHA-256。
-5. 插件把已校验的 WiX Burn 安装器以 `INSTALLFOLDER=<当前 3FUI 目录>` 启动，然后关闭 3FUI。
+5. 插件把已校验的 WiX Burn 安装器以 `InstallFolder=<当前 3FUI 目录>` 启动，然后关闭 3FUI。
 6. 用户确认安装/UAC；内嵌 MSI 升级运行 EXE、插件 DLL 和独立组件，并安全迁移旧平铺目录、清理旧配置残留。安装失败由 Windows Installer 回滚。
 7. 安装完成后重新启动 3FUI。
 

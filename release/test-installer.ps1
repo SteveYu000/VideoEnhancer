@@ -82,11 +82,31 @@ $pluginDll = Join-Path $root 'VideoEnhancerPlugin\obj\plugin-artifact\videoenhan
 $aria2Next = Join-Path $root "cli\obj\third-party\aria2-next\$aria2NextVersion\aria2-next.exe"
 $packageSource = Join-Path $root 'installer\Package\Package.wxs'
 $bundleSource = Join-Path $root 'installer\Bundle\Bundle.wxs'
+$bundleProject = Join-Path $root 'installer\Bundle\VideoEnhancer.Bundle.wixproj'
+$bundleTheme = Join-Path $root 'installer\Bundle\VideoEnhancerTheme.xml'
+$bundleLocalization = Join-Path $root 'installer\Bundle\VideoEnhancerTheme.zh-CN.wxl'
 
-foreach ($required in @($runtimeExe, $pluginDll, $aria2Next, $packageSource, $bundleSource)) {
+foreach ($required in @(
+        $runtimeExe, $pluginDll, $aria2Next, $packageSource, $bundleSource,
+        $bundleProject, $bundleTheme, $bundleLocalization)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "缺少安装门禁输入：$required"
     }
+}
+
+$bundleProjectDocument = [System.Xml.XmlDocument]::new()
+$bundleProjectDocument.Load($bundleProject)
+$wixSdkParts = ([string]$bundleProjectDocument.Project.Sdk).Split('/', 2)
+if ($wixSdkParts.Count -ne 2 -or $wixSdkParts[0] -ne 'WixToolset.Sdk') {
+    throw "无法从 Bundle 工程确定 WiX SDK 版本：$($bundleProjectDocument.Project.Sdk)"
+}
+$nugetPackages = [Environment]::GetEnvironmentVariable('NUGET_PACKAGES')
+if ([string]::IsNullOrWhiteSpace($nugetPackages)) {
+    $nugetPackages = Join-Path ([Environment]::GetFolderPath('UserProfile')) '.nuget\packages'
+}
+$wixTool = Join-Path $nugetPackages "wixtoolset.sdk\$($wixSdkParts[1])\tools\net472\x64\wix.exe"
+if (-not (Test-Path -LiteralPath $wixTool -PathType Leaf)) {
+    throw "缺少 WiX SDK 审计工具：$wixTool"
 }
 
 $runtimeVersion = ((& $runtimeExe --version) | Select-Object -First 1).Trim()
@@ -108,7 +128,7 @@ try {
     New-Item -ItemType Directory -Force -Path $layoutRoot | Out-Null
     $layoutExitCode = Invoke-NativeProcess $Installer @(
         '-quiet', '-norestart', '-layout', $layoutRoot,
-        "INSTALLFOLDER=$(Join-Path $resolvedTest 'selected-host')",
+        "InstallFolder=$(Join-Path $resolvedTest 'selected-host')",
         'SKIPLEGACYCLEANUP=1')
     if ($layoutExitCode -ne 0) { throw "Burn layout 失败，退出码：$layoutExitCode" }
     $laidOutInstaller = Join-Path $layoutRoot ([System.IO.Path]::GetFileName($Installer))
@@ -118,6 +138,45 @@ try {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $laidOutInstaller).Hash -ne
         (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash) {
         throw 'Burn layout 导出的安装包哈希不一致'
+    }
+
+    # 直接审计最终 Burn：首次路径为空、注册表回填、中文主题和选择目录门禁必须都进入成品。
+    $burnPayloadRoot = Join-Path $resolvedTest 'burn-payloads'
+    $burnBaRoot = Join-Path $resolvedTest 'burn-ba'
+    New-Item -ItemType Directory -Force -Path $burnPayloadRoot,$burnBaRoot | Out-Null
+    $extractExitCode = Invoke-NativeProcess $wixTool @(
+        'burn', 'extract', $Installer, '-o', $burnPayloadRoot, '-oba', $burnBaRoot)
+    if ($extractExitCode -ne 0) { throw "Burn 提取审计失败，退出码：$extractExitCode" }
+    $burnManifestPath = Join-Path $burnBaRoot 'manifest.xml'
+    $compiledThemePath = Join-Path $burnBaRoot 'thm.xml'
+    $compiledLocalizationPath = Join-Path $burnBaRoot 'thm.wxl'
+    $compiledLicensePath = Join-Path $burnBaRoot 'license.rtf'
+    foreach ($required in @(
+            $burnManifestPath, $compiledThemePath, $compiledLocalizationPath, $compiledLicensePath)) {
+        if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
+            throw "Burn 成品缺少 UI 资源：$required"
+        }
+    }
+    Assert-SourceContains $burnManifestPath @(
+        '<Variable Id="InstallFolder" Value="" Type="string"',
+        '<RegistrySearch Id="PreviousInstallRootSearch" Variable="InstallFolder"',
+        'Key="Software\VideoEnhancer" Value="InstallRoot" Win64="yes"',
+        '<MsiProperty Id="THREEFUIROOT" Value="[InstallFolder]" Condition="InstallFolder"',
+        'Language="2052"')
+    Assert-SourceContains $compiledThemePath @(
+        'VisibleCondition="InstallFolder"',
+        '<Editbox Name="InstallFolder"',
+        '<BrowseDirectoryAction VariableName="InstallFolder"')
+    Assert-SourceContains $compiledLocalizationPath @(
+        'Culture="zh-CN" Language="2052"',
+        'Value="选择目录(&amp;O)"',
+        '首次安装必须先选择包含 FFmpegFreeUI.exe 的 3FUI 根目录')
+    Assert-SourceContains $compiledLicensePath @(
+        '\u23433?\u-30523?',
+        'HKLM\\Software\\VideoEnhancer')
+    if ((Get-Content -Raw -Encoding UTF8 $burnManifestPath).Contains(
+            '[ProgramFiles64Folder]FFmpegFreeUI', [System.StringComparison]::Ordinal)) {
+        throw 'Burn 成品仍包含旧的 Program Files 固定默认目录'
     }
 
     # MSI 管理安装只展开文件，不写注册表、不注册产品，也不会执行旧配置清理动作。
@@ -229,13 +288,32 @@ try {
         'NOT SKIPLEGACYCLEANUP')
     Assert-SourceContains $bundleSource @(
         'UpgradeCode="519D1BAF-FB98-4C44-8EBE-753B0451ABD5"',
-        'Name="INSTALLFOLDER"',
+        'Name="InstallFolder"',
+        'Variable="InstallFolder"',
+        'Value="InstallRoot"',
+        'Condition="NOT InstallFolder"',
+        'ThemeFile="VideoEnhancerTheme.xml"',
+        'LocalizationFile="VideoEnhancerTheme.zh-CN.wxl"',
         'Persisted="yes"',
         'bal:Overridable="yes"',
         '<MsiProperty Name="THREEFUIROOT"',
+        'Value="[InstallFolder]"',
         'Compressed="yes"')
+    if ((Get-Content -Raw -Encoding UTF8 $bundleSource).Contains(
+            '[ProgramFiles64Folder]FFmpegFreeUI', [System.StringComparison]::Ordinal)) {
+        throw 'Bundle 源码仍包含旧的 Program Files 固定默认目录'
+    }
+    Assert-SourceContains $bundleProject @(
+        '<Cultures>zh-CN</Cultures>',
+        '<PackageReference Include="WixToolset.Util.wixext" Version="6.0.2"')
+    Assert-SourceContains $bundleTheme @(
+        'VisibleCondition="InstallFolder"',
+        '<BrowseDirectoryAction VariableName="InstallFolder"')
+    Assert-SourceContains $bundleLocalization @(
+        'Culture="zh-CN" Language="2052"',
+        '首次安装必须先选择包含 FFmpegFreeUI.exe 的 3FUI 根目录')
 
-    Write-Host 'INSTALLER_TESTS_PASS|burn-layout|msi-admin-image|payload-hashes|legacy-plugin-migration|registry-uninstall-cleanup'
+    Write-Host 'INSTALLER_TESTS_PASS|burn-layout|burn-ui-contract|msi-admin-image|payload-hashes|legacy-plugin-migration|registry-uninstall-cleanup'
 } finally {
     if (Test-Path -LiteralPath $resolvedTest) {
         Remove-Item -LiteralPath $resolvedTest -Recurse -Force

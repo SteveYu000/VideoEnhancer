@@ -5,6 +5,7 @@
     <OutputType>Bundle</OutputType>
     <OutputName>VideoEnhancerInstaller</OutputName>
     <Platform>x64</Platform>
+    <Cultures>zh-CN</Cultures>
     <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
     <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
     <OutputPath Condition="'$(InstallerOutputDirectory)' != ''">$(InstallerOutputDirectory)</OutputPath>
@@ -17,6 +18,7 @@
 
   <ItemGroup Label="WiX extensions">
     <PackageReference Include="WixToolset.Bal.wixext" Version="6.0.2" />
+    <PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" />
   </ItemGroup>
 
 </Project>

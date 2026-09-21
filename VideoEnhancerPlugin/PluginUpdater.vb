@@ -234,7 +234,7 @@ Namespace videoenhancer
                 .WorkingDirectory = Path.GetDirectoryName(installer)
             }
             ' Burn 允许通过 Variable=Value 覆盖变量；ArgumentList 会正确处理含空格的目录。
-            startInfo.ArgumentList.Add("INSTALLFOLDER=" & hostRoot)
+            startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)
             If Process.Start(startInfo) Is Nothing Then
                 Throw New InvalidOperationException("无法启动 VideoEnhancer 安装器")
             End If

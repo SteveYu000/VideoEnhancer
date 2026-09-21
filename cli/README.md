@@ -130,7 +130,7 @@ PowerShell 示例：
 
 插件以 GitHub Release 为唯一版本标准：优先读取 `maxzrb/VideoEnhancer` 的 `releases/latest` 及其 `stable.json` 清单资产；GitHub 不可达时读取 ModelScope `stable.json` 兜底。可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖检查仓库，`VIDEOENHANCER_UPDATE_GITHUB_TOKEN` 供私有仓库或提高 API 限频使用。更新包下载首选 ModelScope 数据集 `AerithDream/VideoEnhancer-Releases`（可用 `VIDEOENHANCER_UPDATE_DATASET=owner/name` 切换），失败时回退 GitHub Release 资产；两源都校验清单中的大小与 SHA-256。发现更高 SemVer 后必须由用户确认。
 
-更新资产是版本化的 WiX Burn 安装器。下载和 SHA-256 校验成功后，插件以 `INSTALLFOLDER=<当前 3FUI 根目录>` 启动安装器并关闭 3FUI；用户在标准安装界面确认后，由内嵌 MSI 更新 EXE、DLL、独立组件，迁移旧平铺目录并清理旧配置残留。安装结束后需要手动重新启动 3FUI。旧 `--apply-update`、`--update-package` 等私有自更新参数已经删除。
+更新资产是版本化的 WiX Burn 安装器。下载和 SHA-256 校验成功后，插件以 `InstallFolder=<当前 3FUI 根目录>` 启动安装器并关闭 3FUI；用户在中文安装界面确认后，由内嵌 MSI 更新 EXE、DLL、独立组件，迁移旧平铺目录并清理旧配置残留。首次手动安装必须自行选择 3FUI 根目录，后续安装会从项目注册表键回填上次位置，该键随卸载删除。安装结束后需要手动重新启动 3FUI。旧 `--apply-update`、`--update-package` 等私有自更新参数已经删除。
 
 ## 目录结构
 
