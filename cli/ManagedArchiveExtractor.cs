@@ -56,7 +56,7 @@ internal static class ManagedArchiveExtractor
             .Select(path => new
             {
                 Source = path,
-                Entry = InstallerBundle.NormalizeRelativePath(Path.GetRelativePath(sourceRoot, path))
+                Entry = NormalizeArchiveEntryPath(Path.GetRelativePath(sourceRoot, path))
             })
             .OrderBy(item => item.Entry, StringComparer.Ordinal)
             .ToArray();
@@ -157,6 +157,17 @@ internal static class ManagedArchiveExtractor
     {
         if (segment is "." or ".." || segment.EndsWith(' ') || segment.EndsWith('.')) return true;
         return segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0;
+    }
+
+    private static string NormalizeArchiveEntryPath(string relativePath)
+    {
+        var normalized = relativePath.Replace('\\', '/').Trim('/');
+        if (string.IsNullOrWhiteSpace(normalized) || Path.IsPathRooted(normalized) || normalized.Contains(':'))
+            throw new InvalidDataException("归档项不是安全的相对路径：" + relativePath);
+        var parts = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0 || parts.Any(IsUnsafeSegment))
+            throw new InvalidDataException("归档项路径不安全：" + relativePath);
+        return string.Join('/', parts);
     }
 
     private static void EnsureSafeParent(string path, string root)

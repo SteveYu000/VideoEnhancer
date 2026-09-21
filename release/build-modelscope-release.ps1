@@ -140,10 +140,13 @@ if (-not [string]::IsNullOrWhiteSpace($HostBin)) {
 if ($LASTEXITCODE -ne 0) { throw '插件与 CLI 发布失败' }
 
 # 端到端校验：CLI 版本号运行时读自 csproj 程序集元数据，必须与发布版本一致。
-$cliExe = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
+$cliExe = Join-Path $root 'cli\bin\Release\net10.0-windows\win-x64\publish\videoenhancer.exe'
+if (-not (Test-Path -LiteralPath $cliExe -PathType Leaf)) {
+    throw "缺少 CLI 发布文件：$cliExe"
+}
 $cliVersion = (& $cliExe --version) | Select-Object -First 1
 if (("$cliVersion").Trim() -ne $Version) {
-    throw "VideoEnhancerInstaller.exe 报告版本 '$cliVersion'，与发布版本 $Version 不一致"
+    throw "videoenhancer.exe 报告版本 '$cliVersion'，与发布版本 $Version 不一致"
 }
 
 $distRoot = Join-Path $PSScriptRoot 'dist\modelscope'
@@ -200,9 +203,9 @@ Write-Host "OK: $manualPath"
 Write-Host "OK: $aria2NextSourcePath"
 Write-Host "OK: $stablePath"
 
-# 目录结构升级属于安装门禁：正式资产必须通过全新安装、旧布局迁移、占用回退和中断恢复。
+# WiX 安装门禁：Burn 可布局、MSI 可展开、载荷哈希一致，并验证旧插件迁移与更新启动契约。
 & (Join-Path $PSScriptRoot 'test-installer.ps1') -Installer $packagePath
-& (Join-Path $PSScriptRoot 'test-updater.ps1') -Version $Version
+& (Join-Path $PSScriptRoot 'test-updater.ps1') -Version $Version -Package $packagePath
 
 # 原生命令在 EAP=Stop 下写 stderr 会被当成终止错误，发布前临时放宽。
 function Invoke-Native {

@@ -6,7 +6,7 @@
 
 ## 安装
 
-1. 双击 GitHub Release 中的版本化 EXE，选择 3FUI 主程序。安装器会生成：
+1. 双击 GitHub Release 中的版本化 WiX Burn 安装器，在“选项（Options）”中选择 3FUI 主程序所在目录后安装。内嵌 MSI 会生成：
    ```
    <主程序目录>\Plugin\videoenhancer.3fui.dll
    <主程序目录>\Plugin\videoenhancer\videoenhancer.exe
@@ -167,7 +167,7 @@
 
 模型下载页会显示 `Plugin/videoenhancer.exe` 资源，但“下载全部”会排除当前插件 EXE；正式升级使用底部“检查更新”入口。插件本体不混入模型解压目录。
 
-从 1.0.6 起，Release 只分发内嵌插件 DLL 的 EXE。1.1.0 起，新 EXE 作为临时更新器等待 3FUI 完全退出，把旧 `Plugin` 平铺目录事务迁入 `Plugin\videoenhancer`；EXE、Backend、模型和工具进入子目录，DLL 留在根目录。短暂占用自动重试，失败恢复旧布局，中断后下次更新先恢复事务，成功后重启 3FUI。布局 JSON 使用 DLL 内嵌资源，不再单独更新。下载首选 GitHub Release 资产，失败回退 ModelScope 镜像（`VIDEOENHANCER_UPDATE_DATASET=owner/name` 可覆盖）；GitHub 检查或下载不可达时均使用 ModelScope 兜底，检查仓库可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖；配置中的 `AutoCheckUpdates` 可关闭启动后台检查。
+Release 分发版本化 WiX Burn 安装器。插件下载并校验安装器后，把当前 3FUI 根目录作为 `INSTALLFOLDER` 启动安装器并退出 3FUI；用户确认安装后，内嵌 MSI 更新运行 EXE、插件 DLL 和独立组件。旧 `Plugin` 平铺目录会安全合并到 `Plugin\videoenhancer`，同名不同内容保留原文件；旧 AppData/INI/临时更新器残留由安装阶段清理。安装完成后需要手动重新启动 3FUI。下载首选 ModelScope 镜像，失败回退 GitHub Release 资产（`VIDEOENHANCER_UPDATE_DATASET=owner/name` 可覆盖）；版本检查首选 GitHub、失败时使用 ModelScope，检查仓库可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖；配置中的 `AutoCheckUpdates` 可关闭启动后台检查。
 
 ## 构建
 

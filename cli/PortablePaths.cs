@@ -7,48 +7,15 @@ namespace VideoEnhancer;
 /// </summary>
 internal static class PortablePaths
 {
-    internal static string ApplicationRoot { get; } = AppContext.BaseDirectory.TrimEnd(
+    internal static string CoreRoot { get; } = AppContext.BaseDirectory.TrimEnd(
         Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
-    // 新安装固定使用 EXE 同目录；只读兼容旧版 videoenhancer.ini，避免升级后外置后端立即失效。
-    internal static string CoreRoot { get; } = ResolveCoreRoot();
-
-    internal static string CacheRoot => Path.Combine(ApplicationRoot, "cache");
-    internal static string WorkRoot => Path.Combine(ApplicationRoot, ".work");
-    internal static string UpdateRoot => Path.Combine(ApplicationRoot, ".update");
+    internal static string CacheRoot => Path.Combine(CoreRoot, "cache");
+    internal static string WorkRoot => Path.Combine(CoreRoot, ".work");
+    internal static string UpdateRoot => Path.Combine(CoreRoot, ".update");
 
     internal static string EmbeddedToolsRoot(string version) =>
-        Path.Combine(ApplicationRoot, "bin", "embedded-tools", version);
-
-    private static string ResolveCoreRoot()
-    {
-        var iniPath = Path.Combine(ApplicationRoot, "videoenhancer.ini");
-        if (!File.Exists(iniPath)) return ApplicationRoot;
-        try
-        {
-            foreach (var rawLine in File.ReadLines(iniPath))
-            {
-                var line = rawLine.Trim();
-                if (line.Length == 0 || line.StartsWith('#') || line.StartsWith(';')) continue;
-                var separator = line.IndexOf('=');
-                if (separator <= 0 || !line[..separator].Trim().Equals(
-                        "core-path", StringComparison.OrdinalIgnoreCase)) continue;
-                var value = line[(separator + 1)..].Trim().Trim('"');
-                if (value.Length == 0) break;
-                var resolved = Path.GetFullPath(Path.IsPathRooted(value)
-                    ? value
-                    : Path.Combine(ApplicationRoot, value));
-                if (Directory.Exists(resolved))
-                    return resolved.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-                break;
-            }
-        }
-        catch
-        {
-            // 旧配置无效时回退到新的固定便携目录，由环境检查报告具体缺失项。
-        }
-        return ApplicationRoot;
-    }
+        Path.Combine(CoreRoot, "bin", "embedded-tools", version);
 
     internal static string CreateWorkDirectory(string purpose)
     {

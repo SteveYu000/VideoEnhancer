@@ -4,7 +4,7 @@ VideoEnhancer 的公开更新源，仅用于分发插件运行文件，不包含
 
 - 版本检查以 GitHub `maxzrb/VideoEnhancer` 的 Release 为首选标准；GitHub 不可达时本数据集提供 `stable.json` 兜底，更新包下载默认优先使用本数据集，失败时回退 GitHub Release。
 - `stable.json`：稳定通道结构化更新清单（与 GitHub Release 附带的清单资产内容一致）。
-- `releases/<version>/VideoEnhancer-<version>-win-x64.exe`：经大小与 SHA-256 校验的单文件更新资产，内嵌对应版本的插件 DLL。
-- 更新器等待 3FUI 退出后替换 EXE，并从新 EXE 释放 `videoenhancer.3fui.dll`；布局 JSON 已嵌入 DLL，不再单独发布。
+- `releases/<version>/VideoEnhancer-<version>-win-x64.exe`：经大小与 SHA-256 校验的 WiX Burn 安装器，内嵌标准 MSI、插件 DLL、纯运行 EXE 和独立组件。
+- 插件把当前 3FUI 根目录传给安装器并退出 3FUI；用户确认后由 MSI 完成升级、旧布局迁移和旧配置残留清理，安装完成后手动重新启动 3FUI。
 
 项目采用独立 SemVer；上游版本仅作为同步基线记录，不参与自动更新比较。

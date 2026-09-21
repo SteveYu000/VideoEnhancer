@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="WixToolset.Sdk/6.0.2">
+
+  <PropertyGroup Label="Project">
+    <OutputType>Package</OutputType>
+    <OutputName>VideoEnhancer</OutputName>
+    <Platform>x64</Platform>
+    <Cultures>zh-CN</Cultures>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
+    <DefineConstants>ProductVersion=$(ProductVersion);InstallerInputRoot=$(InstallerInputRoot)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Label="WiX extensions">
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.2" />
+  </ItemGroup>
+
+  <Target Name="ValidateInstallerInput" BeforeTargets="Build">
+    <Error Condition="'$(InstallerInputRoot)' == ''"
+           Text="InstallerInputRoot 未设置；请从 VideoEnhancer.slnx 发布，或显式传入安装载荷目录。" />
+    <Error Condition="!Exists('$(InstallerInputRoot)\plugin\videoenhancer.3fui.dll')"
+           Text="安装载荷缺少 plugin\videoenhancer.3fui.dll：$(InstallerInputRoot)" />
+    <Error Condition="!Exists('$(InstallerInputRoot)\plugin\videoenhancer\videoenhancer.exe')"
+           Text="安装载荷缺少 plugin\videoenhancer\videoenhancer.exe：$(InstallerInputRoot)" />
+  </Target>
+
+</Project>

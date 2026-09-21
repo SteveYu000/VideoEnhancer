@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 标准 MSI：安装文件、目录选择、升级与卸载元数据。 -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package Name="VideoEnhancer"
+           Manufacturer="VideoEnhancer contributors"
+           Version="$(var.ProductVersion)"
+           Language="2052"
+           InstallerVersion="500"
+           Scope="perMachine"
+           UpgradeCode="A9404409-2388-428B-95CC-AA456B7378BA">
+    <SummaryInformation Description="VideoEnhancer plugin for FFmpegFreeUI" />
+    <MajorUpgrade DowngradeErrorMessage="已安装相同或更高版本的 VideoEnhancer。" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- 只在注册表记录安装位置；该值和项目自有键均由 MSI 在卸载时移除。 -->
+    <Property Id="PREVIOUSINSTALLROOT">
+      <RegistrySearch Id="PreviousInstallRootSearch"
+                      Root="HKLM"
+                      Key="Software\VideoEnhancer"
+                      Name="InstallRoot"
+                      Type="raw"
+                      Bitness="always64" />
+    </Property>
+    <SetProperty Id="THREEFUIROOT"
+                 Value="[PREVIOUSINSTALLROOT]"
+                 Before="CostInitialize"
+                 Condition="NOT THREEFUIROOT AND PREVIOUSINSTALLROOT" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="THREEFUIROOT" Name="FFmpegFreeUI">
+        <Directory Id="PLUGINROOT" Name="Plugin">
+          <Component Id="PluginDllComponent" Guid="*">
+            <File Id="PluginDll"
+                  Source="$(var.InstallerInputRoot)\plugin\videoenhancer.3fui.dll"
+                  Name="videoenhancer.3fui.dll"
+                  KeyPath="yes" />
+          </Component>
+
+          <Directory Id="APPLICATIONROOT" Name="videoenhancer">
+            <Component Id="RuntimeComponent" Guid="*">
+              <File Id="VideoEnhancerExe"
+                    Source="$(var.InstallerInputRoot)\plugin\videoenhancer\videoenhancer.exe"
+                    Name="videoenhancer.exe"
+                    KeyPath="yes" />
+            </Component>
+            <Component Id="ThirdPartyNoticeComponent" Guid="*">
+              <File Id="ThirdPartyNotice"
+                    Source="$(var.InstallerInputRoot)\plugin\videoenhancer\THIRD-PARTY-NOTICES.txt"
+                    Name="THIRD-PARTY-NOTICES.txt"
+                    KeyPath="yes" />
+            </Component>
+            <Component Id="InstallLocationComponent" Guid="*">
+              <RegistryValue Root="HKLM"
+                             Key="Software\VideoEnhancer"
+                             Name="InstallRoot"
+                             Type="string"
+                             Value="[THREEFUIROOT]"
+                             KeyPath="yes" />
+              <RemoveRegistryKey Id="RemoveVideoEnhancerRegistryKey"
+                                 Root="HKLM"
+                                 Key="Software\VideoEnhancer"
+                                 Action="removeOnUninstall" />
+            </Component>
+            <Directory Id="BINROOT" Name="bin">
+              <Directory Id="ARIA2ROOT" Name="aria2-next">
+                <Component Id="Aria2Component" Guid="*">
+                  <File Id="Aria2Exe"
+                        Source="$(var.InstallerInputRoot)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe"
+                        Name="aria2-next.exe"
+                        KeyPath="yes" />
+                </Component>
+              </Directory>
+            </Directory>
+
+            <Directory Id="LICENSESROOT" Name="licenses">
+              <Directory Id="ARIA2LICENSESROOT" Name="aria2-next">
+                <Component Id="Aria2LicenseComponent" Guid="*">
+                  <File Id="Aria2Copying"
+                        Source="$(var.InstallerInputRoot)\plugin\videoenhancer\licenses\aria2-next\COPYING"
+                        Name="COPYING"
+                        KeyPath="yes" />
+                </Component>
+                <Component Id="Aria2AuthorsComponent" Guid="*">
+                  <File Id="Aria2Authors"
+                        Source="$(var.InstallerInputRoot)\plugin\videoenhancer\licenses\aria2-next\AUTHORS"
+                        Name="AUTHORS"
+                        KeyPath="yes" />
+                </Component>
+                <Component Id="Aria2SourceComponent" Guid="*">
+                  <File Id="Aria2Source"
+                        Source="$(var.InstallerInputRoot)\plugin\videoenhancer\licenses\aria2-next\SOURCE.txt"
+                        Name="SOURCE.txt"
+                        KeyPath="yes" />
+                </Component>
+              </Directory>
+              <Directory Id="SHARPCOMPRESSLICENSESROOT" Name="SharpCompress">
+                <Component Id="SharpCompressLicenseComponent" Guid="*">
+                  <File Id="SharpCompressLicense"
+                        Source="$(var.InstallerInputRoot)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt"
+                        Name="LICENSE.txt"
+                        KeyPath="yes" />
+                </Component>
+              </Directory>
+            </Directory>
+
+            <!-- models/python 为用户数据目录；卸载只会移除仍为空的目录，不删除用户下载的数据。 -->
+            <Directory Id="MODELSROOT" Name="models">
+              <Component Id="ModelsDirectoryComponent" Guid="061D6B5D-5C15-40AD-BFC4-3E36E0A42342">
+                <CreateFolder />
+              </Component>
+            </Directory>
+            <Directory Id="PYTHONROOT" Name="python">
+              <Component Id="PythonDirectoryComponent" Guid="65FEC033-DC3F-4AC1-8F3B-AF672108C1A9">
+                <CreateFolder />
+              </Component>
+            </Directory>
+          </Directory>
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Complete" Title="VideoEnhancer" Level="1">
+      <ComponentRef Id="PluginDllComponent" />
+      <ComponentRef Id="RuntimeComponent" />
+      <ComponentRef Id="ThirdPartyNoticeComponent" />
+      <ComponentRef Id="InstallLocationComponent" />
+      <ComponentRef Id="Aria2Component" />
+      <ComponentRef Id="Aria2LicenseComponent" />
+      <ComponentRef Id="Aria2AuthorsComponent" />
+      <ComponentRef Id="Aria2SourceComponent" />
+      <ComponentRef Id="SharpCompressLicenseComponent" />
+      <ComponentRef Id="ModelsDirectoryComponent" />
+      <ComponentRef Id="PythonDirectoryComponent" />
+    </Feature>
+
+    <ui:WixUI Id="WixUI_InstallDir"
+              InstallDirectory="THREEFUIROOT"
+              ExtendedPathValidation="yes" />
+    <WixVariable Id="WixUILicenseRtf" Value="InstallerNotice.rtf" />
+
+    <!--
+      安装事务成功提交时，以提升后的 MSI 上下文迁移旧 Plugin 平铺布局并清除已知残留。
+      LocalAppDataFolder/TempFolder 只用于读取、迁移和删除旧文件，不会成为新文件的写入位置。
+    -->
+    <SetProperty Id="CleanupLegacyResidue"
+                 Value="--cleanup-legacy-residue --plugin-root &quot;[PLUGINROOT].&quot; --legacy-local-app-data &quot;[LocalAppDataFolder].&quot; --legacy-temp-root &quot;[TempFolder].&quot;"
+                 After="InstallFiles"
+                 Sequence="execute"
+                 Condition="NOT REMOVE~=&quot;ALL&quot; AND ACTION &lt;&gt; &quot;ADMIN&quot; AND NOT SKIPLEGACYCLEANUP" />
+    <CustomAction Id="CleanupLegacyResidue"
+                  FileRef="VideoEnhancerExe"
+                  ExeCommand="[CustomActionData]"
+                  Execute="commit"
+                  Impersonate="no"
+                  HideTarget="yes"
+                  Return="ignore" />
+    <!-- 非升级卸载时清理插件为当前用户创建的图片右键菜单；项目 HKLM 键由组件表删除。 -->
+    <CustomAction Id="CleanupCurrentUserRegistryResidue"
+                  FileRef="VideoEnhancerExe"
+                  ExeCommand="--cleanup-registry-residue"
+                  Execute="deferred"
+                  Impersonate="yes"
+                  Return="ignore" />
+    <InstallExecuteSequence>
+      <Custom Action="CleanupLegacyResidue"
+              After="SetCleanupLegacyResidue"
+              Condition="NOT REMOVE~=&quot;ALL&quot; AND ACTION &lt;&gt; &quot;ADMIN&quot; AND NOT SKIPLEGACYCLEANUP" />
+      <Custom Action="CleanupCurrentUserRegistryResidue"
+              Before="RemoveFiles"
+              Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

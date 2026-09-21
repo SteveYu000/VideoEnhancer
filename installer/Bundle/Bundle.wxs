@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Burn 只封装一个带完整 UI 的主 MSI。 -->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
+  <Bundle Name="VideoEnhancer"
+          Manufacturer="VideoEnhancer contributors"
+          Version="$(var.ProductVersion)"
+          UpgradeCode="519D1BAF-FB98-4C44-8EBE-753B0451ABD5"
+          Compressed="yes">
+    <BootstrapperApplication>
+      <bal:WixStandardBootstrapperApplication
+          Theme="rtfLicense"
+          LicenseFile="..\Package\InstallerNotice.rtf"
+          ShowVersion="yes"
+          SuppressOptionsUI="no" />
+    </BootstrapperApplication>
+
+    <!-- WixStdBA 的“选项”页直接编辑 INSTALLFOLDER；插件更新也通过同名变量传入当前目录。 -->
+    <Variable Name="INSTALLFOLDER"
+              Type="formatted"
+              Value="[ProgramFiles64Folder]FFmpegFreeUI"
+              Persisted="yes"
+              bal:Overridable="yes" />
+    <!-- 仅供无副作用的安装器门禁使用；普通安装与插件更新保持为 0。 -->
+    <Variable Name="SKIPLEGACYCLEANUP"
+              Type="numeric"
+              Value="0"
+              Hidden="yes"
+              bal:Overridable="yes" />
+
+    <Chain>
+      <MsiPackage SourceFile="$(var.VideoEnhancer.Package.TargetPath)"
+                  Compressed="yes"
+                  Visible="no"
+                  Vital="yes">
+        <MsiProperty Name="THREEFUIROOT"
+                     Value="[INSTALLFOLDER]"
+                     Condition="INSTALLFOLDER" />
+        <MsiProperty Name="SKIPLEGACYCLEANUP"
+                     Value="[SKIPLEGACYCLEANUP]"
+                     Condition="SKIPLEGACYCLEANUP" />
+      </MsiPackage>
+    </Chain>
+  </Bundle>
+</Wix>

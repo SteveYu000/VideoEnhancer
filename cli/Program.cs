@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace VideoEnhancer;
 
@@ -35,7 +36,6 @@ internal static class Program
         }
         return assembly?.GetName().Version?.ToString(3) ?? "0.0.0";
     }
-    private const string EmbeddedPluginResource = "VideoEnhancer.Embedded.videoenhancer.3fui.dll";
     private const string EmbeddedThirdPartyNoticesResource = "VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt";
     private const string EmbeddedSharpCompressLicenseResource = "VideoEnhancer.Embedded.SharpCompress.LICENSE.txt";
     private const string EmbeddedOrderedBackendResource = "VideoEnhancer.Embedded.rve-ordered-backend.py";
@@ -64,8 +64,7 @@ internal static class Program
     private static string ModelScopeResolveRoot =>
         "https://www.modelscope.cn/datasets/" + ModelScopeDataset + "/resolve/master/";
 
-    // 新安装使用固定便携目录；旧版 videoenhancer.ini 仅作为外置后端的只读兼容入口。
-    private static readonly string AppRoot = PortablePaths.ApplicationRoot;
+    // CoreRoot 永远是 videoenhancer.exe 所在目录，不读取 INI 或用户目录配置。
     private static readonly string CoreRoot = PortablePaths.CoreRoot;
 
     private static string PythonExe => Path.Combine(CoreRoot, "python", "python", "python.exe");
@@ -161,48 +160,6 @@ internal static class Program
 
     [DllImport("ntdll.dll")]
     private static extern uint NtResumeProcess(IntPtr processHandle);
-
-    [DllImport("kernel32.dll")]
-    private static extern IntPtr GetConsoleWindow();
-
-    [DllImport("comdlg32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool GetOpenFileName(ref OPENFILENAME ofn);
-
-    [DllImport("comdlg32.dll")]
-    private static extern uint CommDlgExtendedError();
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct OPENFILENAME
-    {
-        public int lStructSize;
-        public IntPtr hwndOwner;
-        public IntPtr hInstance;
-        public IntPtr lpstrFilter;
-        public IntPtr lpstrCustomFilter;
-        public int nMaxCustFilter;
-        public int nFilterIndex;
-        public IntPtr lpstrFile;
-        public int nMaxFile;
-        public IntPtr lpstrFileTitle;
-        public int nMaxFileTitle;
-        public IntPtr lpstrInitialDir;
-        public IntPtr lpstrTitle;
-        public uint Flags;
-        public short nFileOffset;
-        public short nFileExtension;
-        public IntPtr lpstrDefExt;
-        public IntPtr lCustData;
-        public IntPtr lpfnHook;
-        public IntPtr lpTemplateName;
-        public IntPtr pvReserved;
-        public int dwReserved;
-        public uint FlagsEx;
-    }
-
-    private const uint OFN_PATHMUSTEXIST = 0x00000800;
-    private const uint OFN_FILEMUSTEXIST = 0x00001000;
-    private const uint OFN_EXPLORER = 0x00080000;
 
     private const int JobObjectExtendedLimitInformation = 9;
     private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
@@ -937,11 +894,11 @@ internal static class Program
         public string DownloadOutput = "";
         public string ExtractArchive = "";
         public string ExtractOutput = "";
-        public bool ApplyUpdate;
-        public string UpdatePackage = "";
-        public string UpdateTarget = "";
-        public string WaitPid = "0";
-        public string RestartExe = "";
+        public bool CleanupLegacyResidue;
+        public bool CleanupRegistryResidue;
+        public string PluginRoot = "";
+        public string LegacyLocalAppData = "";
+        public string LegacyTempRoot = "";
         public readonly List<string> ImageInputs = new();
         public readonly List<string> ImageFolders = new();
         public string ImageOutput = "";
@@ -972,8 +929,6 @@ internal static class Program
 
     private static int Run(string[] args)
     {
-        if (args.Length > 0 && args[0].Equals("--create-installer-bundle", StringComparison.Ordinal))
-            return CreateInstallerBundle(args);
         if (args.Length > 0 && args[0].Equals("--create-7z", StringComparison.Ordinal))
             return CreateSevenZip(args);
         if (args.Length == 1 && args[0].Equals("--third-party-notices", StringComparison.Ordinal))
@@ -983,7 +938,8 @@ internal static class Program
         }
         if (args.Length == 0)
         {
-            return RunInteractiveInstaller();
+            PrintHelp(Console.Out);
+            return 0;
         }
 
         var o = ParseArgs(args);
@@ -1001,10 +957,14 @@ internal static class Program
             return 0;
         }
 
-        // 更新器只操作目标 Plugin 目录，不依赖模型或推理后端。
-        if (o.ApplyUpdate)
+        // 由 MSI 在安装结束前调用，只迁移/删除旧版已知残留，不参与普通处理流程。
+        if (o.CleanupLegacyResidue)
         {
-            return ApplyUpdate(o);
+            return CleanupLegacyResidue(o);
+        }
+        if (o.CleanupRegistryResidue)
+        {
+            return CleanupRegistryResidue();
         }
 
         // 推理后端：ncnn（默认，Vulkan）或 cuda（PyTorch，需 .pth 模型）
@@ -1434,51 +1394,12 @@ internal static class Program
             o.DynamicOpticalFlow, sceneThreshold, tileSize, o.UpscalePrecision, o.InterpPrecision);
     }
 
-    private static int CreateInstallerBundle(string[] args)
-    {
-        if (args.Length != 4)
-            return Fail("--create-installer-bundle 需要 <运行EXE> <输出EXE> <载荷目录>");
-
-        var output = Path.GetFullPath(args[2]);
-        try
-        {
-            InstallerBundle.Create(args[1], output, args[3]);
-            using var bundle = InstallerBundle.Open(output);
-            ValidateInstallerPayload(bundle.PayloadPaths);
-            Console.WriteLine("INSTALLER_BUNDLE_COMPLETE|" + output);
-            return 0;
-        }
-        catch
-        {
-            try { if (File.Exists(output)) File.Delete(output); } catch { }
-            throw;
-        }
-    }
-
     private static int CreateSevenZip(string[] args)
     {
         if (args.Length != 3) return Fail("--create-7z 需要 <源目录> <输出.7z>");
         ManagedArchiveExtractor.CreateSevenZip(args[1], args[2]);
         Console.WriteLine("ARCHIVE_CREATE_COMPLETE|" + Path.GetFullPath(args[2]));
         return 0;
-    }
-
-    private static void ValidateInstallerPayload(IEnumerable<string> payloadPaths)
-    {
-        var paths = payloadPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var required in new[]
-        {
-            "bin/aria2-next/aria2-next.exe",
-            "THIRD-PARTY-NOTICES.txt",
-            "licenses/aria2-next/COPYING",
-            "licenses/aria2-next/AUTHORS",
-            "licenses/aria2-next/SOURCE.txt",
-            "licenses/SharpCompress/LICENSE.txt"
-        })
-        {
-            if (!paths.Contains(required))
-                throw new InvalidDataException("安装器缺少必需载荷：" + required);
-        }
     }
 
     private static void PrintThirdPartyNotices(TextWriter writer)
@@ -1620,24 +1541,20 @@ internal static class Program
                 case "--extract-output":
                     o.ExtractOutput = TakeValue(args, ref i, name, inlineValue);
                     break;
-                case "--apply-update":
-                    o.ApplyUpdate = true;
+                case "--cleanup-legacy-residue":
+                    o.CleanupLegacyResidue = true;
                     break;
-                case "--update-package":
-                    o.UpdatePackage = TakeValue(args, ref i, name, inlineValue);
+                case "--cleanup-registry-residue":
+                    o.CleanupRegistryResidue = true;
                     break;
-                case "--update-target":
-                    o.UpdateTarget = TakeValue(args, ref i, name, inlineValue);
+                case "--plugin-root":
+                    o.PluginRoot = TakeValue(args, ref i, name, inlineValue);
                     break;
-                case "--wait-pid":
-                    o.WaitPid = TakeValue(args, ref i, name, inlineValue);
+                case "--legacy-local-app-data":
+                    o.LegacyLocalAppData = TakeValue(args, ref i, name, inlineValue);
                     break;
-                case "--restart-exe":
-                    o.RestartExe = TakeValue(args, ref i, name, inlineValue);
-                    break;
-                case "--update-result":
-                    // 兼容旧更新器调用形状，但不再接受外部结果路径；结果固定写入目标便携目录。
-                    _ = TakeValue(args, ref i, name, inlineValue);
+                case "--legacy-temp-root":
+                    o.LegacyTempRoot = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "--debug-split":
                     o.DebugSplit = true;
@@ -1818,344 +1735,47 @@ internal static class Program
         return (arg, null);
     }
 
-    /// <summary>在 3FUI 退出后迁移到子目录布局并替换 EXE/DLL；任一步失败都会恢复旧布局。</summary>
-    private static int ApplyUpdate(Options o)
+    /// <summary>由 WiX MSI 调用：迁移旧配置并清除可明确识别的旧版残留。</summary>
+    private static int CleanupLegacyResidue(Options o)
     {
-        if (string.IsNullOrWhiteSpace(o.UpdatePackage) || string.IsNullOrWhiteSpace(o.UpdateTarget))
-        {
-            return Fail("--apply-update 需要 --update-package 和 --update-target");
-        }
-        if (!int.TryParse(o.WaitPid, NumberStyles.None, CultureInfo.InvariantCulture, out var waitPid) || waitPid < 0)
-        {
-            return Fail("--wait-pid 必须是非负整数");
-        }
-        if (waitPid == Environment.ProcessId)
-        {
-            return Fail("更新器不能等待自身退出");
-        }
+        if (string.IsNullOrWhiteSpace(o.PluginRoot))
+            return Fail("--cleanup-legacy-residue 需要 --plugin-root", 1);
 
-        var packagePath = Path.GetFullPath(o.UpdatePackage);
-        var pluginRoot = Path.GetFullPath(o.UpdateTarget)
+        var pluginRoot = Path.GetFullPath(o.PluginRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!File.Exists(packagePath)) return Fail("更新包不存在：" + packagePath, 1);
-        if (!Directory.Exists(pluginRoot)) return Fail("Plugin 目录不存在：" + pluginRoot, 1);
+        if (!Directory.Exists(pluginRoot))
+            return Fail("Plugin 目录不存在：" + pluginRoot, 1);
 
-        var applicationRoot = ApplicationLayoutManager.ApplicationRoot(pluginRoot);
-        var updateRoot = Path.Combine(applicationRoot, ".update");
-        var resultPath = Path.Combine(updateRoot, "update-result.txt");
-        var workRoot = Path.Combine(updateRoot, "transactions", Guid.NewGuid().ToString("N"));
-        var stagingDirectory = Path.Combine(workRoot, "staging");
-        Directory.CreateDirectory(stagingDirectory);
-        var hostExitConfirmed = waitPid == 0;
-
-        try
-        {
-            if (waitPid > 0)
-            {
-                try
-                {
-                    using var process = Process.GetProcessById(waitPid);
-                    Console.WriteLine("等待 3FUI 退出（PID " + waitPid + "）...");
-                    if (!process.WaitForExit(5 * 60 * 1000))
-                    {
-                        throw new TimeoutException("等待 3FUI 退出超时，未修改任何文件");
-                    }
-                    hostExitConfirmed = true;
-                }
-                catch (ArgumentException)
-                {
-                    // 宿主已退出，可以继续替换。
-                    hostExitConfirmed = true;
-                }
-            }
-
-            var updaterPath = Path.GetFullPath(Environment.ProcessPath
-                ?? throw new InvalidOperationException("无法确定临时更新器路径"));
-            using (var packageStream = File.OpenRead(packagePath))
-            using (var updaterStream = File.OpenRead(updaterPath))
-            {
-                var packageHash = Convert.ToHexString(SHA256.HashData(packageStream));
-                var updaterHash = Convert.ToHexString(SHA256.HashData(updaterStream));
-                if (!packageHash.Equals(updaterHash, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("更新 EXE 与临时更新器不一致");
-            }
-
-            var stagedExe = Path.Combine(stagingDirectory, "videoenhancer.exe");
-            var stagedPlugin = Path.Combine(stagingDirectory, "videoenhancer.3fui.dll");
-            IReadOnlyList<StagedApplicationFile> stagedApplicationFiles;
-            using (var bundle = InstallerBundle.Open(packagePath))
-            {
-                ValidateInstallerPayload(bundle.PayloadPaths);
-                bundle.ExtractRuntime(stagedExe);
-                stagedApplicationFiles = bundle.ExtractPayload(Path.Combine(stagingDirectory, "application"));
-            }
-            ExtractEmbeddedPlugin(stagedPlugin);
-            if (new FileInfo(stagedExe).Length <= 0)
-                throw new InvalidDataException("安装器内的 videoenhancer.exe 无效");
-            if (new FileInfo(stagedPlugin).Length <= 0)
-                throw new InvalidDataException("新 EXE 内嵌的插件 DLL 无效");
-
-            var existingCoreRoot = Directory.Exists(Path.Combine(
-                    ApplicationLayoutManager.ApplicationRoot(pluginRoot), "python"))
-                ? ApplicationLayoutManager.ApplicationRoot(pluginRoot)
-                : pluginRoot;
-            BackendUpdateManager.RecoverPending(existingCoreRoot);
-            ApplicationLayoutManager.Install(
-                pluginRoot,
-                stagedExe,
-                stagedPlugin,
-                replaceCanonicalExe: true,
-                removeLegacyExe: true,
-                stagedApplicationFiles);
-            LegacyResidueCleaner.CleanObsoleteEmbeddedTools(applicationRoot);
-
-            Console.WriteLine("UPDATE_COMPLETE|" + ToolVersion);
-            WriteUpdateResult(resultPath, "OK|" + ToolVersion);
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            WriteUpdateResult(resultPath, "ERROR|" + ex.Message.Replace('\r', ' ').Replace('\n', ' '));
-            return Fail("应用更新失败：" + ex.Message, 1);
-        }
-        finally
-        {
-            try { Directory.Delete(workRoot, true); } catch { }
-            if (hostExitConfirmed) TryRestartHost(o.RestartExe);
-        }
+        var applicationRoot = Path.Combine(pluginRoot, "videoenhancer");
+        Directory.CreateDirectory(applicationRoot);
+        var legacyLocalAppData = string.IsNullOrWhiteSpace(o.LegacyLocalAppData)
+            ? null
+            : Path.GetFullPath(o.LegacyLocalAppData);
+        var legacyTempRoot = string.IsNullOrWhiteSpace(o.LegacyTempRoot)
+            ? null
+            : Path.GetFullPath(o.LegacyTempRoot);
+        LegacyResidueCleaner.MigrateLegacyPluginLayout(pluginRoot);
+        var protectedLegacyConfig = LegacyResidueCleaner.MigratePluginConfiguration(
+            applicationRoot,
+            legacyLocalAppData);
+        LegacyResidueCleaner.Clean(
+            pluginRoot,
+            protectedLegacyConfig,
+            legacyLocalAppData,
+            legacyTempRoot);
+        LegacyResidueCleaner.CleanObsoleteEmbeddedTools(applicationRoot);
+        Console.WriteLine("LEGACY_CLEANUP_COMPLETE|" + pluginRoot);
+        return 0;
     }
 
-    /// <summary>宿主已经退出后，无论更新成败都尝试恢复 3FUI，错误详情由结果文件在下次启动时显示。</summary>
-    private static void TryRestartHost(string restartPath)
+    /// <summary>由 MSI 卸载调用：移除当前用户由插件创建的图片右键菜单。</summary>
+    private static int CleanupRegistryResidue()
     {
-        if (string.IsNullOrWhiteSpace(restartPath)) return;
-        try
-        {
-            var restartExe = Path.GetFullPath(restartPath);
-            if (!File.Exists(restartExe))
-            {
-                Console.Error.WriteLine("[警告] 找不到要重启的 3FUI：" + restartExe);
-                return;
-            }
-            Process.Start(new ProcessStartInfo(restartExe) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("[警告] 无法重启 3FUI：" + ex.Message);
-        }
-    }
-
-    private static void WriteUpdateResult(string resultPath, string value)
-    {
-        if (string.IsNullOrWhiteSpace(resultPath)) return;
-        try
-        {
-            var fullPath = Path.GetFullPath(resultPath);
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            File.WriteAllText(fullPath, value, new UTF8Encoding(false));
-        }
-        catch
-        {
-            // 结果文件只用于下次启动提示，不影响已经完成的更新或回滚。
-        }
-    }
-
-    /// <summary>双击无参数启动时将版本化安装器事务安装为固定名称，并初始化便携核心目录。</summary>
-    private static int RunInteractiveInstaller()
-    {
-        var installationStarted = false;
-        try
-        {
-            Console.WriteLine($"VideoEnhancer 插件安装程序 v{ToolVersion}");
-            Console.WriteLine("按下y并enter执行安装，按其他任意键并enter退出安装。");
-            Console.Write("> ");
-            if (!ReadYes())
-            {
-                Console.WriteLine("已退出安装。");
-                return 0;
-            }
-            installationStarted = true;
-
-            Console.WriteLine("请选择正确的ffmpegfreeui.exe路径（可执行文件名称不限）。");
-            var hostExe = PickHostExecutable();
-            if (string.IsNullOrWhiteSpace(hostExe))
-            {
-                Console.WriteLine("未选择程序，已取消安装。");
-                return 0;
-            }
-
-            var hostDirectory = Path.GetDirectoryName(hostExe)
-                ?? throw new InvalidOperationException("无法确定所选程序的目录。");
-            var pluginDirectory = Path.Combine(hostDirectory, "plugin");
-            var currentExe = Path.GetFullPath(Environment.ProcessPath ?? Path.Combine(AppRoot, "videoenhancer.exe"));
-            var installedExe = InstallPluginFiles(currentExe, pluginDirectory);
-            Console.WriteLine("程序已安装为：" + installedExe);
-            Console.WriteLine("插件已安装到：" + Path.Combine(pluginDirectory, "videoenhancer.3fui.dll"));
-            Console.WriteLine("下载组件已安装到：" + Path.Combine(
-                ApplicationLayoutManager.ApplicationRoot(pluginDirectory), "bin", "aria2-next", "aria2-next.exe"));
-
-            var applicationDirectory = ApplicationLayoutManager.ApplicationRoot(pluginDirectory);
-            var protectedLegacyConfig = LegacyResidueCleaner.MigratePluginConfiguration(applicationDirectory);
-            var hasOtherEntries = Directory.EnumerateFileSystemEntries(pluginDirectory)
-                .Any(path => !string.Equals(Path.GetFullPath(path), applicationDirectory, StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(Path.GetFileName(path), ApplicationLayoutManager.PluginDllName, StringComparison.OrdinalIgnoreCase));
-            if (hasOtherEntries)
-            {
-                Console.Write("检测到插件目录存在其他文件，");
-            }
-            Console.Write($"程序即将在\"{applicationDirectory}\"中自动创建核心目录（models、python 和 bin），是否继续？选择\"是(Y)\"：");
-            if (!ReadYes())
-            {
-                Console.WriteLine("插件安装完成；已跳过核心目录初始化。");
-            }
-            else
-            {
-                Directory.CreateDirectory(Path.Combine(applicationDirectory, "models"));
-                Directory.CreateDirectory(Path.Combine(applicationDirectory, "python"));
-                Directory.CreateDirectory(Path.Combine(applicationDirectory, "bin"));
-                Console.WriteLine("安装完成。核心目录已准备好。");
-            }
-
-            Console.Write("是否清理旧版本遗留的 AppData 配置/状态、内置工具副本、更新器副本和废弃 INI？选择\"是(Y)\"：");
-            if (ReadYes())
-                LegacyResidueCleaner.Clean(pluginDirectory, protectedLegacyConfig);
-            else
-                Console.WriteLine("已保留旧配置残留。");
-            return 0;
-        }
-        catch (Exception ex)
-        {
-            Console.Error.WriteLine("安装失败：" + ex);
-            return 1;
-        }
-        finally
-        {
-            IfInstallationWasStartedPause(installationStarted);
-        }
-    }
-
-    private static void IfInstallationWasStartedPause(bool installationStarted)
-    {
-        if (!installationStarted) return;
-        Console.WriteLine("按 Enter 键关闭此窗口。");
-        Console.ReadLine();
-    }
-
-    private static bool ReadYes()
-    {
-        var answer = Console.ReadLine()?.Trim();
-        return string.Equals(answer, "Y", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(answer, "是", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? PickHostExecutable()
-    {
-        // 自动测试或受管部署可显式提供宿主路径；普通双击安装仍使用文件选择窗口。
-        var configuredHost = Environment.GetEnvironmentVariable("VIDEOENHANCER_INSTALL_HOST")?.Trim();
-        if (!string.IsNullOrWhiteSpace(configuredHost))
-        {
-            var fullPath = Path.GetFullPath(configuredHost.Trim('"'));
-            if (!File.Exists(fullPath))
-                throw new FileNotFoundException("VIDEOENHANCER_INSTALL_HOST 指向的程序不存在", fullPath);
-            return fullPath;
-        }
-
-        const int fileCapacity = 32768;
-        var fileBuffer = Marshal.AllocHGlobal(fileCapacity * sizeof(char));
-        var filter = Marshal.StringToHGlobalUni("可执行程序 (*.exe)\0*.exe\0所有文件 (*.*)\0*.*\0\0");
-        var initialDirectory = Marshal.StringToHGlobalUni(AppRoot);
-        var title = Marshal.StringToHGlobalUni("请选择正确的ffmpegfreeui.exe路径（文件名不限）");
-        var defaultExtension = Marshal.StringToHGlobalUni("exe");
-        try
-        {
-            Marshal.WriteInt16(fileBuffer, 0);
-            var dialog = new OPENFILENAME
-            {
-                lStructSize = Marshal.SizeOf<OPENFILENAME>(),
-                hwndOwner = GetConsoleWindow(),
-                lpstrFilter = filter,
-                nFilterIndex = 1,
-                lpstrFile = fileBuffer,
-                nMaxFile = fileCapacity,
-                lpstrInitialDir = initialDirectory,
-                lpstrTitle = title,
-                Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST,
-                lpstrDefExt = defaultExtension
-            };
-            if (GetOpenFileName(ref dialog)) return Marshal.PtrToStringUni(fileBuffer);
-            var error = CommDlgExtendedError();
-            if (error != 0) throw new InvalidOperationException($"无法打开文件选择窗口（错误 0x{error:X8}）。");
-            return null;
-        }
-        finally
-        {
-            Marshal.FreeHGlobal(fileBuffer);
-            Marshal.FreeHGlobal(filter);
-            Marshal.FreeHGlobal(initialDirectory);
-            Marshal.FreeHGlobal(title);
-            Marshal.FreeHGlobal(defaultExtension);
-        }
-    }
-
-    /// <summary>
-    /// 将任意文件名的发行 EXE 安装为 Plugin\videoenhancer\videoenhancer.exe，DLL 留在 Plugin 根目录。
-    /// 运行中的源 EXE 只读复制即可；旧平铺目录与目标文件一起事务迁移。
-    /// </summary>
-    private static string InstallPluginFiles(string sourceExePath, string pluginDirectory)
-    {
-        var sourceExe = Path.GetFullPath(sourceExePath);
-        var targetDirectory = Path.GetFullPath(pluginDirectory)
-            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        if (!File.Exists(sourceExe)) throw new FileNotFoundException("安装程序不存在", sourceExe);
-        Directory.CreateDirectory(targetDirectory);
-
-        var workRoot = Path.Combine(targetDirectory,
-            ".videoenhancer-install-transaction-" + Guid.NewGuid().ToString("N"));
-        var stagingDirectory = Path.Combine(workRoot, "staging");
-        Directory.CreateDirectory(stagingDirectory);
-
-        try
-        {
-            var stagedExe = Path.Combine(stagingDirectory, ApplicationLayoutManager.ExecutableName);
-            var stagedPlugin = Path.Combine(stagingDirectory, ApplicationLayoutManager.PluginDllName);
-            IReadOnlyList<StagedApplicationFile> stagedApplicationFiles;
-            using (var bundle = InstallerBundle.Open(sourceExe))
-            {
-                ValidateInstallerPayload(bundle.PayloadPaths);
-                bundle.ExtractRuntime(stagedExe);
-                stagedApplicationFiles = bundle.ExtractPayload(Path.Combine(stagingDirectory, "application"));
-            }
-            ExtractEmbeddedPlugin(stagedPlugin);
-            var existingCoreRoot = Directory.Exists(Path.Combine(
-                    ApplicationLayoutManager.ApplicationRoot(targetDirectory), "python"))
-                ? ApplicationLayoutManager.ApplicationRoot(targetDirectory)
-                : targetDirectory;
-            BackendUpdateManager.RecoverPending(existingCoreRoot);
-            var installedExe = ApplicationLayoutManager.Install(
-                targetDirectory,
-                stagedExe,
-                stagedPlugin,
-                replaceCanonicalExe: true,
-                removeLegacyExe: !sourceExe.Equals(
-                    Path.Combine(targetDirectory, ApplicationLayoutManager.ExecutableName),
-                    StringComparison.OrdinalIgnoreCase),
-                stagedApplicationFiles);
-            LegacyResidueCleaner.CleanObsoleteEmbeddedTools(
-                ApplicationLayoutManager.ApplicationRoot(targetDirectory));
-            return installedExe;
-        }
-        finally
-        {
-            try { Directory.Delete(workRoot, true); } catch { }
-        }
-    }
-
-    private static void ExtractEmbeddedPlugin(string destinationPath)
-    {
-        using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream(EmbeddedPluginResource)
-            ?? throw new InvalidOperationException("内置的 videoenhancer 插件 DLL 不存在，无法安装。");
-        using var destination = new FileStream(destinationPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        source.CopyTo(destination);
+        const string shellRoot = @"Software\Classes\SystemFileAssociations\image\shell";
+        using var shell = Registry.CurrentUser.OpenSubKey(shellRoot, writable: true);
+        shell?.DeleteSubKeyTree("VideoEnhancer.Upscale", throwOnMissingSubKey: false);
+        Console.WriteLine("REGISTRY_CLEANUP_COMPLETE|HKCU\\" + shellRoot + "\\VideoEnhancer.Upscale");
+        return 0;
     }
 
     private static string DefaultBackendChannel => ModelScopeResolveRoot + "Backend/channel.json";
@@ -2565,7 +2185,7 @@ internal static class Program
         var category = model.Path[..slash];
         var suffix = model.Path[(slash + 1)..].Replace('/', Path.DirectorySeparatorChar);
         var destinationRoot = category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)
-            ? AppRoot
+            ? CoreRoot
             : category.Equals("Backend", StringComparison.OrdinalIgnoreCase)
                 ? Path.Combine(CoreRoot, "python")
                 : category.Equals("Bin", StringComparison.OrdinalIgnoreCase)
@@ -7570,9 +7190,8 @@ internal static class Program
         writer.WriteLine("  --image-png / --image-source-format  输出无损 PNG（默认）或保持源扩展格式");
         writer.WriteLine();
         writer.WriteLine("说明");
-        writer.WriteLine("  · 便携目录：新安装的 CoreRoot 是 videoenhancer.exe 所在目录；");
-        writer.WriteLine("    旧版 videoenhancer.ini 的 core-path 仅作只读兼容，不再由程序创建或修改。");
-        writer.WriteLine("    cache、.work 和 .update 始终位于 EXE 目录内。");
+        writer.WriteLine("  · 便携目录：CoreRoot 永远是 videoenhancer.exe 所在目录；");
+        writer.WriteLine("    不读取或写入 videoenhancer.ini，cache、.work 和 .update 始终位于 EXE 目录内。");
         writer.WriteLine("  · FFmpeg 优先使用 3FUI EXE 同目录或 PATH 中的 ffmpeg.exe/ffprobe.exe；");
         writer.WriteLine("    插件旧版 bin\\ffmpeg 仅作兼容回退。其余检测 CoreRoot 下的 python 与 models；");
         writer.WriteLine("    任一缺失会报错并标出缺失项。");

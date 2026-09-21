@@ -19,14 +19,25 @@ internal static class LegacyResidueCleaner
         "inspect_interpolation_models.py", "inspect_upscale_models.py",
         "prepare_rife_tensorrt.py", "rve-image-backend.py", "rve-segmented-backend.py"
     };
+    private static readonly string[] LegacyPortableDirectories =
+    {
+        "bin", "cache", "models", "python", ".work", ".update",
+        ".videoenhancer-backend-update"
+    };
+    private static readonly string[] LegacyPortableFiles =
+    {
+        LegacyConfigFileName, "videoenhancer-layout.json", "ffmpeg_log.txt"
+    };
 
     /// <summary>
     /// 先把旧插件配置复制到便携目录，并移除已废弃的 ExePath 字段。
     /// 返回值非空时表示迁移失败，后续清理必须保留该旧配置。
     /// </summary>
-    internal static string? MigratePluginConfiguration(string applicationRoot)
+    internal static string? MigratePluginConfiguration(
+        string applicationRoot,
+        string? legacyLocalAppData)
     {
-        var legacyConfig = LegacyConfigPath();
+        var legacyConfig = LegacyConfigPath(legacyLocalAppData);
         if (legacyConfig is null || !File.Exists(legacyConfig)) return null;
 
         var portableConfig = Path.Combine(Path.GetFullPath(applicationRoot), LegacyConfigFileName);
@@ -70,23 +81,85 @@ internal static class LegacyResidueCleaner
         }
     }
 
-    internal static void Clean(string pluginRoot, string? protectedLegacyConfig)
+    /// <summary>
+    /// 把旧版 Plugin 平铺布局合并到 Plugin\videoenhancer。
+    /// 同名同内容文件只删除旧副本；同名不同内容保留在原处并报告，绝不覆盖用户数据。
+    /// </summary>
+    internal static void MigrateLegacyPluginLayout(string pluginRoot)
     {
         var root = Path.GetFullPath(pluginRoot)
             .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        var appRoot = ApplicationLayoutManager.ApplicationRoot(root);
+        var appRoot = Path.Combine(root, "videoenhancer");
+        Directory.CreateDirectory(appRoot);
+
+        var moved = 0;
+        var duplicateFiles = 0;
+        var failures = new List<string>();
+        foreach (var directoryName in LegacyPortableDirectories)
+        {
+            MergeLegacyDirectory(
+                Path.Combine(root, directoryName),
+                Path.Combine(appRoot, directoryName),
+                ref moved,
+                ref duplicateFiles,
+                failures);
+        }
+        foreach (var fileName in LegacyPortableFiles)
+        {
+            MoveLegacyFile(
+                Path.Combine(root, fileName),
+                Path.Combine(appRoot, fileName),
+                ref moved,
+                ref duplicateFiles,
+                failures);
+        }
+        if (!IsReparsePoint(root))
+        {
+            try
+            {
+                foreach (var source in Directory.EnumerateFiles(root, "python_*.7z", SearchOption.TopDirectoryOnly))
+                {
+                    MoveLegacyFile(
+                        source,
+                        Path.Combine(appRoot, Path.GetFileName(source)),
+                        ref moved,
+                        ref duplicateFiles,
+                        failures);
+                }
+            }
+            catch (Exception ex)
+            {
+                failures.Add(root + "：" + ex.Message);
+            }
+        }
+
+        Console.WriteLine($"旧插件布局迁移完成：移动 {moved} 个文件，移除 {duplicateFiles} 个重复副本。");
+        foreach (var failure in failures)
+            Console.Error.WriteLine("[迁移保留] " + failure);
+    }
+
+    internal static void Clean(
+        string pluginRoot,
+        string? protectedLegacyConfig,
+        string? legacyLocalAppData,
+        string? legacyTempRoot)
+    {
+        var root = Path.GetFullPath(pluginRoot)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var appRoot = Path.Combine(root, "videoenhancer");
         var deleted = 0;
         var failures = new List<string>();
 
-        var legacyConfig = LegacyConfigPath();
+        var legacyConfig = LegacyConfigPath(legacyLocalAppData);
         if (legacyConfig is not null && !PathsEqual(legacyConfig, protectedLegacyConfig))
             DeleteKnownFile(legacyConfig, ref deleted, failures);
         DeleteKnownFile(Path.Combine(root, LegacyIniFileName), ref deleted, failures);
         DeleteKnownFile(Path.Combine(appRoot, LegacyIniFileName), ref deleted, failures);
+        DeleteKnownFile(Path.Combine(root, "videoenhancer.exe"), ref deleted, failures);
 
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (!string.IsNullOrWhiteSpace(localAppData))
+        if (!string.IsNullOrWhiteSpace(legacyLocalAppData))
         {
+            var localAppData = Path.GetFullPath(legacyLocalAppData);
             var oldUpdaterRoot = Path.Combine(localAppData, "FFmpegFreeUI", "VideoEnhancer");
             DeleteKnownFile(Path.Combine(oldUpdaterRoot, "update-result.txt"), ref deleted, failures);
             DeleteFilesInChildDirectories(
@@ -105,10 +178,14 @@ internal static class LegacyResidueCleaner
             RemoveEmptyTree(oldCacheRoot);
         }
 
-        var oldNativeRoot = Path.Combine(Path.GetTempPath(), "videoenhancer.3fui", "fff-native-11");
-        foreach (var fileName in LegacyNativePayloadFiles)
-            DeleteKnownFile(Path.Combine(oldNativeRoot, fileName), ref deleted, failures);
-        RemoveEmptyTree(Path.GetDirectoryName(oldNativeRoot)!);
+        if (!string.IsNullOrWhiteSpace(legacyTempRoot))
+        {
+            var oldNativeRoot = Path.Combine(
+                Path.GetFullPath(legacyTempRoot), "videoenhancer.3fui", "fff-native-11");
+            foreach (var fileName in LegacyNativePayloadFiles)
+                DeleteKnownFile(Path.Combine(oldNativeRoot, fileName), ref deleted, failures);
+            RemoveEmptyTree(Path.GetDirectoryName(oldNativeRoot)!);
+        }
 
         Console.WriteLine($"旧配置残留清理完成：删除 {deleted} 个已知文件。");
         foreach (var failure in failures)
@@ -133,12 +210,115 @@ internal static class LegacyResidueCleaner
             Console.Error.WriteLine("[清理失败] " + failure);
     }
 
-    private static string? LegacyConfigPath()
+    private static string? LegacyConfigPath(string? legacyLocalAppData)
     {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        return string.IsNullOrWhiteSpace(localAppData)
+        return string.IsNullOrWhiteSpace(legacyLocalAppData)
             ? null
-            : Path.Combine(localAppData, "FFmpegFreeUI", LegacyConfigFileName);
+            : Path.Combine(
+                Path.GetFullPath(legacyLocalAppData),
+                "FFmpegFreeUI",
+                LegacyConfigFileName);
+    }
+
+    private static void MergeLegacyDirectory(
+        string source,
+        string target,
+        ref int moved,
+        ref int duplicateFiles,
+        ICollection<string> failures)
+    {
+        if (!Directory.Exists(source)) return;
+        if (IsReparsePoint(source))
+        {
+            failures.Add(source + "：符号链接或重解析点未迁移");
+            return;
+        }
+        if (File.Exists(target))
+        {
+            failures.Add(source + "：目标被同名文件占用");
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(target);
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.TopDirectoryOnly))
+            {
+                MoveLegacyFile(
+                    file,
+                    Path.Combine(target, Path.GetFileName(file)),
+                    ref moved,
+                    ref duplicateFiles,
+                    failures);
+            }
+            foreach (var directory in Directory.EnumerateDirectories(source, "*", SearchOption.TopDirectoryOnly))
+            {
+                MergeLegacyDirectory(
+                    directory,
+                    Path.Combine(target, Path.GetFileName(directory)),
+                    ref moved,
+                    ref duplicateFiles,
+                    failures);
+            }
+            if (!Directory.EnumerateFileSystemEntries(source).Any()) Directory.Delete(source);
+        }
+        catch (Exception ex)
+        {
+            failures.Add(source + "：" + ex.Message);
+        }
+    }
+
+    private static void MoveLegacyFile(
+        string source,
+        string target,
+        ref int moved,
+        ref int duplicateFiles,
+        ICollection<string> failures)
+    {
+        if (!File.Exists(source)) return;
+        if (IsReparsePoint(source))
+        {
+            failures.Add(source + "：符号链接或重解析点未迁移");
+            return;
+        }
+        try
+        {
+            if (Directory.Exists(target))
+            {
+                failures.Add(source + "：目标被同名目录占用");
+                return;
+            }
+            if (File.Exists(target))
+            {
+                if (!FilesEqual(source, target))
+                {
+                    failures.Add(source + "：目标存在不同内容，已保留旧文件");
+                    return;
+                }
+                File.Delete(source);
+                duplicateFiles++;
+                return;
+            }
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Move(source, target);
+            moved++;
+        }
+        catch (Exception ex)
+        {
+            failures.Add(source + "：" + ex.Message);
+        }
+    }
+
+    private static bool FilesEqual(string left, string right)
+    {
+        var leftInfo = new FileInfo(left);
+        var rightInfo = new FileInfo(right);
+        if (leftInfo.Length != rightInfo.Length) return false;
+        using var leftStream = File.OpenRead(left);
+        using var rightStream = File.OpenRead(right);
+        var leftHash = System.Security.Cryptography.SHA256.HashData(leftStream);
+        var rightHash = System.Security.Cryptography.SHA256.HashData(rightStream);
+        return leftHash.AsSpan().SequenceEqual(rightHash);
     }
 
     private static void DeleteFilesInChildDirectories(

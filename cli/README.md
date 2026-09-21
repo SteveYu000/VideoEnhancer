@@ -6,15 +6,16 @@
 
 ## 配置
 
-`CoreRoot` 固定为 `videoenhancer.exe` 所在目录，不读取路径 INI。安装程序会把任意版本化发行 EXE 安装为
+`CoreRoot` 永远固定为 `videoenhancer.exe` 所在目录，不读取或写入路径 INI。WiX 安装程序会把任意版本化发行 EXE 中的运行文件安装为
 `3FUI\Plugin\videoenhancer\videoenhancer.exe`，并在同级建立 `models`、`python`、`bin`
 三个便携核心目录；插件 DLL 单独保留在 `3FUI\Plugin` 根目录，3FUI 加载后会自动识别子目录 EXE。
 配置、缓存、临时文件和更新文件分别保存在同级的 `videoenhancer.plugin.json`、`cache`、`.work` 和 `.update` 中。
+普通运行不会向 AppData 写文件。安装时只会读取并清理旧版本的已知 AppData 残留；项目自有安装位置键和执行卸载用户的 `VideoEnhancer.Upscale` 图片右键菜单会在 MSI 卸载时删除。
 
 ## 构建（单文件）
 
 要求：.NET 10 SDK，以及用于编译插件的 3FUI `FFmpegFreeUI.dll`、LakeUI 5.1+。
-只发布未改名的 CLI 单文件时，CLI 会通过项目引用自动先构建并嵌入插件：
+只发布未改名的 CLI 单文件时，直接发布 CLI 项目；该命令不构建或嵌入插件：
 
 ```powershell
 dotnet publish .\VideoEnhancer.csproj -c Release `
@@ -31,9 +32,11 @@ dotnet publish .\VideoEnhancer.slnx -c Release `
 ```
 
 `HostBin` 可改用环境变量 `VIDEOENHANCER_HOST_BIN`；相邻 FFmpegFreeUI
-Release/Debug 输出也会被自动发现。解决方案发布后在仓库根目录的 `Artifacts` 中生成
+Release/Debug 输出也会被自动发现。解决方案发布会构建插件和 CLI、通过 NuGet 还原 WiX 6，
+先生成 MSI 再封装 Burn；完成后在仓库根目录的 `Artifacts` 中生成
 `VideoEnhancerInstaller.exe`，以及包含 DLL、EXE 和安装说明的
-`VideoEnhancer.zip`。作为 3FUI 插件使用时，ZIP 内的程序放在
+`VideoEnhancer.zip`。`installer\Package` 和 `installer\Bundle` 由发布目标在载荷暂存完成后调用，
+因此不作为普通解决方案项目直接并行构建。作为 3FUI 插件使用时，ZIP 内的程序放在
 `Plugin\videoenhancer` 中运行，并与 `bin\`、`python\`、`models\` 同级。
 
 ## 用法
@@ -125,9 +128,9 @@ PowerShell 示例：
 
 ## 插件自动更新
 
-插件以 GitHub Release 为唯一版本标准：优先读取 `maxzrb/VideoEnhancer` 的 `releases/latest` 及其 `stable.json` 清单资产；GitHub 不可达时读取 ModelScope `stable.json` 兜底。可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖检查仓库，`VIDEOENHANCER_UPDATE_GITHUB_TOKEN` 供私有仓库或提高 API 限频使用。更新包下载同样首选 GitHub Release 资产，失败时回退 ModelScope 数据集 `AerithDream/VideoEnhancer-Releases`（可用 `VIDEOENHANCER_UPDATE_DATASET=owner/name` 切换）；两源都校验清单中的大小与 SHA-256。发现更高 SemVer 后必须由用户确认。
+插件以 GitHub Release 为唯一版本标准：优先读取 `maxzrb/VideoEnhancer` 的 `releases/latest` 及其 `stable.json` 清单资产；GitHub 不可达时读取 ModelScope `stable.json` 兜底。可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖检查仓库，`VIDEOENHANCER_UPDATE_GITHUB_TOKEN` 供私有仓库或提高 API 限频使用。更新包下载首选 ModelScope 数据集 `AerithDream/VideoEnhancer-Releases`（可用 `VIDEOENHANCER_UPDATE_DATASET=owner/name` 切换），失败时回退 GitHub Release 资产；两源都校验清单中的大小与 SHA-256。发现更高 SemVer 后必须由用户确认。
 
-从 1.0.6 起，更新资产是单个版本化 `videoenhancer.exe`。1.1.0 起，临时更新器在 3FUI 退出后将旧平铺布局事务迁入 `Plugin\videoenhancer`，把 EXE 安装到子目录并把内嵌 DLL 保留在 `Plugin` 根目录；短暂占用会重试，失败回滚，进程中断后下次安装会先恢复。成功后自动重启 3FUI。布局 JSON 已嵌入 DLL，不再作为更新资产。`--apply-update` 及相关参数是插件内部更新协议，不作为普通处理命令使用。
+更新资产是版本化的 WiX Burn 安装器。下载和 SHA-256 校验成功后，插件以 `INSTALLFOLDER=<当前 3FUI 根目录>` 启动安装器并关闭 3FUI；用户在标准安装界面确认后，由内嵌 MSI 更新 EXE、DLL、独立组件，迁移旧平铺目录并清理旧配置残留。安装结束后需要手动重新启动 3FUI。旧 `--apply-update`、`--update-package` 等私有自更新参数已经删除。
 
 ## 目录结构
 

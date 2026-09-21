@@ -625,12 +625,6 @@ Namespace videoenhancer
             QueueHook.AttachQueueMenu()
             AddHandler _queueMenuTimer.Tick, AddressOf OnQueueMenuTick
             _queueMenuTimer.Start()
-            Dim updateResult = PluginUpdater.ConsumeUpdateResult()
-            If updateResult.StartsWith("OK|", StringComparison.Ordinal) Then
-                ShowStatus("已更新到 v" & updateResult.Substring(3), False)
-            ElseIf updateResult.StartsWith("ERROR|", StringComparison.Ordinal) Then
-                ShowStatus("上次自动更新失败：" & updateResult.Substring(6), True)
-            End If
             If _config.AutoCheckUpdates Then StartAutomaticUpdateCheck()
         End Sub
 
@@ -658,8 +652,7 @@ Namespace videoenhancer
             If Not silent Then ShowStatus("正在从 GitHub 检查更新…", False)
             Try
                 Dim manifest = Await PluginUpdater.FetchLatestManifestAsync()
-                If Not PluginUpdater.HasUpdate(manifest,
-                    PluginConfig.ResolveInstalledExePath()) Then
+                If Not PluginUpdater.HasUpdate(manifest) Then
                     If Not silent Then ShowStatus("当前已是最新稳定版 v" & PluginUpdater.CurrentVersion, False)
                     Return
                 End If
@@ -668,7 +661,7 @@ Namespace videoenhancer
                     Environment.NewLine & "当前版本：" & PluginUpdater.CurrentVersion &
                     Environment.NewLine & "更新包：" & FormatDownloadSize(manifest.Package.Size)
                 message &= Environment.NewLine & Environment.NewLine &
-                    "下载完成并校验后会再次询问是否关闭并重启 3FUI。" & Environment.NewLine &
+                    "下载完成并校验后会再次询问是否关闭 3FUI 并打开标准安装器。" & Environment.NewLine &
                     "现在下载更新包吗？"
                 If Not ShowLakeConfirm(Me, message, "发现新版本", defaultYes:=True) Then Return
                 userAccepted = True
@@ -682,30 +675,24 @@ Namespace videoenhancer
                     Not File.Exists(Path.Combine(targetDirectory, "videoenhancer.3fui.dll")) Then
                     Throw New InvalidOperationException("自动更新无法确定承载插件 DLL 的 Plugin 目录")
                 End If
-                Dim hostExe = Environment.ProcessPath
-                If String.IsNullOrWhiteSpace(hostExe) OrElse Not File.Exists(hostExe) Then
-                    Throw New FileNotFoundException("无法确定 3FUI 主程序路径")
-                End If
-
                 ShowStatus("正在下载 VideoEnhancer v" & manifest.Version & "…", False)
                 Dim packagePath = Await PluginUpdater.DownloadPackageAsync(manifest,
                     Sub(percent) ShowStatus("正在下载更新：" & percent & "%", False))
                 ShowStatus("更新包已下载并校验，等待确认安装…", False)
                 Dim restartMessage = "VideoEnhancer " & manifest.Version & " 已下载并通过校验。" &
                     Environment.NewLine & Environment.NewLine &
-                    "现在安装会关闭并重新启动 3FUI。" & Environment.NewLine &
+                    "现在将打开 WiX 安装器并关闭 3FUI；安装完成后请手动重新打开 3FUI。" & Environment.NewLine &
                     "请先停止编码与视频处理任务，并保存尚未完成的操作。" & Environment.NewLine & Environment.NewLine &
-                    "确定现在重启并安装吗？"
-                If Not ShowLakeConfirm(Me, restartMessage, "确认重启安装", defaultYes:=False) Then
-                    ShowStatus("更新包已下载；已取消本次重启安装", False)
+                    "确定现在打开安装器吗？"
+                If Not ShowLakeConfirm(Me, restartMessage, "确认安装更新", defaultYes:=False) Then
+                    ShowStatus("更新包已下载；已取消本次安装", False)
                     Return
                 End If
-                ShowStatus("用户已确认，正在准备重启 3FUI…", False)
+                ShowStatus("用户已确认，正在打开 WiX 安装器…", False)
                 If Not StopEnvironmentCheck(10000) Then
                     Throw New InvalidOperationException("启动环境检查未能及时停止，请稍后重试")
                 End If
-                PluginUpdater.StartUpdate(packagePath, targetDirectory,
-                    Environment.ProcessId, hostExe)
+                PluginUpdater.StartUpdate(packagePath, targetDirectory)
                 Application.Exit()
             Catch ex As Exception
                 If Not silent OrElse userAccepted Then ShowStatus("检查或安装更新失败：" & ex.Message, True)
