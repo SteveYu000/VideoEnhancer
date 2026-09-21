@@ -36,8 +36,8 @@ internal static class Program
         return assembly?.GetName().Version?.ToString(3) ?? "0.0.0";
     }
     private const string EmbeddedPluginResource = "VideoEnhancer.Embedded.videoenhancer.3fui.dll";
-    private const string EmbeddedAriaResource = "VideoEnhancer.Embedded.aria2-next.exe";
-    private const string Embedded7ZipResource = "VideoEnhancer.Embedded.7za.exe";
+    private const string EmbeddedThirdPartyNoticesResource = "VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt";
+    private const string EmbeddedSharpCompressLicenseResource = "VideoEnhancer.Embedded.SharpCompress.LICENSE.txt";
     private const string EmbeddedOrderedBackendResource = "VideoEnhancer.Embedded.rve-ordered-backend.py";
     private const string EmbeddedInterpolationInspectorResource = "VideoEnhancer.Embedded.inspect_interpolation_models.py";
     private const string EmbeddedUpscaleInspectorResource = "VideoEnhancer.Embedded.inspect_upscale_models.py";
@@ -77,6 +77,7 @@ internal static class Program
     private static string InterpolationInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_interpolation_models.py");
     private static string UpscaleInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_upscale_models.py");
     private static string RifeTensorRTPrepareScript => Path.Combine(CoreRoot, "python", "backend", "prepare_rife_tensorrt.py");
+    private static string Aria2NextExe => Path.Combine(CoreRoot, "bin", "aria2-next", "aria2-next.exe");
     // 最终编码复用 3FUI 的 FFmpeg：先查宿主目录与 PATH，插件私带 bin\ffmpeg 仅作旧版回退。
     private static string FfmpegExe => Resolve3FuiFfmpegTool("ffmpeg.exe");
     private static string FfprobeExe => Resolve3FuiFfmpegTool("ffprobe.exe");
@@ -971,6 +972,15 @@ internal static class Program
 
     private static int Run(string[] args)
     {
+        if (args.Length > 0 && args[0].Equals("--create-installer-bundle", StringComparison.Ordinal))
+            return CreateInstallerBundle(args);
+        if (args.Length > 0 && args[0].Equals("--create-7z", StringComparison.Ordinal))
+            return CreateSevenZip(args);
+        if (args.Length == 1 && args[0].Equals("--third-party-notices", StringComparison.Ordinal))
+        {
+            PrintThirdPartyNotices(Console.Out);
+            return 0;
+        }
         if (args.Length == 0)
         {
             return RunInteractiveInstaller();
@@ -1103,7 +1113,7 @@ internal static class Program
             var output = string.IsNullOrWhiteSpace(o.ExtractOutput)
                 ? Path.GetDirectoryName(archive)!
                 : Path.GetFullPath(o.ExtractOutput);
-            return ExtractWith7Zip(archive, output);
+            return ExtractArchive(archive, output);
         }
 
         if (!string.IsNullOrWhiteSpace(o.InspectUpscaleModel))
@@ -1422,6 +1432,69 @@ internal static class Program
         return RunVideoPipeline(input, outputFile, model, customEncoder, overwrite, scale,
             o.PauseShm, stopWatcher, interpModel, interpFactor, o.Backend, o.InterpBackend, o.ProcessOrder, hdrMode,
             o.DynamicOpticalFlow, sceneThreshold, tileSize, o.UpscalePrecision, o.InterpPrecision);
+    }
+
+    private static int CreateInstallerBundle(string[] args)
+    {
+        if (args.Length != 4)
+            return Fail("--create-installer-bundle 需要 <运行EXE> <输出EXE> <载荷目录>");
+
+        var output = Path.GetFullPath(args[2]);
+        try
+        {
+            InstallerBundle.Create(args[1], output, args[3]);
+            using var bundle = InstallerBundle.Open(output);
+            ValidateInstallerPayload(bundle.PayloadPaths);
+            Console.WriteLine("INSTALLER_BUNDLE_COMPLETE|" + output);
+            return 0;
+        }
+        catch
+        {
+            try { if (File.Exists(output)) File.Delete(output); } catch { }
+            throw;
+        }
+    }
+
+    private static int CreateSevenZip(string[] args)
+    {
+        if (args.Length != 3) return Fail("--create-7z 需要 <源目录> <输出.7z>");
+        ManagedArchiveExtractor.CreateSevenZip(args[1], args[2]);
+        Console.WriteLine("ARCHIVE_CREATE_COMPLETE|" + Path.GetFullPath(args[2]));
+        return 0;
+    }
+
+    private static void ValidateInstallerPayload(IEnumerable<string> payloadPaths)
+    {
+        var paths = payloadPaths.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var required in new[]
+        {
+            "bin/aria2-next/aria2-next.exe",
+            "THIRD-PARTY-NOTICES.txt",
+            "licenses/aria2-next/COPYING",
+            "licenses/aria2-next/AUTHORS",
+            "licenses/aria2-next/SOURCE.txt",
+            "licenses/SharpCompress/LICENSE.txt"
+        })
+        {
+            if (!paths.Contains(required))
+                throw new InvalidDataException("安装器缺少必需载荷：" + required);
+        }
+    }
+
+    private static void PrintThirdPartyNotices(TextWriter writer)
+    {
+        foreach (var resourceName in new[]
+        {
+            EmbeddedThirdPartyNoticesResource,
+            EmbeddedSharpCompressLicenseResource
+        })
+        {
+            using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
+                ?? throw new InvalidOperationException("缺少第三方声明资源：" + resourceName);
+            using var reader = new StreamReader(source, Encoding.UTF8, true, leaveOpen: false);
+            writer.WriteLine(reader.ReadToEnd().TrimEnd());
+            writer.WriteLine();
+        }
     }
 
     private static Options ParseArgs(string[] args)
@@ -1809,8 +1882,16 @@ internal static class Program
 
             var stagedExe = Path.Combine(stagingDirectory, "videoenhancer.exe");
             var stagedPlugin = Path.Combine(stagingDirectory, "videoenhancer.3fui.dll");
-            File.Copy(packagePath, stagedExe, true);
+            IReadOnlyList<StagedApplicationFile> stagedApplicationFiles;
+            using (var bundle = InstallerBundle.Open(packagePath))
+            {
+                ValidateInstallerPayload(bundle.PayloadPaths);
+                bundle.ExtractRuntime(stagedExe);
+                stagedApplicationFiles = bundle.ExtractPayload(Path.Combine(stagingDirectory, "application"));
+            }
             ExtractEmbeddedPlugin(stagedPlugin);
+            if (new FileInfo(stagedExe).Length <= 0)
+                throw new InvalidDataException("安装器内的 videoenhancer.exe 无效");
             if (new FileInfo(stagedPlugin).Length <= 0)
                 throw new InvalidDataException("新 EXE 内嵌的插件 DLL 无效");
 
@@ -1824,7 +1905,9 @@ internal static class Program
                 stagedExe,
                 stagedPlugin,
                 replaceCanonicalExe: true,
-                removeLegacyExe: true);
+                removeLegacyExe: true,
+                stagedApplicationFiles);
+            LegacyResidueCleaner.CleanObsoleteEmbeddedTools(applicationRoot);
 
             Console.WriteLine("UPDATE_COMPLETE|" + ToolVersion);
             WriteUpdateResult(resultPath, "OK|" + ToolVersion);
@@ -1908,6 +1991,8 @@ internal static class Program
             var installedExe = InstallPluginFiles(currentExe, pluginDirectory);
             Console.WriteLine("程序已安装为：" + installedExe);
             Console.WriteLine("插件已安装到：" + Path.Combine(pluginDirectory, "videoenhancer.3fui.dll"));
+            Console.WriteLine("下载组件已安装到：" + Path.Combine(
+                ApplicationLayoutManager.ApplicationRoot(pluginDirectory), "bin", "aria2-next", "aria2-next.exe"));
 
             var applicationDirectory = ApplicationLayoutManager.ApplicationRoot(pluginDirectory);
             var protectedLegacyConfig = LegacyResidueCleaner.MigratePluginConfiguration(applicationDirectory);
@@ -2024,8 +2109,6 @@ internal static class Program
         if (!File.Exists(sourceExe)) throw new FileNotFoundException("安装程序不存在", sourceExe);
         Directory.CreateDirectory(targetDirectory);
 
-        var targetExe = ApplicationLayoutManager.ExecutablePath(targetDirectory);
-        var sourceIsTarget = sourceExe.Equals(Path.GetFullPath(targetExe), StringComparison.OrdinalIgnoreCase);
         var workRoot = Path.Combine(targetDirectory,
             ".videoenhancer-install-transaction-" + Guid.NewGuid().ToString("N"));
         var stagingDirectory = Path.Combine(workRoot, "staging");
@@ -2035,21 +2118,31 @@ internal static class Program
         {
             var stagedExe = Path.Combine(stagingDirectory, ApplicationLayoutManager.ExecutableName);
             var stagedPlugin = Path.Combine(stagingDirectory, ApplicationLayoutManager.PluginDllName);
-            File.Copy(sourceExe, stagedExe, true);
+            IReadOnlyList<StagedApplicationFile> stagedApplicationFiles;
+            using (var bundle = InstallerBundle.Open(sourceExe))
+            {
+                ValidateInstallerPayload(bundle.PayloadPaths);
+                bundle.ExtractRuntime(stagedExe);
+                stagedApplicationFiles = bundle.ExtractPayload(Path.Combine(stagingDirectory, "application"));
+            }
             ExtractEmbeddedPlugin(stagedPlugin);
             var existingCoreRoot = Directory.Exists(Path.Combine(
                     ApplicationLayoutManager.ApplicationRoot(targetDirectory), "python"))
                 ? ApplicationLayoutManager.ApplicationRoot(targetDirectory)
                 : targetDirectory;
             BackendUpdateManager.RecoverPending(existingCoreRoot);
-            return ApplicationLayoutManager.Install(
+            var installedExe = ApplicationLayoutManager.Install(
                 targetDirectory,
                 stagedExe,
                 stagedPlugin,
-                replaceCanonicalExe: !sourceIsTarget,
+                replaceCanonicalExe: true,
                 removeLegacyExe: !sourceExe.Equals(
                     Path.Combine(targetDirectory, ApplicationLayoutManager.ExecutableName),
-                    StringComparison.OrdinalIgnoreCase));
+                    StringComparison.OrdinalIgnoreCase),
+                stagedApplicationFiles);
+            LegacyResidueCleaner.CleanObsoleteEmbeddedTools(
+                ApplicationLayoutManager.ApplicationRoot(targetDirectory));
+            return installedExe;
         }
         finally
         {
@@ -2233,7 +2326,7 @@ internal static class Program
             "extract-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var code = ExtractWith7Zip(archive, extractRoot);
+            var code = ExtractArchive(archive, extractRoot);
             if (code != 0) return code;
             var version = BackendUpdateManager.ApplyExtractedPatch(CoreRoot, extractRoot);
             Console.WriteLine("BACKEND_PATCH_COMPLETE|" + version);
@@ -2258,7 +2351,7 @@ internal static class Program
             "full-extract-" + Guid.NewGuid().ToString("N"));
         try
         {
-            var code = ExtractWith7Zip(archive, extractRoot);
+            var code = ExtractArchive(archive, extractRoot);
             if (code != 0) return code;
             var stagedPython = File.Exists(Path.Combine(extractRoot, "python", "python", "python.exe"))
                 ? Path.Combine(extractRoot, "python")
@@ -2506,7 +2599,7 @@ internal static class Program
                     : category.Equals("Frame-Interpolation", StringComparison.OrdinalIgnoreCase)
                         ? FrameInterpolationDir
                         : Path.Combine(CoreRoot, "models");
-            code = ExtractWith7Zip(destination, extractionRoot);
+            code = ExtractArchive(destination, extractionRoot);
             if (code != 0) return code;
             if (category.Equals("Frame-Interpolation", StringComparison.OrdinalIgnoreCase))
             {
@@ -2800,7 +2893,7 @@ internal static class Program
         }
     }
 
-    private static string EnsureEmbeddedTool(string resourceName, string fileName)
+    private static string EnsureEmbeddedFile(string resourceName, string fileName)
     {
         var directory = PortablePaths.EmbeddedToolsRoot(ToolVersion);
         Directory.CreateDirectory(directory);
@@ -3221,7 +3314,9 @@ internal static class Program
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-            var aria = EnsureEmbeddedTool(EmbeddedAriaResource, "aria2-next.exe");
+            var aria = Aria2NextExe;
+            if (!File.Exists(aria))
+                return Fail("缺少独立下载组件 aria2-next：" + aria + "。请重新安装完整发行包。", 1);
             var start = new ProcessStartInfo
             {
                 FileName = aria,
@@ -3255,7 +3350,7 @@ internal static class Program
                 }
             };
             process.ErrorDataReceived += (_, e) => { if (e.Data is not null) Console.Error.WriteLine(e.Data); };
-            if (!process.Start()) return Fail("无法启动内置 aria2-next", 1);
+            if (!process.Start()) return Fail("无法启动 aria2-next", 1);
             process.BeginOutputReadLine();
             process.BeginErrorReadLine();
             process.WaitForExit();
@@ -3271,38 +3366,12 @@ internal static class Program
         }
     }
 
-    private static int ExtractWith7Zip(string archive, string outputDirectory, bool printComplete = true)
+    private static int ExtractArchive(string archive, string outputDirectory, bool printComplete = true)
     {
         try
         {
             if (!File.Exists(archive)) return Fail("压缩文件不存在：" + archive, 1);
-            Directory.CreateDirectory(outputDirectory);
-            var sevenZip = EnsureEmbeddedTool(Embedded7ZipResource, "7za.exe");
-            var start = new ProcessStartInfo
-            {
-                FileName = sevenZip,
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
-            PortablePaths.ConfigureChildProcess(start);
-            start.ArgumentList.Add("x");
-            start.ArgumentList.Add(archive);
-            start.ArgumentList.Add("-o" + outputDirectory);
-            start.ArgumentList.Add("-y");
-            using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动内置 7-Zip-zstd");
-            var stdout = process.StandardOutput.ReadToEndAsync();
-            var stderr = process.StandardError.ReadToEndAsync();
-            process.WaitForExit();
-            if (process.ExitCode != 0)
-            {
-                Console.Error.WriteLine(stderr.GetAwaiter().GetResult());
-                return Fail("7-Zip-zstd 解压失败，退出码：" + process.ExitCode, 1);
-            }
-            _ = stdout.GetAwaiter().GetResult();
+            ManagedArchiveExtractor.Extract(archive, outputDirectory);
             if (printComplete) Console.WriteLine("EXTRACT_COMPLETE|" + outputDirectory);
             return 0;
         }
@@ -4276,7 +4345,7 @@ internal static class Program
             if (File.Exists(source) && IsModelArchive(source))
             {
                 extractionRoot = PortablePaths.CreateWorkDirectory("model-import");
-                if (ExtractWith7Zip(source, extractionRoot, printComplete: false) != 0)
+                if (ExtractArchive(source, extractionRoot, printComplete: false) != 0)
                     return 1;
                 source = extractionRoot;
             }
@@ -5098,7 +5167,7 @@ internal static class Program
         {
             "-c:v", "ffv1", "-level", "3", "-pix_fmt", "rgb24", "-an", "-sn",
         });
-        var script = EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
+        var script = EnsureEmbeddedFile(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
         var arguments = new List<string>
         {
             script,
@@ -5572,7 +5641,7 @@ internal static class Program
 
         var segmentPayload = EncodePreparedSegments(prepared);
         var encoderPayload = EncodeStringList(encoderArguments);
-        var script = EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
+        var script = EnsureEmbeddedFile(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py");
         var arguments = new List<string>
         {
             script,
@@ -5636,7 +5705,7 @@ internal static class Program
         // 同后端组合统一使用内置包装器：保持单进程帧级传递，同时允许两个模型使用不同精度。
         if (upscaleBackend == interpBackend)
         {
-            var orderedBackend = EnsureEmbeddedTool(
+            var orderedBackend = EnsureEmbeddedFile(
                 EmbeddedOrderedBackendResource, "rve-ordered-backend.py");
             var args = BuildBackendArgs(input, outputFile, model, customEncoder, overwrite, scale,
                 pauseShm, interpModel, interpFactor, upscaleBackend, orderedBackend, hdrMode,
@@ -7410,6 +7479,7 @@ internal static class Program
         writer.WriteLine("  videoenhancer.exe --apply-backend-patch <本地补丁包>");
         writer.WriteLine("  videoenhancer.exe --download-url <链接> --download-output <文件>");
         writer.WriteLine("  videoenhancer.exe --extract-archive <压缩包> [--extract-output <目录>]");
+        writer.WriteLine("  videoenhancer.exe --third-party-notices");
         writer.WriteLine("  videoenhancer.exe --version");
         writer.WriteLine();
         writer.WriteLine("必需参数");
@@ -7483,15 +7553,16 @@ internal static class Program
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_DATASET 可覆盖仓库 ID；私有仓库需设置");
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN（不会写入配置文件）");
         writer.WriteLine("  --clean-download-archives  清理 models、python 与 RTX runtime 专用目录中的下载压缩包");
-        writer.WriteLine("  --download-model <路径>  用内置 aria2-next 下载镜像文件；压缩包自动用内置 7-Zip-zstd 解压");
+        writer.WriteLine("  --download-model <路径>  用独立安装的 aria2-next 下载镜像文件；压缩包自动用 SharpCompress 解压");
         writer.WriteLine("  --delete-download-model <路径>  删除本地单文件模型；RTX runtime 路径执行专用卸载，其他组件与压缩包拒绝删除");
         writer.WriteLine("  --backend-status [--json]  检查后端版本、可用增量补丁和预计下载大小");
         writer.WriteLine("  --update-backend  按最小补丁链事务更新后端；失败或中断时自动回滚");
         writer.WriteLine("  --force-backend-full  配合 --update-backend，跳过增量补丁并下载完整修复包");
         writer.WriteLine("  --apply-backend-patch <文件>  离线应用后端增量补丁");
         writer.WriteLine("  --backend-channel <URL或文件>  指定更新通道；也可设置 VIDEOENHANCER_BACKEND_CHANNEL");
-        writer.WriteLine("  --download-url <链接> --download-output <文件>  使用内置 aria2-next 下载任意直链");
-        writer.WriteLine("  --extract-archive <文件> [--extract-output <目录>]  使用内置 7-Zip-zstd 解压");
+        writer.WriteLine("  --download-url <链接> --download-output <文件>  使用独立安装的 aria2-next 下载任意直链");
+        writer.WriteLine("  --extract-archive <文件> [--extract-output <目录>]  使用 SharpCompress 托管解压");
+        writer.WriteLine("  --third-party-notices  显示第三方组件和许可证信息");
         writer.WriteLine("  --image-input <文件>  添加一个图片输入（可重复）");
         writer.WriteLine("  --image-folder <目录>  递归添加目录及其子目录图片（可重复）");
         writer.WriteLine("  --image-output <目录>  指定图片输出目录；或用 --image-output-original 输出到原目录");
@@ -7536,15 +7607,3 @@ internal static class Program
         writer.WriteLine("    （rve-backend 的 spandrel/InterpolateRIFE 加载）。");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,0 +1,25 @@
+aria2-next 对应源码与构建来源
+=============================
+
+组件：aria2-next
+版本：2.5.6
+上游项目：https://github.com/AnInsomniacy/aria2-next
+上游标签：https://github.com/AnInsomniacy/aria2-next/releases/tag/v2.5.6
+标签对象：3edc889f14e03d1d83152b0fbe2918cfdd6f34e9
+对应源码提交：d4971f0e12322e2ffcdb1721911b7d5c6206d0e5
+
+随 VideoEnhancer 分发的 Windows x86_64 二进制：
+https://github.com/AnInsomniacy/aria2-next/releases/download/v2.5.6/aria2-next-2.5.6-windows-x86_64.exe
+SHA-256：1D86C1AD76384F0DD5AD459D5B0CC302FFCC8D12346660307DCD3F2D78BCF25D
+
+本项目未修改该二进制；它是上游 v2.5.6 Release 发布的官方构建。
+上游构建说明和构建脚本位于对应源码归档内。
+上游作者与贡献者声明见同目录 AUTHORS。
+
+对应源码归档：
+https://github.com/AnInsomniacy/aria2-next/archive/refs/tags/v2.5.6.tar.gz
+SHA-256：0A1E324CC8DDAE583E3D3B18411594EE24F24D210EE7216CF11872E3454CCB72
+
+VideoEnhancer 正式发布流程会把该归档以
+aria2-next-2.5.6-source.tar.gz 的名称一同发布并镜像，避免只依赖外部链接。
+源码归档包含上游列入 third_party 的构建依赖源码。许可证全文见同目录 COPYING。

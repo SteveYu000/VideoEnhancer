@@ -15,6 +15,7 @@
     [string]$BackendPatchRemotePath = '',
     [string]$BackendChannelUrl = '',
     [string]$BackendOutputRoot = (Join-Path $PSScriptRoot 'dist\backend-update'),
+    [string]$ArchiveTool = '',
     [switch]$DeferBackendPublish,
     [switch]$ValidateOnly,
     [switch]$PublishGithub,
@@ -38,6 +39,16 @@ function Get-ProjectVersion([string]$projectPath) {
     $nodes = @($document.SelectNodes('/Project/PropertyGroup/Version'))
     if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
         throw "项目必须声明且只能声明一个 Version：$projectPath"
+    }
+    return $nodes[0].InnerText.Trim()
+}
+
+function Get-ProjectProperty([string]$projectPath, [string]$name) {
+    $document = [System.Xml.XmlDocument]::new()
+    $document.Load($projectPath)
+    $nodes = @($document.SelectNodes("/Project/PropertyGroup/$name"))
+    if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
+        throw "项目必须声明且只能声明一个 $name：$projectPath"
     }
     return $nodes[0].InnerText.Trim()
 }
@@ -82,13 +93,25 @@ foreach ($requiredValue in ([ordered]@{
     }
 }
 
+# 正式发布先构建一次托管归档工具，后端门禁不再依赖系统安装的 7-Zip。
+if (-not $ValidateOnly -and [string]::IsNullOrWhiteSpace($ArchiveTool)) {
+    $buildArguments = @('build', $solution, '-c', 'Release')
+    if (-not [string]::IsNullOrWhiteSpace($HostBin)) {
+        $buildArguments += "-p:HostBin=$HostBin"
+    }
+    & dotnet @buildArguments
+    if ($LASTEXITCODE -ne 0) { throw '托管归档工具构建失败' }
+    $ArchiveTool = Join-Path $root 'cli\bin\Release\net10.0-windows\win-x64\videoenhancer.exe'
+}
+
 $backendOutputRoot = [System.IO.Path]::GetFullPath($BackendOutputRoot)
 & (Join-Path $PSScriptRoot 'prepare-backend-update.ps1') `
     -BaseRoot $BackendBaseRoot -TargetRoot $BackendTargetRoot `
     -BaseVersion $BackendBaseVersion -TargetVersion $BackendTargetVersion `
     -FullArchive $BackendFullArchive -OutputRoot $backendOutputRoot `
     -FullRemotePath $BackendFullRemotePath -PatchRemotePath $BackendPatchRemotePath `
-    -SentinelPaths $BackendSentinelPaths -DeferFullArchive:$DeferBackendPublish
+    -SentinelPaths $BackendSentinelPaths -DeferFullArchive:$DeferBackendPublish `
+    -ArchiveTool $ArchiveTool
 $backendAuditPath = Join-Path $backendOutputRoot 'backend-release-audit.json'
 $backendAudit = Get-Content -Raw -Encoding UTF8 $backendAuditPath | ConvertFrom-Json
 if ($ValidateOnly) {
@@ -98,6 +121,8 @@ if ($ValidateOnly) {
 
 $sourceVersion = Get-ProjectVersion $pluginProject
 $cliSourceVersion = Get-ProjectVersion $cliProject
+$aria2NextVersion = Get-ProjectProperty $cliProject 'Aria2NextVersion'
+$aria2NextSourceSha256 = Get-ProjectProperty $cliProject 'Aria2NextSourceSha256'
 if (-not $Version) { $Version = $sourceVersion }
 
 if ($sourceVersion -ne $Version) {
@@ -125,6 +150,16 @@ $distRoot = Join-Path $PSScriptRoot 'dist\modelscope'
 $versionRoot = Join-Path $distRoot (Join-Path 'releases' $Version)
 if (Test-Path -LiteralPath $versionRoot) { Remove-Item -LiteralPath $versionRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $versionRoot | Out-Null
+
+# GPL 二进制与精确对应源码归档必须出现在同一次正式发布中，并由固定哈希门禁。
+$aria2NextSourceName = "aria2-next-$aria2NextVersion-source.tar.gz"
+$aria2NextSourcePath = Join-Path $versionRoot $aria2NextSourceName
+$aria2NextSourceUrl = "https://github.com/AnInsomniacy/aria2-next/archive/refs/tags/v$aria2NextVersion.tar.gz"
+Invoke-WebRequest -UseBasicParsing -Uri $aria2NextSourceUrl -OutFile $aria2NextSourcePath
+$actualAria2NextSourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $aria2NextSourcePath).Hash
+if ($actualAria2NextSourceHash -ne $aria2NextSourceSha256) {
+    throw "aria2-next 对应源码校验失败：期望 $aria2NextSourceSha256，实际 $actualAria2NextSourceHash"
+}
 
 $exeSource = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
 if (-not (Test-Path -LiteralPath $exeSource)) { throw "缺少发布文件：$exeSource" }
@@ -162,6 +197,7 @@ $releaseNotesPath = Join-Path $distRoot 'release-notes.txt'
 
 Write-Host "OK: $packagePath"
 Write-Host "OK: $manualPath"
+Write-Host "OK: $aria2NextSourcePath"
 Write-Host "OK: $stablePath"
 
 # 目录结构升级属于安装门禁：正式资产必须通过全新安装、旧布局迁移、占用回退和中断恢复。
@@ -231,7 +267,7 @@ if ($PublishGithub) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         throw '未找到 gh CLI；请安装 GitHub CLI 并 gh auth login 后重试'
     }
-    $code = Invoke-Native { gh release create "v$Version" $packagePath $manualPath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
+    $code = Invoke-Native { gh release create "v$Version" $packagePath $manualPath $aria2NextSourcePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
     if ($code -ne 0) { throw "gh release create v$Version 失败（$GithubRepo）" }
     Write-Host "OK: GitHub Release v$Version 已创建（$GithubRepo）"
 }
@@ -251,7 +287,7 @@ if ($PublishModelScope) {
 if (-not $PublishGithub -and -not $PublishModelScope) {
     Write-Host "ModelScope 上传目录：$distRoot"
     Write-Host '手动发布命令：'
-    Write-Host "  gh release create v$Version `"$packagePath`" `"$manualPath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
+    Write-Host "  gh release create v$Version `"$packagePath`" `"$manualPath`" `"$aria2NextSourcePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
     Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$distRoot`" --repo_type dataset"
     Write-Host "  modelscope upload $ModelScopeModelsDataset `"$packagePath`" Plugin/videoenhancer.exe --repo_type dataset --no-cache"
 }

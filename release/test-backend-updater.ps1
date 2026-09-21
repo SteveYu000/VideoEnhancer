@@ -1,12 +1,21 @@
 param(
     [string]$BuildOutput = (Join-Path $PSScriptRoot '..\cli\bin\Release\net10.0-windows\win-x64'),
-    [string]$SevenZip = '7z'
+    [string]$ArchiveTool = '',
+    [string]$PythonExe = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('videoenhancer-backend-tests-' + [guid]::NewGuid().ToString('N'))
 $activeExe = ''
+
+if ([string]::IsNullOrWhiteSpace($ArchiveTool)) {
+    $ArchiveTool = Join-Path $BuildOutput 'videoenhancer.exe'
+}
+if (-not (Test-Path -LiteralPath $ArchiveTool -PathType Leaf)) {
+    throw "找不到托管归档工具：$ArchiveTool"
+}
+$archiveToolPath = [System.IO.Path]::GetFullPath($ArchiveTool)
 
 function Write-TestText([string]$path, [string]$content) {
     New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($path)) | Out-Null
@@ -42,6 +51,51 @@ function Get-Sha256([string]$path) {
     return (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
 }
 
+function Resolve-PythonExecutable([string]$configuredPath) {
+    $candidates = [System.Collections.Generic.List[string]]::new()
+    if (-not [string]::IsNullOrWhiteSpace($configuredPath)) {
+        $candidates.Add($configuredPath)
+    }
+
+    $pyLauncher = Get-Command py -ErrorAction SilentlyContinue
+    if ($null -ne $pyLauncher) {
+        try {
+            $registeredPython = & $pyLauncher.Source -3 -c 'import sys; print(sys.executable)' 2>$null
+            if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($registeredPython)) {
+                $candidates.Add(($registeredPython | Select-Object -Last 1).Trim())
+            }
+        }
+        catch {
+            # Continue with ordinary command discovery.
+        }
+    }
+
+    foreach ($commandName in @('python', 'python3')) {
+        $command = Get-Command $commandName -ErrorAction SilentlyContinue
+        if ($null -ne $command -and -not [string]::IsNullOrWhiteSpace($command.Source)) {
+            $candidates.Add($command.Source)
+        }
+    }
+
+    foreach ($candidate in $candidates | Select-Object -Unique) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            continue
+        }
+
+        try {
+            & $candidate --version *> $null
+            if ($LASTEXITCODE -eq 0) {
+                return [System.IO.Path]::GetFullPath($candidate)
+            }
+        }
+        catch {
+            # WindowsApps aliases can be discoverable without being usable files.
+        }
+    }
+
+    throw '找不到可执行的 Python 3 解释器。可通过 -PythonExe 显式指定。'
+}
+
 try {
     if (-not (Test-Path -LiteralPath (Join-Path $BuildOutput 'videoenhancer.exe'))) {
         throw "找不到已构建 CLI：$BuildOutput"
@@ -60,7 +114,7 @@ try {
     & (Join-Path $PSScriptRoot 'build-backend-patch.ps1') `
         -BaseRoot $successBase -TargetRoot $successTarget `
         -BaseVersion 'base-1' -TargetVersion 'target-2' `
-        -OutputArchive $successPatch -SevenZip $SevenZip -DisablePythonProbe | Out-Null
+        -OutputArchive $successPatch -ArchiveTool $archiveToolPath -DisablePythonProbe | Out-Null
     $patchItem = Get-Item -LiteralPath $successPatch
     $channel = [ordered]@{
         schemaVersion = 1
@@ -123,7 +177,7 @@ try {
     & (Join-Path $PSScriptRoot 'build-backend-patch.ps1') `
         -BaseRoot $rollbackBase -TargetRoot $rollbackTarget `
         -BaseVersion 'base-1' -TargetVersion 'broken-2' `
-        -OutputArchive $rollbackPatch -SevenZip $SevenZip -DisablePythonProbe | Out-Null
+        -OutputArchive $rollbackPatch -ArchiveTool $archiveToolPath -DisablePythonProbe | Out-Null
     Use-CoreRoot $rollbackCore
     $exitCode = Invoke-VideoEnhancer @('--apply-backend-patch', $rollbackPatch)
     Assert-True ($exitCode -ne 0) '健康检查失败必须返回非零'
@@ -164,7 +218,7 @@ try {
     Write-TestText (Join-Path $fullPython '.videoenhancer-backend.json') '{"version":"full-old"}'
     $fullPackageRoot = Join-Path $full 'package\python'
     Write-TestText (Join-Path $fullPackageRoot 'backend\rve-backend.py') 'fresh'
-    $probeExe = (Get-Command python -ErrorAction Stop).Source
+    $probeExe = Resolve-PythonExecutable $PythonExe
     $probeDirectory = Split-Path -Parent $probeExe
     New-Item -ItemType Directory -Force -Path (Join-Path $fullPackageRoot 'python') | Out-Null
     Copy-Item -LiteralPath $probeExe -Destination (Join-Path $fullPackageRoot 'python\python.exe')
@@ -172,7 +226,7 @@ try {
         $_.Name -match '^python\d+\.dll$' -or $_.Name -match '^vcruntime\d+.*\.dll$'
     } | Copy-Item -Destination (Join-Path $fullPackageRoot 'python')
     $fullArchive = Join-Path $full 'full.7z'
-    & $SevenZip a -t7z -mx=1 $fullArchive (Join-Path $full 'package\*') | Out-Null
+    & $archiveToolPath --create-7z (Join-Path $full 'package') $fullArchive | Out-Null
     if ($LASTEXITCODE -ne 0) { throw '完整包测试归档创建失败' }
     $fullItem = Get-Item -LiteralPath $fullArchive
     $unusedPatch = Join-Path $full 'unused-patch.7z'

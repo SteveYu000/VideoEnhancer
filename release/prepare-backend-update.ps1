@@ -13,7 +13,7 @@ param(
     [string]$PatchRemotePath = '',
     [string[]]$SentinelPaths = @(),
     [switch]$DeferFullArchive,
-    [string]$SevenZip = '7z'
+    [string]$ArchiveTool = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -112,6 +112,18 @@ if (-not $hasChanges) {
 if ($BaseVersion -eq $TargetVersion) {
     throw '检测到后端文件变化，但后端版本未递增'
 }
+
+if ([string]::IsNullOrWhiteSpace($ArchiveTool)) {
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $ArchiveTool = @(
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\videoenhancer.exe'),
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\publish\videoenhancer.exe')
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
+if ([string]::IsNullOrWhiteSpace($ArchiveTool) -or -not (Test-Path -LiteralPath $ArchiveTool -PathType Leaf)) {
+    throw '找不到托管归档工具；请先 dotnet build/publish VideoEnhancer.slnx，或通过 -ArchiveTool 指定 videoenhancer.exe'
+}
+$archiveToolPath = [System.IO.Path]::GetFullPath($ArchiveTool)
 if (-not $DeferFullArchive -and
     ([string]::IsNullOrWhiteSpace($FullArchive) -or -not (Test-Path -LiteralPath $FullArchive -PathType Leaf))) {
     throw '检测到后端变化，必须通过 -FullArchive 提供目标版本完整后端包'
@@ -140,7 +152,7 @@ if (-not $DeferFullArchive) {
     $fullValidationRoot = Join-Path $outputPath ('full-validation-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Force -Path $fullValidationRoot | Out-Null
     try {
-        & $SevenZip x $fullPath "-o$fullValidationRoot" -y | Out-Host
+        & $archiveToolPath --extract-archive $fullPath --extract-output $fullValidationRoot | Out-Host
         if ($LASTEXITCODE -ne 0) { throw '完整后端包解压验证失败' }
         $fullContentRoot = if (Test-Path -LiteralPath (Join-Path $fullValidationRoot 'python') -PathType Container) {
             Join-Path $fullValidationRoot 'python'
@@ -181,7 +193,7 @@ $patchPath = Join-Path $outputPath $patchName
 & (Join-Path $PSScriptRoot 'build-backend-patch.ps1') `
     -BaseRoot $basePath -TargetRoot $targetPath `
     -BaseVersion $BaseVersion -TargetVersion $TargetVersion `
-    -OutputArchive $patchPath -SevenZip $SevenZip
+    -OutputArchive $patchPath -ArchiveTool $archiveToolPath
 if ($LASTEXITCODE -ne 0) { throw '后端增量包生成失败' }
 
 $patchItem = Get-Item -LiteralPath $patchPath

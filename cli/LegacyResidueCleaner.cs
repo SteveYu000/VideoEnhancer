@@ -115,6 +115,24 @@ internal static class LegacyResidueCleaner
             Console.Error.WriteLine("[清理失败] " + failure);
     }
 
+    /// <summary>升级后移除旧版本从主程序资源释放的 aria2-next/7za 副本；后端脚本继续保留。</summary>
+    internal static void CleanObsoleteEmbeddedTools(string applicationRoot)
+    {
+        var embeddedToolsRoot = Path.Combine(Path.GetFullPath(applicationRoot), "bin", "embedded-tools");
+        var deleted = 0;
+        var failures = new List<string>();
+        DeleteFilesInChildDirectories(
+            embeddedToolsRoot,
+            new[] { "aria2-next.exe", "7za.exe" },
+            ref deleted,
+            failures);
+        RemoveEmptyTree(embeddedToolsRoot);
+        if (deleted > 0)
+            Console.WriteLine($"已移除 {deleted} 个旧版内嵌工具副本。");
+        foreach (var failure in failures)
+            Console.Error.WriteLine("[清理失败] " + failure);
+    }
+
     private static string? LegacyConfigPath()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

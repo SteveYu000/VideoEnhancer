@@ -1,10 +1,21 @@
-param([string]$SevenZip = '7z')
+param([string]$ArchiveTool = '')
 
 $ErrorActionPreference = 'Stop'
 $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('videoenhancer-release-gates-' + [guid]::NewGuid().ToString('N'))
 $releaseScript = Join-Path $PSScriptRoot 'build-modelscope-release.ps1'
 $prepareScript = Join-Path $PSScriptRoot 'prepare-backend-update.ps1'
+$repositoryRoot = Split-Path -Parent $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($ArchiveTool)) {
+    $ArchiveTool = @(
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\videoenhancer.exe'),
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\publish\videoenhancer.exe')
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
+if ([string]::IsNullOrWhiteSpace($ArchiveTool) -or -not (Test-Path -LiteralPath $ArchiveTool -PathType Leaf)) {
+    throw '找不到托管归档工具；请先构建解决方案'
+}
+$archiveToolPath = [System.IO.Path]::GetFullPath($ArchiveTool)
 
 function Write-TestText([string]$path, [string]$content) {
     New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($path)) | Out-Null
@@ -55,13 +66,13 @@ try {
         Write-TestText (Join-Path $root 'backend\add.py') 'add'
     }
     $fullArchive = Join-Path $testRoot 'changed\python_full.7z'
-    & $SevenZip a -t7z $fullArchive (Join-Path $testRoot 'changed\package\*') | Out-Null
+    & $archiveToolPath --create-7z (Join-Path $testRoot 'changed\package') $fullArchive | Out-Null
     if ($LASTEXITCODE -ne 0) { throw '测试完整包创建失败' }
     $changedOutput = Join-Path $testRoot 'changed\output'
     & $prepareScript -BaseRoot $changedBase -TargetRoot $changedTarget `
         -BaseVersion 'base-1' -TargetVersion 'target-2' `
         -FullArchive $fullArchive -OutputRoot $changedOutput `
-        -SentinelPaths 'backend/stable.py' -SevenZip $SevenZip | Out-Host
+        -SentinelPaths 'backend/stable.py' -ArchiveTool $archiveToolPath | Out-Host
     $audit = Get-Content -Raw -Encoding UTF8 (Join-Path $changedOutput 'backend-release-audit.json') | ConvertFrom-Json
     Assert-True ($audit.hasChanges) '后端变化未被识别'
     Assert-True ($audit.counts.add -eq 1 -and $audit.counts.replace -eq 1 -and $audit.counts.delete -eq 1) '后端差异分类不正确'
@@ -71,7 +82,7 @@ try {
     & $prepareScript -BaseRoot $changedBase -TargetRoot $changedTarget `
         -BaseVersion 'base-1' -TargetVersion 'target-2' `
         -OutputRoot $deferredOutput -SentinelPaths 'backend/stable.py' `
-        -DeferFullArchive -SevenZip $SevenZip | Out-Host
+        -DeferFullArchive -ArchiveTool $archiveToolPath | Out-Host
     $deferredAudit = Get-Content -Raw -Encoding UTF8 (Join-Path $deferredOutput 'backend-release-audit.json') | ConvertFrom-Json
     Assert-True ($deferredAudit.counts.add -eq 1 -and $deferredAudit.counts.replace -eq 1 -and $deferredAudit.counts.delete -eq 1) '暂缓模式后端差异分类不正确'
     Assert-True ((Test-Path -LiteralPath $deferredAudit.patch.localPath) -and -not (Test-Path -LiteralPath (Join-Path $deferredOutput 'backend-channel.json'))) '暂缓模式应只生成增量包和审计，不应生成 channel'
@@ -79,12 +90,12 @@ try {
     $badPackageRoot = Join-Path $testRoot 'bad-package\python'
     Write-TestText (Join-Path $badPackageRoot 'backend\rve-backend.py') 'stale'
     $badArchive = Join-Path $testRoot 'bad-package.7z'
-    & $SevenZip a -t7z $badArchive (Join-Path $testRoot 'bad-package\*') | Out-Null
+    & $archiveToolPath --create-7z (Join-Path $testRoot 'bad-package') $badArchive | Out-Null
     $badOutput = & pwsh -NoProfile -File $prepareScript `
         -BaseRoot $changedBase -TargetRoot $changedTarget `
         -BaseVersion 'base-1' -TargetVersion 'target-2' `
         -FullArchive $badArchive -OutputRoot (Join-Path $testRoot 'bad-output') `
-        -SentinelPaths 'backend/stable.py' -SevenZip $SevenZip 2>&1
+        -SentinelPaths 'backend/stable.py' -ArchiveTool $archiveToolPath 2>&1
     Assert-True ($LASTEXITCODE -ne 0) '与候选目录不一致的完整包必须被拒绝'
     Assert-True (($badOutput -join "`n").Contains('完整后端包')) '完整包拒绝原因不明确'
 

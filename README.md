@@ -27,14 +27,16 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 本体镜像：[VideoEnhancer-Releases](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases)
 - 模型镜像：[VideoEnhancer-Models](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Models)
 
-每个 Release 发布版本化 EXE、手动安装 ZIP 和更新清单：
+每个 Release 发布版本化安装器、手动安装 ZIP、更新清单以及与 GPL 下载组件精确对应的源码归档：
 
 ```text
 VideoEnhancer-<version>-win-x64.exe
+VideoEnhancer-<version>-manual-install.zip
+aria2-next-2.5.6-source.tar.gz
 stable.json
 ```
 
-插件 DLL 已嵌入 EXE，双击安装或自动更新时会释放到 3FUI 的 `plugin` 目录。模型、Python 运行环境、FFmpeg 和其他大型资源不包含在本体 Release 中，需要在模型下载页按需获取。`PotPlayer.7z` 不属于本项目分发内容。
+插件 DLL 已嵌入安装器的运行部分。安装器尾部另带独立的 `aria2-next`、第三方许可证和来源说明；双击安装或自动更新时会校验载荷，把纯运行版 `videoenhancer.exe` 与 `aria2-next` 分开安装。模型、Python 运行环境、FFmpeg 和其他大型资源不包含在本体 Release 中，需要在模型下载页按需获取。`PotPlayer.7z` 不属于本项目分发内容。
 
 ## 系统要求
 
@@ -52,7 +54,7 @@ stable.json
 
 1. 安装或准备可运行的 3FUI。
 2. 从 GitHub Release 下载 `VideoEnhancer-<version>-win-x64.exe`，无需手动改名或移动。
-3. 双击版本化 EXE 并选择 3FUI 主程序；安装器会创建 `Plugin\videoenhancer`，把自身安装为固定名称 `videoenhancer.exe`，并将插件 DLL 放在 `Plugin` 根目录。
+3. 双击版本化 EXE 并选择 3FUI 主程序；安装器会创建 `Plugin\videoenhancer`，释放不含安装载荷的固定名称 `videoenhancer.exe`，把独立下载组件安装到 `bin\aria2-next`，并将插件 DLL 放在 `Plugin` 根目录。
 4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 
@@ -77,7 +79,10 @@ Plugin\
    ├─ cache\...（运行缓存）
    ├─ .work\...（临时工作文件）
    ├─ .update\...（更新包、更新器和更新结果）
-   ├─ bin\embedded-tools\...（内置下载/解压工具）
+   ├─ THIRD-PARTY-NOTICES.txt
+   ├─ licenses\...（第三方许可证与来源说明）
+   ├─ bin\aria2-next\aria2-next.exe（独立 GPL 下载组件）
+   ├─ bin\embedded-tools\...（随版本同步的 Python 辅助脚本）
    ├─ bin\ffmpeg\ffmpeg.exe
    ├─ bin\rtx-video\runtime\vsr_backend.exe（RTX 运行组件，可选）
    ├─ python\python\python.exe
@@ -231,10 +236,14 @@ Artifacts\
   VideoEnhancer.zip
 ```
 
-`VideoEnhancer.zip` 已包含手动安装所需的插件 DLL、CLI EXE 和安装说明。
+`VideoEnhancer.zip` 已包含手动安装所需的插件 DLL、纯运行版 CLI EXE、独立
+`aria2-next`、许可证、来源说明和安装说明。解决方案发布会从上游 v2.5.6
+Release 获取 `aria2-next`，SHA-256 不等于项目文件中锁定的值时立即失败；二进制
+不再提交到 Git，也不再作为 .NET 嵌入资源。
 如果只需要未改名的 CLI 单文件，可执行
 `dotnet publish .\cli\VideoEnhancer.csproj -c Release`，产物位于 CLI 的标准
-`bin\Release\net10.0-windows\win-x64\publish` 目录，不会生成 `Artifacts`。
+`bin\Release\net10.0-windows\win-x64\publish` 目录，不会生成 `Artifacts`，也不包含
+`aria2-next` 或安装器载荷；需要下载功能时必须按上述便携布局配套放置独立组件。
 只构建插件时可直接运行：
 
 ```powershell
@@ -270,6 +279,8 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 - [REAL-Video-Enhancer](https://github.com/TNTwise/REAL-Video-Enhancer) 与 [RVE 模型仓库](https://github.com/TNTwise/real-video-enhancer-models)：后端架构参考与模型镜像来源。
 - [mkvtoolnix](https://mkvtoolnix.download/)：随包提供的字幕提取与封装工具。
 - [ModelScope](https://www.modelscope.cn/)：模型与发布镜像托管。
+- [aria2-next](https://github.com/AnInsomniacy/aria2-next)（GPL-2.0-or-later）：以独立进程提供分段和断点续传下载，安装在 `bin\aria2-next`；正式 Release 同时提供固定版本的对应源码归档。
+- [SharpCompress](https://github.com/adamhathcock/sharpcompress)（MIT）：提供托管的 ZIP、7z、RAR、TAR、GZip、XZ 和 Zstandard 等格式读取，并负责生成发布流程使用的 7z 归档，取代原先分发和外部调用的 `7za.exe`。
 
 下表覆盖当前模型镜像中可被程序选择的全部模型家族。带“待核实”的条目表示目前只能追溯到 RVE 的公开模型仓库或社区发布记录，尚未找到可确认的原作者正式发布页；这不是对模型所有权或再分发授权的主张。若作者、链接或授权信息有误，欢迎提交 Issue，本项目会及时更正或下架。
 
@@ -304,6 +315,8 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 ## 许可证和第三方资源
 
 本项目代码、3FUI 宿主、RVE 后端、预训练权重、FFmpeg、Python 依赖和其他运行资源可能具有不同的许可证和再分发条件。使用或再分发前，请分别查看对应项目和资源的许可证、NOTICE 或来源说明；项目版本号或仓库标签不代表第三方模型权重获得了统一授权。
+
+安装后的 `THIRD-PARTY-NOTICES.txt` 汇总本体直接分发的第三方组件。`aria2-next` 的 GPLv2 全文、作者与贡献者声明、二进制 SHA-256、上游标签/提交和对应源码地址位于 `licenses\aria2-next`；SharpCompress 的 MIT 许可证位于 `licenses\SharpCompress`。也可运行 `videoenhancer.exe --third-party-notices` 查看内嵌托管组件的声明。正式发布脚本会校验并同时上传 `aria2-next-2.5.6-source.tar.gz`。
 
 RTX 运行组件包（模型仓库 `Bin/rtx-video`）包含基于 MIT 许可 sidecar 的定制构建、LGPL 动态链接的 FFmpeg 共享库，以及 NVIDIA 专有的 `nvngx_*.dll` 运行库；后者按 NVIDIA RTX Video SDK 许可随显卡环境使用，公开再分发前请自行完成许可复核。
 

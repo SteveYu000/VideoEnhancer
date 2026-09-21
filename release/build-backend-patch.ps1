@@ -9,7 +9,7 @@ param(
     [string]$TargetVersion,
     [Parameter(Mandatory = $true)]
     [string]$OutputArchive,
-    [string]$SevenZip = '7z',
+    [string]$ArchiveTool = '',
     [switch]$DisablePythonProbe
 )
 
@@ -18,6 +18,18 @@ $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
 $basePath = [System.IO.Path]::GetFullPath($BaseRoot).TrimEnd('\', '/')
 $targetPath = [System.IO.Path]::GetFullPath($TargetRoot).TrimEnd('\', '/')
 $outputPath = [System.IO.Path]::GetFullPath($OutputArchive)
+
+if ([string]::IsNullOrWhiteSpace($ArchiveTool)) {
+    $repositoryRoot = Split-Path -Parent $PSScriptRoot
+    $ArchiveTool = @(
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\videoenhancer.exe'),
+        (Join-Path $repositoryRoot 'cli\bin\Release\net10.0-windows\win-x64\publish\videoenhancer.exe')
+    ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+}
+if ([string]::IsNullOrWhiteSpace($ArchiveTool) -or -not (Test-Path -LiteralPath $ArchiveTool -PathType Leaf)) {
+    throw '找不到托管归档工具；请先 dotnet build/publish VideoEnhancer.slnx，或通过 -ArchiveTool 指定 videoenhancer.exe'
+}
+$archiveToolPath = [System.IO.Path]::GetFullPath($ArchiveTool)
 
 if (-not (Test-Path -LiteralPath $basePath -PathType Container)) {
     throw "基础后端目录不存在：$basePath"
@@ -118,9 +130,9 @@ try {
     if (Test-Path -LiteralPath $outputPath) {
         Remove-Item -LiteralPath $outputPath -Force
     }
-    & $SevenZip a -t7z -mx=9 $outputPath (Join-Path $staging '*') | Out-Host
+    & $archiveToolPath --create-7z $staging $outputPath | Out-Host
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $outputPath)) {
-        throw "7-Zip 创建补丁失败，退出码：$LASTEXITCODE"
+        throw "托管归档工具创建补丁失败，退出码：$LASTEXITCODE"
     }
 
     $item = Get-Item -LiteralPath $outputPath

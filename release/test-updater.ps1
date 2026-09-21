@@ -64,13 +64,34 @@ function New-DummyTarget([string]$name) {
 
 function Assert-UpdatedLayout([string]$target) {
     $applicationRoot = Join-Path $target 'videoenhancer'
-    $expectedExe = (Get-FileHash -Algorithm SHA256 -LiteralPath $updater).Hash
-    $actualExe = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $applicationRoot 'videoenhancer.exe')).Hash
-    if ($actualExe -ne $expectedExe) { throw '新布局 EXE 哈希不一致' }
+    $installedExe = Join-Path $applicationRoot 'videoenhancer.exe'
+    if (((& $installedExe --version) | Select-Object -First 1).Trim() -ne $Version) {
+        throw '新布局纯运行 EXE 版本不一致'
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installedExe).Hash -eq
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $updater).Hash) {
+        throw '更新后的运行 EXE 仍包含安装器尾部载荷'
+    }
     $expectedDll = (Get-FileHash -Algorithm SHA256 -LiteralPath $pluginDll).Hash
     $actualDll = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path $target 'videoenhancer.3fui.dll')).Hash
     if ($actualDll -ne $expectedDll) { throw 'Plugin 根目录 DLL 哈希不一致' }
     if (Test-Path -LiteralPath (Join-Path $target 'videoenhancer.exe')) { throw '更新后仍残留旧平铺 EXE' }
+    $aria2Next = Join-Path $applicationRoot 'bin\aria2-next\aria2-next.exe'
+    if (-not (Test-Path -LiteralPath $aria2Next -PathType Leaf) -or
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $aria2Next).Hash -ne
+            '1D86C1AD76384F0DD5AD459D5B0CC302FFCC8D12346660307DCD3F2D78BCF25D') {
+        throw '更新后 aria2-next 独立组件不存在或哈希错误'
+    }
+    foreach ($notice in @(
+        'THIRD-PARTY-NOTICES.txt',
+        'licenses\aria2-next\COPYING',
+        'licenses\aria2-next\AUTHORS',
+        'licenses\aria2-next\SOURCE.txt',
+        'licenses\SharpCompress\LICENSE.txt')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $applicationRoot $notice) -PathType Leaf)) {
+            throw "更新后缺少第三方许可材料：$notice"
+        }
+    }
     foreach ($directory in @('bin', 'models', 'python', '.videoenhancer-backend-update')) {
         if (-not (Test-Path -LiteralPath (Join-Path $applicationRoot "$directory\migration-marker.txt"))) {
             throw "旧目录内容没有迁移：$directory"

@@ -21,6 +21,8 @@ if (-not $resolvedTest.StartsWith($resolvedTemp, [System.StringComparison]::Ordi
 New-Item -ItemType Directory -Force -Path $resolvedTest | Out-Null
 $versionedInstaller = Join-Path $resolvedTest 'VideoEnhancer-test-win-x64.exe'
 Copy-Item -LiteralPath $Installer -Destination $versionedInstaller
+$installerVersion = ((& $versionedInstaller --version) | Select-Object -First 1).Trim()
+$aria2NextSha256 = '1D86C1AD76384F0DD5AD459D5B0CC302FFCC8D12346660307DCD3F2D78BCF25D'
 $originalInstallHost = $env:VIDEOENHANCER_INSTALL_HOST
 $originalFailAfterMove = $env:VIDEOENHANCER_TEST_LAYOUT_FAIL_AFTER_MOVE
 
@@ -77,9 +79,27 @@ function Assert-NewInstall([string]$hostRoot) {
     if (-not (Test-Path -LiteralPath $installedExe) -or -not (Test-Path -LiteralPath $installedDll)) {
         throw '全新安装没有生成固定名称的 EXE 和插件 DLL'
     }
-    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installedExe).Hash -ne
+    if (((& $installedExe --version) | Select-Object -First 1).Trim() -ne $installerVersion) {
+        throw '安装后的纯运行 EXE 版本不正确'
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $installedExe).Hash -eq
         (Get-FileHash -Algorithm SHA256 -LiteralPath $versionedInstaller).Hash) {
-        throw '固定名称 EXE 与版本化安装器哈希不一致'
+        throw '安装后的运行 EXE 仍包含安装器尾部载荷'
+    }
+    $aria2Next = Join-Path $applicationRoot 'bin\aria2-next\aria2-next.exe'
+    if (-not (Test-Path -LiteralPath $aria2Next -PathType Leaf) -or
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $aria2Next).Hash -ne $aria2NextSha256) {
+        throw 'aria2-next 未按固定哈希安装为独立组件'
+    }
+    foreach ($notice in @(
+        'THIRD-PARTY-NOTICES.txt',
+        'licenses\aria2-next\COPYING',
+        'licenses\aria2-next\AUTHORS',
+        'licenses\aria2-next\SOURCE.txt',
+        'licenses\SharpCompress\LICENSE.txt')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $applicationRoot $notice) -PathType Leaf)) {
+            throw "缺少第三方许可材料：$notice"
+        }
     }
     foreach ($directory in @('models', 'python', 'bin')) {
         if (-not (Test-Path -LiteralPath (Join-Path $applicationRoot $directory) -PathType Container)) {

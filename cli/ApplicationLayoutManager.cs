@@ -28,7 +28,7 @@ internal static partial class ApplicationLayoutManager
 
     private sealed class LayoutJournal
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
         public string PluginRoot { get; set; } = "";
         public string ApplicationRoot { get; set; } = "";
         public string WorkRoot { get; set; } = "";
@@ -38,6 +38,7 @@ internal static partial class ApplicationLayoutManager
         public bool ReplaceCanonicalExe { get; set; }
         public bool RemoveLegacyExe { get; set; }
         public List<LayoutMove> Moves { get; set; } = new();
+        public List<ManagedFileChange> ManagedFiles { get; set; } = new();
     }
 
     private sealed class LayoutMove
@@ -46,6 +47,13 @@ internal static partial class ApplicationLayoutManager
         public string Target { get; set; } = "";
         public bool IsDirectory { get; set; }
         public bool Completed { get; set; }
+    }
+
+    private sealed class ManagedFileChange
+    {
+        public string Target { get; set; } = "";
+        public string Backup { get; set; } = "";
+        public bool HadOriginal { get; set; }
     }
 
     [JsonSourceGenerationOptions(WriteIndented = true)]
@@ -81,7 +89,7 @@ internal static partial class ApplicationLayoutManager
         {
             throw new InvalidDataException("无法读取上次未完成的布局迁移日志：" + journalPath, ex);
         }
-        if (journal.SchemaVersion != 1 ||
+        if (journal.SchemaVersion is not (1 or 2) ||
             !Path.GetFullPath(journal.PluginRoot).Equals(root, StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException("布局迁移日志与当前 Plugin 目录不匹配：" + journalPath);
@@ -97,7 +105,8 @@ internal static partial class ApplicationLayoutManager
         string stagedExe,
         string stagedPluginDll,
         bool replaceCanonicalExe,
-        bool removeLegacyExe)
+        bool removeLegacyExe,
+        IReadOnlyList<StagedApplicationFile>? stagedApplicationFiles = null)
     {
         var root = NormalizePluginRoot(pluginRoot);
         var appRoot = ApplicationRoot(root);
@@ -110,6 +119,7 @@ internal static partial class ApplicationLayoutManager
         RecoverPending(root);
         if (!File.Exists(stagedExe)) throw new FileNotFoundException("缺少暂存 EXE", stagedExe);
         if (!File.Exists(stagedPluginDll)) throw new FileNotFoundException("缺少暂存插件 DLL", stagedPluginDll);
+        var applicationFiles = ValidateApplicationFiles(appRoot, canonicalExe, stagedApplicationFiles);
 
         var moves = BuildMoves(root, appRoot);
         ValidateMoveConflicts(moves);
@@ -153,6 +163,26 @@ internal static partial class ApplicationLayoutManager
                     File.Move(move.Source, move.Target);
                 completedMoves++;
                 RunMigrationTestHook(completedMoves, root);
+            }
+
+            foreach (var file in applicationFiles)
+            {
+                if (Directory.Exists(file.Target))
+                    throw new IOException("应用文件目标被同名目录占用：" + file.Target);
+                WaitForExclusiveAccess(file.Target, TimeSpan.FromSeconds(10));
+                var relative = Path.GetRelativePath(appRoot, file.Target);
+                var backup = Path.Combine(backupRoot, "application-files", relative);
+                var change = new ManagedFileChange
+                {
+                    Target = file.Target,
+                    Backup = backup,
+                    HadOriginal = File.Exists(file.Target)
+                };
+                BackupIfPresent(file.Target, backup);
+                journal.ManagedFiles.Add(change);
+                WriteJournal(journalPath, journal);
+                CopyWithSharingRetry(file.SourcePath, file.Target, TimeSpan.FromSeconds(10));
+                VerifySameFile(file.SourcePath, file.Target, "安装后的独立组件校验失败：" + relative);
             }
 
             if (replaceCanonicalExe)
@@ -215,6 +245,36 @@ internal static partial class ApplicationLayoutManager
         return moves;
     }
 
+    private static IReadOnlyList<(string SourcePath, string Target)> ValidateApplicationFiles(
+        string applicationRoot,
+        string canonicalExe,
+        IReadOnlyList<StagedApplicationFile>? files)
+    {
+        if (files is null || files.Count == 0)
+            return Array.Empty<(string SourcePath, string Target)>();
+
+        var rootPrefix = applicationRoot + Path.DirectorySeparatorChar;
+        var targets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<(string SourcePath, string Target)>(files.Count);
+        foreach (var file in files)
+        {
+            var source = Path.GetFullPath(file.SourcePath);
+            if (!File.Exists(source)) throw new FileNotFoundException("缺少暂存应用文件", source);
+            var relative = InstallerBundle.NormalizeRelativePath(file.RelativePath)
+                .Replace('/', Path.DirectorySeparatorChar);
+            var target = Path.GetFullPath(Path.Combine(applicationRoot, relative));
+            if (!target.StartsWith(rootPrefix, StringComparison.OrdinalIgnoreCase)
+                || target.Equals(canonicalExe, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException("应用文件目标越界或覆盖主程序：" + file.RelativePath);
+            }
+            if (!targets.Add(target))
+                throw new InvalidDataException("应用文件目标重复：" + file.RelativePath);
+            result.Add((source, target));
+        }
+        return result;
+    }
+
     private static void ValidateMoveConflicts(IEnumerable<LayoutMove> moves)
     {
         var conflicts = moves.Where(move => move.IsDirectory
@@ -235,6 +295,13 @@ internal static partial class ApplicationLayoutManager
         var legacyExe = Path.Combine(journal.PluginRoot, ExecutableName);
         var pluginDll = Path.Combine(journal.PluginRoot, PluginDllName);
         var errors = new List<string>();
+
+        foreach (var file in journal.ManagedFiles.AsEnumerable().Reverse())
+        {
+            RestoreFile(file.Target, file.Backup, file.HadOriginal, errors);
+            if (!file.HadOriginal)
+                TryDeleteEmptyParents(Path.GetDirectoryName(file.Target), journal.ApplicationRoot);
+        }
 
         RestoreFile(canonicalExe, Path.Combine(backupRoot, "canonical-videoenhancer.exe"),
             journal.HadCanonicalExe, errors);
@@ -398,6 +465,26 @@ internal static partial class ApplicationLayoutManager
         }
         catch
         {
+        }
+    }
+
+    private static void TryDeleteEmptyParents(string? start, string boundary)
+    {
+        if (string.IsNullOrWhiteSpace(start)) return;
+        var current = Path.GetFullPath(start);
+        var root = Path.GetFullPath(boundary);
+        while (current.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                if (!Directory.Exists(current) || Directory.EnumerateFileSystemEntries(current).Any()) return;
+                Directory.Delete(current);
+            }
+            catch
+            {
+                return;
+            }
+            current = Path.GetDirectoryName(current) ?? root;
         }
     }
 }

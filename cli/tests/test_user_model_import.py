@@ -81,7 +81,7 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("ApplySegmentResolutionRule(config)", segmented)
         self.assertIn('case "--allow-mixed-segment-backends"', program)
         self.assertIn("!options.AllowMixedSegmentBackends", program)
-        self.assertIn('EnsureEmbeddedTool(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py")', program)
+        self.assertIn('EnsureEmbeddedFile(EmbeddedSegmentedBackendResource, "rve-segmented-backend.py")', program)
         self.assertIn('ScriptSupportsArgument(script, "--tile-size")', program)
         self.assertIn("RunHybridSegmentedVideo(", program)
         self.assertIn("RunDirectCustomSegment(", program)

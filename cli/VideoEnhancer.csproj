@@ -40,6 +40,21 @@
     <ManualInstallReadmePath>$(MSBuildProjectDirectory)\manual-install-readme.txt</ManualInstallReadmePath>
     <InstallerArtifactPath>$(ArtifactsDirectory)VideoEnhancerInstaller.exe</InstallerArtifactPath>
     <ManualPackagePath>$(ArtifactsDirectory)VideoEnhancer.zip</ManualPackagePath>
+    <ThirdPartyNoticePath>$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticePath>
+    <Aria2NextLicensePath>$(MSBuildProjectDirectory)\third-party\aria2-next\COPYING</Aria2NextLicensePath>
+    <Aria2NextAuthorsPath>$(MSBuildProjectDirectory)\third-party\aria2-next\AUTHORS</Aria2NextAuthorsPath>
+    <Aria2NextSourcePath>$(MSBuildProjectDirectory)\third-party\aria2-next\SOURCE.txt</Aria2NextSourcePath>
+    <SharpCompressLicensePath>$(MSBuildProjectDirectory)\third-party\SharpCompress\LICENSE.txt</SharpCompressLicensePath>
+  </PropertyGroup>
+
+  <PropertyGroup Label="Third-party components">
+    <!-- aria2-next 作为独立 GPL 组件安装，不再嵌入 videoenhancer.exe。 -->
+    <Aria2NextVersion>2.5.6</Aria2NextVersion>
+    <Aria2NextDownloadUrl>https://github.com/AnInsomniacy/aria2-next/releases/download/v$(Aria2NextVersion)/aria2-next-$(Aria2NextVersion)-windows-x86_64.exe</Aria2NextDownloadUrl>
+    <Aria2NextSha256>1D86C1AD76384F0DD5AD459D5B0CC302FFCC8D12346660307DCD3F2D78BCF25D</Aria2NextSha256>
+    <Aria2NextSourceSha256>0A1E324CC8DDAE583E3D3B18411594EE24F24D210EE7216CF11872E3454CCB72</Aria2NextSourceSha256>
+    <Aria2NextCacheDirectory>$(MSBuildProjectDirectory)\obj\third-party\aria2-next\$(Aria2NextVersion)</Aria2NextCacheDirectory>
+    <Aria2NextExecutablePath>$(Aria2NextCacheDirectory)\aria2-next.exe</Aria2NextExecutablePath>
   </PropertyGroup>
 
   <ItemGroup Label="Project references">
@@ -48,14 +63,19 @@
                       PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup Label="Package references">
+    <!-- 代替原先随程序分发的 7za.exe；许可证文本随安装包一同发布。 -->
+    <PackageReference Include="SharpCompress" Version="0.50.3" />
+  </ItemGroup>
+
   <ItemGroup Label="Embedded resources">
     <!-- 双击安装时释放到所选 FFmpegFreeUI 程序旁的 plugin 目录。 -->
     <EmbeddedResource Include="$(PluginArtifactPath)"
                       LogicalName="VideoEnhancer.Embedded.$(PluginArtifactFileName)" />
-    <EmbeddedResource Include="embedded-tools\aria2-next.exe"
-                      LogicalName="VideoEnhancer.Embedded.aria2-next.exe" />
-    <EmbeddedResource Include="embedded-tools\7za.exe"
-                      LogicalName="VideoEnhancer.Embedded.7za.exe" />
+    <EmbeddedResource Include="$(ThirdPartyNoticePath)"
+                      LogicalName="VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt" />
+    <EmbeddedResource Include="$(SharpCompressLicensePath)"
+                      LogicalName="VideoEnhancer.Embedded.SharpCompress.LICENSE.txt" />
     <EmbeddedResource Include="embedded-tools\rve-ordered-backend.py"
                       LogicalName="VideoEnhancer.Embedded.rve-ordered-backend.py" />
     <EmbeddedResource Include="embedded-tools\inspect_interpolation_models.py"
@@ -71,6 +91,37 @@
     <EmbeddedResource Include="model-capabilities.json"
                       LogicalName="VideoEnhancer.Embedded.model-capabilities.json" />
   </ItemGroup>
+
+  <Target Name="ValidateThirdPartyMetadata"
+          BeforeTargets="PrepareForBuild"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(ThirdPartyNoticePath)')"
+           Text="缺少第三方组件声明：$(ThirdPartyNoticePath)" />
+    <Error Condition="!Exists('$(Aria2NextLicensePath)')"
+           Text="缺少 aria2-next GPL 许可证：$(Aria2NextLicensePath)" />
+    <Error Condition="!Exists('$(Aria2NextAuthorsPath)')"
+           Text="缺少 aria2-next 作者声明：$(Aria2NextAuthorsPath)" />
+    <Error Condition="!Exists('$(Aria2NextSourcePath)')"
+           Text="缺少 aria2-next 对应源码说明：$(Aria2NextSourcePath)" />
+    <Error Condition="!Exists('$(SharpCompressLicensePath)')"
+           Text="缺少 SharpCompress 许可证：$(SharpCompressLicensePath)" />
+  </Target>
+
+  <Target Name="AcquireAria2Next"
+          Condition="'$(BuildingSolutionFile)' == 'true'">
+    <MakeDir Directories="$(Aria2NextCacheDirectory)" />
+    <DownloadFile SourceUrl="$(Aria2NextDownloadUrl)"
+                  DestinationFolder="$(Aria2NextCacheDirectory)"
+                  DestinationFileName="aria2-next.exe"
+                  SkipUnchangedFiles="true"
+                  Retries="3"
+                  RetryDelayMilliseconds="1000" />
+    <GetFileHash Files="$(Aria2NextExecutablePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="_Aria2NextWithHash" />
+    </GetFileHash>
+    <Error Condition="'%(_Aria2NextWithHash.FileHash)' != '$(Aria2NextSha256)'"
+           Text="aria2-next v$(Aria2NextVersion) 校验失败：期望 $(Aria2NextSha256)，实际 %(_Aria2NextWithHash.FileHash)。" />
+  </Target>
 
   <Target Name="ValidateEmbeddedPlugin"
           BeforeTargets="CoreCompile"
@@ -91,10 +142,12 @@
 
   <Target Name="CreateSolutionArtifacts"
           AfterTargets="Publish"
-          Condition="'$(BuildingSolutionFile)' == 'true'">
+          Condition="'$(BuildingSolutionFile)' == 'true'"
+          DependsOnTargets="AcquireAria2Next">
     <PropertyGroup>
       <PublishedExecutable>$(PublishDir)$(AssemblyName).exe</PublishedExecutable>
-      <ManualPackageStage>$(IntermediateOutputPath)manual-install\</ManualPackageStage>
+      <ManualPackageStage>$(IntermediateOutputPath)manual-install</ManualPackageStage>
+      <InstallerPayloadStage>$(IntermediateOutputPath)installer-payload</InstallerPayloadStage>
     </PropertyGroup>
     <Error Condition="!Exists('$(PublishedExecutable)')"
            Text="发布产物不存在：$(PublishedExecutable)" />
@@ -103,23 +156,49 @@
     <Error Condition="!Exists('$(ManualInstallReadmePath)')"
            Text="手动安装说明不存在：$(ManualInstallReadmePath)" />
     <MakeDir Directories="$(ArtifactsDirectory)" />
-    <Copy SourceFiles="$(PublishedExecutable)"
-          DestinationFiles="$(InstallerArtifactPath)"
-          SkipUnchangedFiles="true" />
+    <RemoveDir Directories="$(InstallerPayloadStage)" />
+    <MakeDir Directories="$(InstallerPayloadStage)\bin\aria2-next;$(InstallerPayloadStage)\licenses\aria2-next;$(InstallerPayloadStage)\licenses\SharpCompress" />
+    <Copy SourceFiles="$(Aria2NextExecutablePath)"
+          DestinationFiles="$(InstallerPayloadStage)\bin\aria2-next\aria2-next.exe" />
+    <Copy SourceFiles="$(ThirdPartyNoticePath)"
+          DestinationFiles="$(InstallerPayloadStage)\THIRD-PARTY-NOTICES.txt" />
+    <Copy SourceFiles="$(Aria2NextLicensePath)"
+          DestinationFiles="$(InstallerPayloadStage)\licenses\aria2-next\COPYING" />
+    <Copy SourceFiles="$(Aria2NextAuthorsPath)"
+          DestinationFiles="$(InstallerPayloadStage)\licenses\aria2-next\AUTHORS" />
+    <Copy SourceFiles="$(Aria2NextSourcePath)"
+          DestinationFiles="$(InstallerPayloadStage)\licenses\aria2-next\SOURCE.txt" />
+    <Copy SourceFiles="$(SharpCompressLicensePath)"
+          DestinationFiles="$(InstallerPayloadStage)\licenses\SharpCompress\LICENSE.txt" />
+    <Delete Files="$(InstallerArtifactPath)" />
+    <Exec Command="&quot;$(PublishedExecutable)&quot; --create-installer-bundle &quot;$(PublishedExecutable)&quot; &quot;$(InstallerArtifactPath)&quot; &quot;$(InstallerPayloadStage)&quot;" />
     <Message Importance="high" Text="安装程序：$(InstallerArtifactPath)" />
 
     <RemoveDir Directories="$(ManualPackageStage)" />
-    <MakeDir Directories="$(ManualPackageStage)plugin\videoenhancer" />
+    <MakeDir Directories="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress" />
     <Copy SourceFiles="$(PluginArtifactPath)"
-          DestinationFiles="$(ManualPackageStage)plugin\$(PluginArtifactFileName)" />
+          DestinationFiles="$(ManualPackageStage)\plugin\$(PluginArtifactFileName)" />
     <Copy SourceFiles="$(PublishedExecutable)"
-          DestinationFiles="$(ManualPackageStage)plugin\videoenhancer\$(InstalledExecutableFileName)" />
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\$(InstalledExecutableFileName)" />
+    <Copy SourceFiles="$(Aria2NextExecutablePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe" />
+    <Copy SourceFiles="$(ThirdPartyNoticePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\THIRD-PARTY-NOTICES.txt" />
+    <Copy SourceFiles="$(Aria2NextLicensePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\COPYING" />
+    <Copy SourceFiles="$(Aria2NextAuthorsPath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\AUTHORS" />
+    <Copy SourceFiles="$(Aria2NextSourcePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\SOURCE.txt" />
+    <Copy SourceFiles="$(SharpCompressLicensePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt" />
     <Copy SourceFiles="$(ManualInstallReadmePath)"
-          DestinationFiles="$(ManualPackageStage)手动安装说明.txt" />
+          DestinationFiles="$(ManualPackageStage)\手动安装说明.txt" />
     <ZipDirectory SourceDirectory="$(ManualPackageStage)"
                   DestinationFile="$(ManualPackagePath)"
                   Overwrite="true" />
     <RemoveDir Directories="$(ManualPackageStage)" />
+    <RemoveDir Directories="$(InstallerPayloadStage)" />
     <Message Importance="high" Text="手动安装包：$(ManualPackagePath)" />
   </Target>
 
