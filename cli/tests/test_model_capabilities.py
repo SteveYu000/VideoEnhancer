@@ -5,7 +5,7 @@ from pathlib import Path
 
 MANIFEST = Path(__file__).resolve().parents[1] / "model-capabilities.json"
 PROGRAM_SOURCE = Path(__file__).resolve().parents[1] / "Program.cs"
-PLUGIN_SOURCE = Path(__file__).resolve().parents[2] / "VideoEnhancerPlugin" / "PluginPanel.vb"
+PLUGIN_ROOT = Path(__file__).resolve().parents[2] / "VideoEnhancerPlugin"
 QUEUE_HOOK_SOURCE = Path(__file__).resolve().parents[2] / "VideoEnhancerPlugin" / "QueueHook.vb"
 
 
@@ -62,7 +62,11 @@ class ModelCapabilityManifestTests(unittest.TestCase):
 
     def test_onnx_manual_tiling_is_available_end_to_end(self):
         program = PROGRAM_SOURCE.read_text(encoding="utf-8-sig")
-        plugin = PLUGIN_SOURCE.read_text(encoding="utf-8-sig")
+        panel_paths = [PLUGIN_ROOT / "PluginPanel.vb"]
+        panel_paths.extend(sorted((PLUGIN_ROOT / "Pages").glob("PluginPanel.*Page.vb")))
+        plugin = "\n".join(
+            path.read_text(encoding="utf-8-sig") for path in panel_paths
+        )
         queue_hook = QUEUE_HOOK_SOURCE.read_text(encoding="utf-8-sig")
         self.assertIn('backend is ("ncnn" or "cuda" or "tensorrt" or "onnx")', program)
         self.assertIn('o.Backend is not ("ncnn" or "cuda" or "tensorrt" or "onnx")', program)

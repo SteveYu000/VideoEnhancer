@@ -196,6 +196,15 @@ CLI 发布时会将其作为 `videoenhancer.3fui.dll` 放入
 `VIDEOENHANCER_HOST_BIN` 环境变量提供；仓库与 FFmpegFreeUI 并列时会自动查找
 相邻 Release/Debug 输出。LakeUI `5.1` 是最低基线，只接受后续 5.x 版本。
 
+### 页面代码结构
+
+插件运行时页面按照职责拆分：
+
+- `Pages/PluginPanel.*Page.vb`：对应页面的布局、事件和业务逻辑；`PluginPanel.vb`
+  只保留主面板、共享主题、页签协调和生命周期。
+- 这些页面文件仍是 `PluginPanel` 的 Partial Class，不提供独立 Visual Studio Designer
+  页面。这样可以避免设计器进程实例化完整 LakeUI 插件控件树而空白或卡死。
+
 ## 宿主兼容说明
 
 - 依赖 3FUI 插件约定（`插件管理.vb`）：

@@ -1,0 +1,1092 @@
+Imports System
+Imports System.Collections.Generic
+Imports System.Diagnostics
+Imports System.Drawing
+Imports System.IO
+Imports System.Linq
+Imports System.Security.Cryptography
+Imports System.Text
+Imports System.Text.Json
+Imports System.Text.RegularExpressions
+Imports System.Reflection
+Imports System.Threading.Tasks
+Imports System.Windows.Forms
+Imports FFmpegFreeUI
+Imports LakeUI
+
+Namespace videoenhancer
+
+    Public Partial Class PluginPanel
+
+        ' ── 模型下载页 ──
+        Private Const DownloadActionColumn As Integer = 3
+        Private Const MaxParallelDownloads As Integer = 3
+        Private Const UpscaleContentHeight As Integer = 920
+        Private ReadOnly _downloadList As New UltraDetailListView()
+        Private ReadOnly _btnRefreshDownloads As New ModernButton()
+        Private ReadOnly _btnDownloadPluginUpdate As New ModernButton()
+        Private ReadOnly _btnCleanArchives As New ModernButton()
+        Private ReadOnly _btnCheckUpdates As New ModernButton()
+        Private _downloadsLoaded As Boolean = False
+        Private _downloadsLoading As Boolean = False
+        Private _downloadOnline As Boolean = True
+        Private _archiveCleanupBusy As Boolean = False
+        Private _updateCheckBusy As Boolean = False
+        Private _environmentCheckCompleted As Boolean = False
+        Private ReadOnly _environmentCheckSync As New Object()
+        Private _environmentCheckCancellation As System.Threading.CancellationTokenSource
+        Private _environmentCheckTask As Task
+        Private _downloadActiveCount As Integer = 0
+        Private _downloadActionsEnabled As Boolean = True
+        Private _downloadListConfigured As Boolean = False
+        Private ReadOnly _activeDownloadPaths As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Private ReadOnly _activeDownloadGroups As New HashSet(Of String)(StringComparer.OrdinalIgnoreCase)
+        Private ReadOnly _downloadItemsByPath As New Dictionary(Of String, UltraDetailListView.ListItem)(StringComparer.OrdinalIgnoreCase)
+        Private ReadOnly _downloadGroupItems As New Dictionary(Of String, UltraDetailListView.ListItem)(StringComparer.OrdinalIgnoreCase)
+        Private _downloadModelContextMenu As ModernContextMenu
+        Private _contextDownloadModel As DownloadModelEntry
+        Private NotInheritable Class DownloadModelEntry
+            Public Property Name As String
+            Public Property RelativePath As String
+            Public Property Size As Long
+            Public Property Installed As Boolean
+            Public Property StatusText As String = ""
+            Public Property ActionText As String = ""
+            Public Property IsBackend As Boolean
+            Public Property ForceBackendFull As Boolean
+            Public Property BackendFullSize As Long
+        End Class
+        Private NotInheritable Class BackendDownloadStatus
+            Public Property State As String = ""
+            Public Property InstalledVersion As String = ""
+            Public Property LatestVersion As String = ""
+            Public Property Mode As String = ""
+            Public Property DownloadSize As Long
+            Public Property FullSize As Long
+        End Class
+        Private NotInheritable Class DownloadListRowTag
+            Public Property Entry As DownloadModelEntry
+            Public Property Category As String
+            Public Property BatchPaths As List(Of String)
+        End Class
+        Private NotInheritable Class DownloadExecutionResult
+            Public Property ExitCode As Integer = -1
+            Public Property Errors As String = ""
+        End Class
+        Private Sub BuildOfficialModelDownloadPage()
+            _pageDownloader.Dock = DockStyle.Fill
+            _pageDownloader.BackColor = Color.Transparent
+            _pageDownloader.Padding = New Padding(0, 8, 0, 0)
+
+            Dim root As New ModernGridPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 1,
+                .RowCount = 2,
+                .BackColor = Color.Transparent,
+                .Margin = Padding.Empty,
+                .Padding = Padding.Empty
+            }
+            root.RowStyles.Add(New RowStyle(SizeType.Absolute, 58.0F))
+            root.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+            Dim header As New ModernGridPanel With {
+                .Dock = DockStyle.Fill,
+                .ColumnCount = 3,
+                .RowCount = 1,
+                .BackColor = Color.Transparent,
+                .Margin = Padding.Empty,
+                .Padding = Padding.Empty
+            }
+            header.ColumnStyles.Add(New ColumnStyle(SizeType.Percent, 100.0F))
+            header.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 174.0F))
+            header.ColumnStyles.Add(New ColumnStyle(SizeType.Absolute, 190.0F))
+            header.RowStyles.Add(New RowStyle(SizeType.Percent, 100.0F))
+            header.AddAt(CreateOfficialSectionHeading(
+                "模型资源库", "从 ModelScope 获取模型与后端组件"), 0, 0)
+            _btnDownloadPluginUpdate.Text = "下载全部"
+            _btnDownloadPluginUpdate.Dock = DockStyle.Fill
+            _btnDownloadPluginUpdate.AutoSize = False
+            _btnDownloadPluginUpdate.Margin = New Padding(12, 7, 0, 7)
+            ConfigureSecondaryButton(_btnDownloadPluginUpdate)
+            AddHandler _btnDownloadPluginUpdate.Click, AddressOf OnDownloadAllClick
+            header.AddAt(_btnDownloadPluginUpdate, 2, 0)
+            _btnRefreshDownloads.Text = "刷新资源"
+            _btnRefreshDownloads.Dock = DockStyle.Fill
+            _btnRefreshDownloads.Margin = New Padding(12, 7, 0, 7)
+            ConfigureSecondaryButton(_btnRefreshDownloads)
+            AddHandler _btnRefreshDownloads.Click, Sub(sender, e) LoadDownloadModels(True)
+            header.AddAt(_btnRefreshDownloads, 1, 0)
+            root.AddAt(header, 0, 0)
+
+            ConfigureDownloadList()
+            root.AddAt(_downloadList, 0, 1)
+            _pageDownloader.Controls.Add(root)
+        End Sub
+
+        Private Sub ConfigureDownloadList()
+            If _downloadListConfigured Then Return
+            _downloadListConfigured = True
+            _downloadList.Dock = DockStyle.Fill
+            _downloadList.Margin = Padding.Empty
+            _downloadList.AutoScroll = False
+            _downloadList.Font = New Font("Microsoft YaHei UI", 9.2F)
+            _downloadList.BackColor = Color.Transparent
+            _downloadList.BackgroundColor = Color.Transparent
+            _downloadList.BackgroundSource = ModernPanel1
+            _downloadList.BorderColor = Color.Transparent
+            _downloadList.BorderSize = 0
+            _downloadList.BorderRadius = 0
+            _downloadList.HeaderVisible = True
+            _downloadList.HeaderHeight = 38
+            _downloadList.HeaderBackColor = Color.FromArgb(36, 36, 36)
+            _downloadList.HeaderForeColor = UiTextSecondary
+            _downloadList.HeaderBorderColor = Color.FromArgb(52, 52, 52)
+            _downloadList.HeaderBorderWidth = 1
+            _downloadList.AllowColumnResize = True
+            _downloadList.MultiSelect = False
+            _downloadList.AllowDragReorder = False
+            _downloadList.ItemForeColor = UiTextSecondary
+            _downloadList.ItemHoverBackColor = Color.FromArgb(48, 255, 255, 255)
+            _downloadList.ItemSelectedBackColor = Color.FromArgb(54, 71, 156, 255)
+            _downloadList.ItemCornerRadius = 4
+            _downloadList.ItemPadding = New Padding(12, 8, 10, 8)
+            _downloadList.ItemSpacing = 2
+            _downloadList.ContentPadding = New Padding(0, 4, 0, 4)
+            _downloadList.GroupHeight = 38
+            _downloadList.GroupBackColor = Color.FromArgb(31, 31, 31)
+            _downloadList.GroupForeColor = UiText
+            _downloadList.GroupBorderColor = Color.FromArgb(48, 48, 48)
+            _downloadList.ScrollBarWidth = 10
+            _downloadList.ScrollBarTrackColor = Color.FromArgb(18, 18, 18)
+            _downloadList.ScrollBarThumbColor = Color.FromArgb(72, 72, 72)
+            _downloadList.ScrollBarThumbHoverColor = Color.FromArgb(104, 104, 104)
+            _downloadList.Columns.AddRange(New UltraDetailListView.ListColumn() {
+                New UltraDetailListView.ListColumn("资源名称", 520),
+                New UltraDetailListView.ListColumn("大小", 110),
+                New UltraDetailListView.ListColumn("状态", 130),
+                New UltraDetailListView.ListColumn("操作", 138)
+            })
+            AddHandler _downloadList.ItemClick, AddressOf OnDownloadListItemClick
+            AddHandler _downloadList.MouseDown, AddressOf OnDownloadListMouseDown
+            AddHandler _downloadList.ClientSizeChanged,
+                Sub(sender, e)
+                    If _downloadList.Columns.Count = 0 Then Return
+                    Dim resourceWidth = Math.Max(260, _downloadList.ClientSize.Width - 10 - 110 - 130 - 138)
+                    If _downloadList.Columns(0).Width <> resourceWidth Then
+                        _downloadList.Columns(0).Width = resourceWidth
+                        _downloadList.RefreshItems()
+                    End If
+                End Sub
+        End Sub
+
+        Private Function DownloadExecutablePath() As String
+            Return PluginConfig.ResolveInstalledExePath()
+        End Function
+
+        Private Sub ResetDownloadList()
+            _downloadList.Items.Clear()
+            _downloadList.Groups.Clear()
+            _downloadItemsByPath.Clear()
+            _downloadGroupItems.Clear()
+        End Sub
+
+        Private Sub AddDownloadMessage(title As String, detail As String, color As Color)
+            Dim item = New UltraDetailListView.ListItem(New UltraDetailListView.ListSubItem() {
+                New UltraDetailListView.ListSubItem(title, New Font("Microsoft YaHei UI", 9.4F, FontStyle.Bold), color),
+                New UltraDetailListView.ListSubItem(""),
+                New UltraDetailListView.ListSubItem(detail, Nothing, UiTextMuted),
+                New UltraDetailListView.ListSubItem("")
+            })
+            _downloadList.Items.Add(item)
+        End Sub
+
+        Private Sub LoadDownloadModels(force As Boolean)
+            If _downloadsLoading OrElse _archiveCleanupBusy OrElse _downloadActiveCount > 0 OrElse
+                (_downloadsLoaded AndAlso Not force) Then Return
+            Dim exePath = DownloadExecutablePath()
+            If String.IsNullOrWhiteSpace(exePath) Then
+                ShowStatus("请先在超分主界面指定 videoenhancer.exe", True)
+                Return
+            End If
+            _downloadsLoading = True
+            _btnRefreshDownloads.Enabled = False
+            _btnCleanArchives.Enabled = False
+            _btnDownloadPluginUpdate.Enabled = False
+            _downloadActionsEnabled = False
+            _downloadList.BeginUpdate()
+            Try
+                ResetDownloadList()
+                AddDownloadMessage("正在同步模型资源...", "请稍候", UiTextSecondary)
+            Finally
+                _downloadList.EndUpdate()
+            End Try
+
+            Task.Run(
+                Sub()
+                    Dim stdout = ""
+                    Dim stderr = ""
+                    Dim exitCode = -1
+                    Dim backendStdout = ""
+                    Dim backendExitCode = -1
+                    Try
+                        Dim psi As New ProcessStartInfo With {
+                            .FileName = exePath, .WorkingDirectory = Path.GetDirectoryName(exePath),
+                            .UseShellExecute = False, .RedirectStandardOutput = True,
+                            .RedirectStandardError = True, .CreateNoWindow = True,
+                            .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                        }
+                        PortableRuntime.ConfigureProcess(psi)
+                        psi.ArgumentList.Add("--list-download-models")
+                        psi.ArgumentList.Add("--json")
+                        Using runningProcess As Process = Diagnostics.Process.Start(psi)
+                            If runningProcess IsNot Nothing Then
+                                Dim outputTask = runningProcess.StandardOutput.ReadToEndAsync()
+                                Dim errorTask = runningProcess.StandardError.ReadToEndAsync()
+                                If runningProcess.WaitForExit(45000) Then
+                                    stdout = outputTask.GetAwaiter().GetResult()
+                                    stderr = errorTask.GetAwaiter().GetResult()
+                                    exitCode = runningProcess.ExitCode
+                                Else
+                                    Try
+                                        runningProcess.Kill(True)
+                                    Catch
+                                    End Try
+                                    stderr = "[错误] 读取 ModelScope 模型列表超时"
+                                    exitCode = -2
+                                End If
+                            End If
+                        End Using
+                        Dim backendPsi As New ProcessStartInfo With {
+                            .FileName = exePath, .WorkingDirectory = Path.GetDirectoryName(exePath),
+                            .UseShellExecute = False, .RedirectStandardOutput = True,
+                            .RedirectStandardError = True, .CreateNoWindow = True,
+                            .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                        }
+                        PortableRuntime.ConfigureProcess(backendPsi)
+                        backendPsi.ArgumentList.Add("--backend-status")
+                        backendPsi.ArgumentList.Add("--json")
+                        Using backendProcess As Process = Diagnostics.Process.Start(backendPsi)
+                            If backendProcess IsNot Nothing Then
+                                Dim backendOutputTask = backendProcess.StandardOutput.ReadToEndAsync()
+                                Dim backendErrorTask = backendProcess.StandardError.ReadToEndAsync()
+                                If backendProcess.WaitForExit(45000) Then
+                                    backendStdout = backendOutputTask.GetAwaiter().GetResult()
+                                    backendExitCode = backendProcess.ExitCode
+                                    If backendExitCode <> 0 Then stderr &= Environment.NewLine & backendErrorTask.GetAwaiter().GetResult()
+                                Else
+                                    Try
+                                        backendProcess.Kill(True)
+                                    Catch
+                                    End Try
+                                End If
+                            End If
+                        End Using
+                    Catch ex As Exception
+                        stderr = ex.Message
+                    End Try
+                    Try
+                        BeginInvoke(New Action(Sub() RenderDownloadModels(stdout, stderr, exitCode, backendStdout, backendExitCode)))
+                    Catch
+                    End Try
+                End Sub)
+        End Sub
+
+        Private Sub RenderDownloadModels(stdout As String, stderr As String, exitCode As Integer,
+                                         backendStdout As String, backendExitCode As Integer)
+            _downloadsLoading = False
+            _btnRefreshDownloads.Enabled = True
+            _downloadActionsEnabled = True
+            _downloadList.BeginUpdate()
+            Try
+                ResetDownloadList()
+                If exitCode <> 0 OrElse String.IsNullOrWhiteSpace(stdout) Then
+                    _downloadsLoaded = False
+                    If stderr.Contains("NO_NETWORK|", StringComparison.Ordinal) Then
+                        _downloadOnline = False
+                        ShowOfflineDownloadStatus()
+                    ElseIf stderr.Contains("AUTH_REQUIRED|", StringComparison.Ordinal) Then
+                        _downloadOnline = True
+                        AddDownloadMessage("模型仓库需要认证", "设置 ModelScope 令牌后重启 3FUI", UiDanger)
+                        ShowStatus("私有模型仓库需要有效令牌，请设置 VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN 后重启 3FUI。", True)
+                    Else
+                        _downloadOnline = True
+                        AddDownloadMessage("模型列表读取失败", "点击右上角刷新资源重试", UiDanger)
+                        ShowStatus(CliErrorMessage(stderr, "模型列表读取失败"), True)
+                    End If
+                    Return
+                End If
+
+                Try
+                    Dim entries As New List(Of DownloadModelEntry)()
+                    Dim backendStatus As BackendDownloadStatus = Nothing
+                    If backendExitCode = 0 AndAlso Not String.IsNullOrWhiteSpace(backendStdout) Then
+                        Using backendDocument = JsonDocument.Parse(backendStdout.Trim())
+                            Dim root = backendDocument.RootElement
+                            backendStatus = New BackendDownloadStatus With {
+                                .State = root.GetProperty("state").GetString(),
+                                .InstalledVersion = root.GetProperty("installedVersion").GetString(),
+                                .LatestVersion = root.GetProperty("latestVersion").GetString(),
+                                .Mode = root.GetProperty("mode").GetString(),
+                                .DownloadSize = root.GetProperty("downloadSize").GetInt64(),
+                                .FullSize = root.GetProperty("fullSize").GetInt64()
+                            }
+                        End Using
+                    End If
+                    Using document = JsonDocument.Parse(stdout.Trim())
+                        For Each item In document.RootElement.EnumerateArray()
+                            Dim name = item.GetProperty("name").GetString()
+                            Dim relativePath = item.GetProperty("path").GetString()
+                            Dim size = item.GetProperty("size").GetInt64()
+                            Dim entry = New DownloadModelEntry With {
+                                .Name = If(name, relativePath), .RelativePath = If(relativePath, ""), .Size = size,
+                                .Installed = IsDownloadInstalled(If(relativePath, ""))
+                            }
+                            entry.IsBackend = DownloadCategory(entry.RelativePath).Equals("Backend", StringComparison.OrdinalIgnoreCase)
+                            If entry.IsBackend Then ApplyBackendDownloadStatus(entry, backendStatus)
+                            entries.Add(entry)
+                        Next
+                    End Using
+                    Dim categoryOrder = New String() {"Plugin", "Backend", "BasicVSR++", "Bin", "ONNX", "Param-Bin", "FlashVSR", "Frame-Interpolation", "RIFE", "PTH", "TensorRT-Default"}
+                    For Each group In entries.GroupBy(Function(entry) DownloadCategory(entry.RelativePath)).
+                            OrderBy(Function(value)
+                                        Dim index = Array.FindIndex(categoryOrder, Function(name) name.Equals(value.Key, StringComparison.OrdinalIgnoreCase))
+                                        Return If(index < 0, Integer.MaxValue, index)
+                                    End Function)
+                        AddDownloadGroup(group.Key, group.ToList())
+                    Next
+                    _downloadsLoaded = True
+                    _downloadOnline = True
+                    ShowStatus("模型列表已更新，共 " & entries.Count & " 个文件", False)
+                Catch ex As Exception
+                    _downloadsLoaded = False
+                    _downloadOnline = True
+                    ShowStatus("模型列表格式错误：" & ex.Message, True)
+                End Try
+                UpdateDownloadUtilityButtons()
+            Finally
+                _downloadList.EndUpdate()
+            End Try
+        End Sub
+
+        Private Shared Sub ApplyBackendDownloadStatus(entry As DownloadModelEntry, status As BackendDownloadStatus)
+            entry.Name = "Backend 后端"
+            If status Is Nothing Then
+                entry.Installed = True
+                entry.StatusText = "更新信息不可用"
+                entry.ActionText = "刷新后重试"
+                Return
+            End If
+            entry.Size = status.DownloadSize
+            entry.BackendFullSize = status.FullSize
+            entry.ForceBackendFull = status.Mode.Equals("full", StringComparison.OrdinalIgnoreCase)
+            Select Case status.State
+                Case "current"
+                    entry.Installed = True
+                    entry.Name &= " " & status.LatestVersion
+                    ' 状态列较窄，长文本会被列表控件按两行高度布局而显得上浮。
+                    entry.StatusText = "已是最新"
+                    entry.ActionText = "无需操作"
+                Case "update-available", "legacy-update-available"
+                    entry.Installed = False
+                    entry.Name &= " " & status.InstalledVersion & " → " & status.LatestVersion
+                    entry.StatusText = If(status.Mode = "patch", "可增量更新", "需要完整修复")
+                    entry.ActionText = If(status.Mode = "patch", "增量更新", "完整修复")
+                Case "not-installed"
+                    entry.Installed = False
+                    entry.Name &= " " & status.LatestVersion
+                    entry.StatusText = "尚未安装"
+                    entry.ActionText = "完整安装"
+                Case Else
+                    entry.Installed = False
+                    entry.Name &= " → " & status.LatestVersion
+                    entry.StatusText = "版本无法识别"
+                    entry.ActionText = "完整修复"
+            End Select
+        End Sub
+
+        Private Shared Function DownloadCategory(relativePath As String) As String
+            If String.IsNullOrWhiteSpace(relativePath) Then Return "其他"
+            Dim normalized = relativePath.Replace("\"c, "/"c)
+            Dim slash = normalized.IndexOf("/"c)
+            Return If(slash > 0, normalized.Substring(0, slash), normalized)
+        End Function
+
+        Private Shared Function DownloadCategoryTitle(category As String) As String
+            Select Case category.ToUpperInvariant()
+                Case "PLUGIN" : Return "插件文件"
+                Case "ONNX" : Return "ONNX 模型"
+                Case "PARAM-BIN" : Return "Param-Bin 模型"
+                Case "FRAME-INTERPOLATION" : Return "Frame-Interpolation 补帧模型"
+                Case "RIFE" : Return "旧版 RIFE 补帧模型"
+                Case "PTH" : Return "PTH 模型"
+                Case "BASICVSR++" : Return "BasicVSR++ 模型"
+                Case "BACKEND" : Return "Backend 后端"
+                Case Else : Return category
+            End Select
+        End Function
+
+        Private Function IsDownloadInstalled(relativePath As String) As Boolean
+            If String.IsNullOrWhiteSpace(relativePath) Then Return False
+            Try
+                Dim normalized = relativePath.Replace("\"c, "/"c).TrimStart("/"c)
+                Dim slash = normalized.IndexOf("/"c)
+                If slash <= 0 Then Return False
+                Dim category = normalized.Substring(0, slash)
+                Dim suffix = normalized.Substring(slash + 1).Replace("/"c, Path.DirectorySeparatorChar)
+                Dim coreRoot = ResolveCoreRoot()
+                Dim resolvedExe = PluginConfig.ResolveInstalledExePath()
+                Dim destinationRoot = If(category.Equals("Plugin", StringComparison.OrdinalIgnoreCase),
+                    If(String.IsNullOrWhiteSpace(resolvedExe), coreRoot, Path.GetDirectoryName(resolvedExe)),
+                    If(category.Equals("Backend", StringComparison.OrdinalIgnoreCase),
+                        Path.Combine(coreRoot, "python"),
+                        If(category.Equals("Bin", StringComparison.OrdinalIgnoreCase),
+                            Path.Combine(coreRoot, "bin"), Path.Combine(coreRoot, "models", category))))
+                Dim downloaded = Path.Combine(destinationRoot, suffix)
+                If File.Exists(downloaded) Then Return True
+
+                ' 压缩包下载后会自动解压；刷新时用解压后的核心文件判断，清理压缩包后仍能保持“已存在”。
+                If Not String.Equals(Path.GetExtension(suffix), ".7z", StringComparison.OrdinalIgnoreCase) AndAlso
+                   Not String.Equals(Path.GetExtension(suffix), ".zip", StringComparison.OrdinalIgnoreCase) Then
+                    Return False
+                End If
+                If category.Equals("Backend", StringComparison.OrdinalIgnoreCase) Then
+                    Return File.Exists(Path.Combine(coreRoot, "python", "python", "python.exe"))
+                End If
+                If category.Equals("Bin", StringComparison.OrdinalIgnoreCase) Then
+                    Dim archiveName = Path.GetFileNameWithoutExtension(suffix)
+                    If archiveName.StartsWith("RTXVideoRuntime_", StringComparison.OrdinalIgnoreCase) Then
+                        Return File.Exists(Path.Combine(coreRoot, "bin", "rtx-video", "runtime", "vsr_backend.exe"))
+                    End If
+                    If archiveName.Equals("ffmpeg", StringComparison.OrdinalIgnoreCase) Then
+                        Return File.Exists(Path.Combine(coreRoot, "bin", "ffmpeg", "ffmpeg.exe"))
+                    End If
+                    If archiveName.Equals("mkvtoolnix", StringComparison.OrdinalIgnoreCase) Then
+                        Return Directory.Exists(Path.Combine(coreRoot, "bin", "mkvtoolnix"))
+                    End If
+                    If archiveName.Equals("PortableGit", StringComparison.OrdinalIgnoreCase) Then
+                        Return Directory.Exists(Path.Combine(coreRoot, "bin", "PortableGit"))
+                    End If
+                End If
+                If category.Equals("Frame-Interpolation", StringComparison.OrdinalIgnoreCase) Then
+                    Return IsDownloadArchive(suffix) AndAlso
+                        File.Exists(FrameInterpolationArchiveMarkerPath(coreRoot, normalized))
+                End If
+                If category.Equals("RIFE", StringComparison.OrdinalIgnoreCase) Then
+                    Return Directory.Exists(Path.Combine(coreRoot, "models", "RIFE")) AndAlso
+                        Directory.EnumerateFiles(Path.Combine(coreRoot, "models", "RIFE"), "*.param", SearchOption.AllDirectories).Any() AndAlso
+                        Directory.EnumerateFiles(Path.Combine(coreRoot, "models", "RIFE"), "*.bin", SearchOption.AllDirectories).Any()
+                End If
+                If category.Equals("Param-Bin", StringComparison.OrdinalIgnoreCase) Then
+                    Dim modelsRoot = Path.Combine(coreRoot, "models")
+                    Return Directory.Exists(modelsRoot) AndAlso
+                        Directory.EnumerateFiles(modelsRoot, "*.param", SearchOption.AllDirectories).Any() AndAlso
+                        Directory.EnumerateFiles(modelsRoot, "*.bin", SearchOption.AllDirectories).Any()
+                End If
+                Return False
+            Catch
+                Return False
+            End Try
+        End Function
+
+        Private Shared Function IsDownloadArchive(valuePath As String) As Boolean
+            Select Case Path.GetExtension(valuePath).ToLowerInvariant()
+                Case ".7z", ".zip", ".rar", ".gz", ".xz", ".zst", ".tar"
+                    Return True
+                Case Else
+                    Return False
+            End Select
+        End Function
+
+        Private Shared Function IsRtxVideoRuntimeDownload(relativePath As String) As Boolean
+            If String.IsNullOrWhiteSpace(relativePath) Then Return False
+            Dim normalized = relativePath.Replace("\"c, "/"c).TrimStart("/"c)
+            Return Regex.IsMatch(normalized,
+                "^Bin/rtx-video/RTXVideoRuntime_\d{8}\.7z$",
+                RegexOptions.IgnoreCase Or RegexOptions.CultureInvariant)
+        End Function
+
+        Private Shared Function FrameInterpolationArchiveMarkerPath(coreRoot As String, relativePath As String) As String
+            Dim normalized = relativePath.Replace("\"c, "/"c).ToUpperInvariant()
+            Dim hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(normalized)))
+            Return Path.Combine(coreRoot, "models", "Frame-Interpolation", ".downloads", hash & ".installed")
+        End Function
+
+        Private Sub AddDownloadGroup(category As String, entries As List(Of DownloadModelEntry))
+            Dim group = New UltraDetailListView.ListGroup(category,
+                DownloadCategoryTitle(category) & "  ·  " & entries.Count & " 个文件") With {
+                .ForeColor = If(category.Equals("Backend", StringComparison.OrdinalIgnoreCase), UiSuccess, UiText)
+            }
+            _downloadList.Groups.Add(group)
+
+            Dim paths = entries.Select(Function(entry) entry.RelativePath).ToList()
+            Dim installedCount = entries.Where(Function(entry) entry.Installed).Count()
+            Dim isBackendGroup = category.Equals("Backend", StringComparison.OrdinalIgnoreCase)
+            If Not isBackendGroup Then
+            Dim batchItem = New UltraDetailListView.ListItem(New UltraDetailListView.ListSubItem() {
+                New UltraDetailListView.ListSubItem("本组资源"),
+                New UltraDetailListView.ListSubItem(entries.Count & " 个文件"),
+                New UltraDetailListView.ListSubItem(installedCount & "/" & entries.Count & " 已存在"),
+                New UltraDetailListView.ListSubItem(If(installedCount = entries.Count, "已全部存在", "下载本组"))
+            }) With {
+                .GroupName = category,
+                .Tag = New DownloadListRowTag With {.Category = category, .BatchPaths = paths}
+            }
+            batchItem.SubItems(0).Font = New Font("Microsoft YaHei UI", 9.2F, FontStyle.Bold)
+            batchItem.SubItems(DownloadActionColumn).ForeColor = If(installedCount = entries.Count, UiTextMuted, UiAccent)
+            _downloadList.Items.Add(batchItem)
+            _downloadGroupItems(category) = batchItem
+            End If
+
+            For Each entry In entries
+                Dim item = New UltraDetailListView.ListItem(New UltraDetailListView.ListSubItem() {
+                    New UltraDetailListView.ListSubItem(entry.Name),
+                    New UltraDetailListView.ListSubItem(If(entry.Size > 0, FormatDownloadSize(entry.Size), "-")),
+                    New UltraDetailListView.ListSubItem(If(String.IsNullOrWhiteSpace(entry.StatusText), If(entry.Installed, "本地已安装", "未安装"), entry.StatusText)),
+                    New UltraDetailListView.ListSubItem(If(String.IsNullOrWhiteSpace(entry.ActionText), If(entry.Installed, "已存在", "下载"), entry.ActionText))
+                }) With {
+                    .GroupName = category,
+                    .Tag = New DownloadListRowTag With {.Entry = entry, .Category = category}
+                }
+                item.SubItems(2).ForeColor = If(entry.Installed, UiSuccess, If(entry.IsBackend, UiAccent, UiTextMuted))
+                item.SubItems(DownloadActionColumn).ForeColor = If(entry.Installed, UiTextMuted, UiAccent)
+                _downloadList.Items.Add(item)
+                _downloadItemsByPath(entry.RelativePath) = item
+            Next
+        End Sub
+
+        Private Shared Function FormatDownloadSize(bytes As Long) As String
+            If bytes >= 1024L * 1024L * 1024L Then Return (bytes / (1024.0 * 1024.0 * 1024.0)).ToString("0.00") & " GB"
+            If bytes >= 1024L * 1024L Then Return (bytes / (1024.0 * 1024.0)).ToString("0.0") & " MB"
+            If bytes >= 1024L Then Return (bytes / 1024.0).ToString("0.0") & " KB"
+            Return bytes & " B"
+        End Function
+
+        Private Async Sub OnDownloadListItemClick(sender As Object, e As UltraDetailListView.ListItemEventArgs)
+            If e.ColumnIndex <> DownloadActionColumn OrElse e.Item Is Nothing Then Return
+            If Not _downloadActionsEnabled OrElse Not _downloadOnline OrElse _downloadsLoading OrElse _archiveCleanupBusy Then Return
+            Dim row = TryCast(e.Item.Tag, DownloadListRowTag)
+            If row Is Nothing Then Return
+            If row.Entry IsNot Nothing Then
+                Await DownloadSingleItemAsync(row.Entry)
+            ElseIf row.BatchPaths IsNot Nothing Then
+                Await DownloadGroupItemsAsync(row.Category, row.BatchPaths)
+            End If
+        End Sub
+
+        Private Shared Function CanDeleteDownloadedModel(entry As DownloadModelEntry) As Boolean
+            If entry Is Nothing OrElse Not entry.Installed Then Return False
+            If IsRtxVideoRuntimeDownload(entry.RelativePath) Then Return True
+            If IsDownloadArchive(entry.RelativePath) Then Return False
+            Dim category = DownloadCategory(entry.RelativePath)
+            Return Not category.Equals("Backend", StringComparison.OrdinalIgnoreCase) AndAlso
+                Not category.Equals("Bin", StringComparison.OrdinalIgnoreCase) AndAlso
+                Not category.Equals("Plugin", StringComparison.OrdinalIgnoreCase)
+        End Function
+
+        Private Sub OnDownloadListMouseDown(sender As Object, e As MouseEventArgs)
+            If e.Button <> MouseButtons.Right OrElse _downloadsLoading OrElse _archiveCleanupBusy OrElse
+                _downloadActiveCount > 0 Then Return
+            Dim item = _downloadList.GetItemAt(e.X, e.Y)
+            Dim row = TryCast(If(item Is Nothing, Nothing, item.Tag), DownloadListRowTag)
+            Dim entry = If(row Is Nothing, Nothing, row.Entry)
+            If Not CanDeleteDownloadedModel(entry) Then
+                CloseDownloadModelContextMenu()
+                Return
+            End If
+            Dim index = _downloadList.Items.IndexOf(item)
+            If index >= 0 Then _downloadList.SelectedIndex = index
+            ShowDownloadModelContextMenu(entry, e.Location)
+        End Sub
+
+        Private Sub CloseDownloadModelContextMenu()
+            Dim menu = _downloadModelContextMenu
+            _downloadModelContextMenu = Nothing
+            _contextDownloadModel = Nothing
+            If menu Is Nothing Then Return
+            Try
+                menu.Close()
+            Catch
+            End Try
+        End Sub
+
+        Private Sub ShowDownloadModelContextMenu(entry As DownloadModelEntry, location As Point)
+            CloseDownloadModelContextMenu()
+            Dim menu As New ModernContextMenu()
+            ConfigureModelMenu(menu, reserveIconColumn:=False)
+            Dim actionText = If(IsRtxVideoRuntimeDownload(entry.RelativePath),
+                "卸载 RTX 运行组件", "删除本地模型")
+            Dim deleteItem As New ModernContextMenu.ModernMenuItem(actionText) With {
+                .CloseOnClick = True,
+                .ForeColor = UiDanger
+            }
+            AddHandler deleteItem.Click,
+                Sub(sender As Object, args As EventArgs)
+                    Dim target = _contextDownloadModel
+                    CloseDownloadModelContextMenu()
+                    DeleteDownloadedModelWithConfirmation(target)
+                End Sub
+            menu.Items.Add(deleteItem)
+            _contextDownloadModel = entry
+            _downloadModelContextMenu = menu
+            menu.Show(_downloadList, location)
+        End Sub
+
+        Private Async Sub DeleteDownloadedModelWithConfirmation(entry As DownloadModelEntry)
+            If Not CanDeleteDownloadedModel(entry) Then Return
+            Dim isRtxRuntime = IsRtxVideoRuntimeDownload(entry.RelativePath)
+            Dim dialogTitle = If(isRtxRuntime, "卸载 RTX 运行组件", "删除本地模型")
+            Dim question = If(isRtxRuntime,
+                "确定卸载本机 RTX 运行组件？" & Environment.NewLine &
+                    "将删除 bin\rtx-video 中的 sidecar、运行库和所有历史日期归档；" &
+                    "不影响 ModelScope 远端资源，可随时重新下载。",
+                "确定删除本地模型“" & entry.Name & "”？" & Environment.NewLine &
+                    "只删除本机 models 目录中的这个模型文件，不影响 ModelScope 远端资源。") &
+                Environment.NewLine & Environment.NewLine & "路径：" & entry.RelativePath
+            If Not ShowLakeConfirm(Me, question, dialogTitle, defaultYes:=False) Then Return
+
+            Dim exePath = DownloadExecutablePath()
+            If String.IsNullOrWhiteSpace(exePath) OrElse Not File.Exists(exePath) Then
+                ShowStatus("删除失败：找不到 videoenhancer.exe", True)
+                Return
+            End If
+            SetDownloadActionsEnabled(False)
+            Try
+                Dim errorText = Await Task.Run(Function() RunDownloadedModelDelete(exePath, entry.RelativePath))
+                If errorText.Length > 0 Then
+                    ShowStatus("本地模型删除失败：" & errorText, True)
+                    Return
+                End If
+                entry.Installed = IsDownloadInstalled(entry.RelativePath)
+                SetDownloadRowState(entry.RelativePath, "未安装", "下载", UiTextMuted, UiAccent)
+                RefreshDownloadGroupSummary(DownloadCategory(entry.RelativePath))
+                RefreshModels()
+                ShowStatus(If(isRtxRuntime,
+                    "已卸载 RTX 运行组件", "已删除本地模型：" & entry.Name), False)
+            Finally
+                SetDownloadActionsEnabled(True)
+            End Try
+        End Sub
+
+        Private Shared Function RunDownloadedModelDelete(exePath As String, relativePath As String) As String
+            Try
+                Dim psi As New ProcessStartInfo With {
+                    .FileName = exePath, .WorkingDirectory = Path.GetDirectoryName(exePath),
+                    .UseShellExecute = False, .RedirectStandardOutput = True,
+                    .RedirectStandardError = True, .CreateNoWindow = True,
+                    .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                }
+                PortableRuntime.ConfigureProcess(psi)
+                psi.ArgumentList.Add("--delete-download-model")
+                psi.ArgumentList.Add(relativePath)
+                Using child = Diagnostics.Process.Start(psi)
+                    If child Is Nothing Then Return "无法启动模型删除进程"
+                    Dim stdout = child.StandardOutput.ReadToEnd()
+                    Dim stderr = child.StandardError.ReadToEnd()
+                    If Not child.WaitForExit(45000) Then
+                        Try
+                            child.Kill(entireProcessTree:=True)
+                        Catch
+                        End Try
+                        Return "模型删除进程超时"
+                    End If
+                    If child.ExitCode <> 0 Then Return LastNonEmptyLine(If(String.IsNullOrWhiteSpace(stderr), stdout, stderr))
+                End Using
+                Return ""
+            Catch ex As Exception
+                Return ex.Message
+            End Try
+        End Function
+
+        Private Async Sub OnDownloadAllClick(sender As Object, e As EventArgs)
+            If Not _downloadActionsEnabled OrElse Not _downloadOnline OrElse _downloadsLoading OrElse
+                _archiveCleanupBusy OrElse _downloadActiveCount > 0 Then Return
+            ' 插件 EXE 由自动更新流程管理；Backend 使用独立事务更新，均不进入三路并行资源下载。
+            Dim paths = _downloadItemsByPath.Keys.
+                Where(Function(path) Not path.Equals("Plugin/videoenhancer.exe", StringComparison.OrdinalIgnoreCase) AndAlso
+                    Not DownloadCategory(path).Equals("Backend", StringComparison.OrdinalIgnoreCase)).
+                ToList()
+            If paths.Count = 0 Then
+                ShowStatus("请先刷新资源列表。", True)
+                Return
+            End If
+            Await DownloadGroupItemsAsync("全部资源", paths)
+        End Sub
+
+        Private Async Function DownloadSingleItemAsync(entry As DownloadModelEntry) As Task
+            If entry Is Nothing OrElse entry.Installed Then Return
+            If _downloadActiveCount >= MaxParallelDownloads Then
+                ShowStatus("当前已有 3 个并行下载，请等待任一文件完成。", True)
+                Return
+            End If
+            Dim exePath = DownloadExecutablePath()
+            If String.IsNullOrWhiteSpace(exePath) Then Return
+            If entry.IsBackend AndAlso entry.ForceBackendFull Then
+                Dim sizeText = If(entry.BackendFullSize > 0, FormatDownloadSize(entry.BackendFullSize), "未知大小")
+                Dim message = "完整修复包约 " & sizeText & "，将用干净后端整体替换现有 Backend。" &
+                    Environment.NewLine & "旧后端会先移入事务备份；成功后清理，失败时自动恢复。" &
+                    Environment.NewLine & Environment.NewLine & "现在下载完整修复包吗？"
+                If Not ShowLakeConfirm(Me, message, "完整修复 Backend", defaultYes:=False) Then Return
+            End If
+            Dim relativePath = entry.RelativePath
+            If Not TryBeginDownload(relativePath) Then
+                ShowStatus("该资源正在下载，请等待当前任务完成。", True)
+                Return
+            End If
+            SetDownloadRowState(relativePath, "下载中", "准备中...", UiAccent, UiAccent)
+            Dim result = Await ExecuteDownloadAsync(exePath, relativePath,
+                Sub(text)
+                    Try
+                        BeginInvoke(New Action(Sub() SetDownloadRowState(relativePath, "下载中", text, UiAccent, UiAccent)))
+                    Catch
+                    End Try
+                End Sub, entry.ForceBackendFull)
+            If result.ExitCode = 0 Then
+                entry.Installed = True
+                SetDownloadRowState(relativePath, If(entry.IsBackend, "已更新", "本地已安装"), "已完成", UiSuccess, UiTextMuted)
+                ShowStatus(If(entry.IsBackend, "后端更新完成", "模型下载完成：" & relativePath), False)
+            ElseIf result.Errors.Contains("NO_NETWORK|") Then
+                SetDownloadRowState(relativePath, "网络中断", "重试", UiDanger, UiAccent)
+                _downloadOnline = False
+                SetDownloadActionsEnabled(False)
+                ShowOfflineDownloadStatus()
+            ElseIf result.Errors.Contains("AUTH_REQUIRED|") Then
+                SetDownloadRowState(relativePath, "需要认证", "重试", UiDanger, UiAccent)
+                ShowStatus("私有模型仓库需要有效令牌，请设置 VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN 后重启 3FUI。", True)
+            ElseIf entry.IsBackend AndAlso result.Errors.Contains("BACKEND_FULL_REQUIRED|") Then
+                entry.ForceBackendFull = True
+                entry.Size = entry.BackendFullSize
+                SetBackendFullRepairState(relativePath, entry.BackendFullSize)
+                ShowStatus("增量补丁与本地后端文件不一致，已安全回滚。请点击““下载完整修复包””。", True)
+            Else
+                SetDownloadRowState(relativePath, "下载失败", "重试", UiDanger, UiAccent)
+                ShowStatus(CliErrorMessage(result.Errors, "模型下载失败"), True)
+            End If
+            RefreshDownloadGroupSummary(DownloadCategory(relativePath))
+        End Function
+
+        Private Async Function DownloadGroupItemsAsync(category As String, allPaths As List(Of String)) As Task
+            If allPaths Is Nothing OrElse allPaths.Count = 0 OrElse _activeDownloadGroups.Contains(category) Then Return
+            If _downloadActiveCount >= MaxParallelDownloads Then
+                ShowStatus("当前已有 3 个并行下载，请等待任一文件完成。", True)
+                Return
+            End If
+            Dim paths = allPaths.Where(Function(path)
+                Dim item As UltraDetailListView.ListItem = Nothing
+                If Not _downloadItemsByPath.TryGetValue(path, item) Then Return False
+                Dim row = TryCast(item.Tag, DownloadListRowTag)
+                Return row IsNot Nothing AndAlso row.Entry IsNot Nothing AndAlso Not row.Entry.Installed AndAlso
+                    Not _activeDownloadPaths.Contains(path)
+            End Function).ToList()
+            If paths.Count = 0 Then
+                RefreshDownloadGroupSummary(category)
+                Return
+            End If
+            Dim exePath = DownloadExecutablePath()
+            If String.IsNullOrWhiteSpace(exePath) Then Return
+            _activeDownloadGroups.Add(category)
+            Dim completed = 0
+            Dim nextIndex = 0
+            Dim failed = False
+            Dim failureMessage = ""
+            ' 滑动窗口：始终保持最多 3 个活动下载，任一任务完成就立即补下一个。
+            Dim running As New List(Of Task(Of DownloadExecutionResult))()
+            Dim runningPaths As New Dictionary(Of Task(Of DownloadExecutionResult), String)()
+            Try
+                SetDownloadGroupState(category, "0/" & paths.Count & " 已完成", "下载中", UiAccent)
+                While nextIndex < paths.Count OrElse running.Count > 0
+                    While nextIndex < paths.Count AndAlso _downloadActiveCount < MaxParallelDownloads AndAlso Not failed
+                        Dim relativePath = paths(nextIndex)
+                        nextIndex += 1
+                        If Not TryBeginDownload(relativePath) Then Continue While
+                        Dim currentPath = relativePath
+                        SetDownloadRowState(currentPath, "下载中", "准备中...", UiAccent, UiAccent)
+                        Dim task = ExecuteDownloadAsync(exePath, currentPath,
+                            Sub(text)
+                                Try
+                                    BeginInvoke(New Action(Sub()
+                                        SetDownloadRowState(currentPath, "下载中", text, UiAccent, UiAccent)
+                                    End Sub))
+                                Catch
+                                End Try
+                            End Sub)
+                        running.Add(task)
+                        runningPaths(task) = currentPath
+                    End While
+
+                    If running.Count = 0 Then Exit While
+                    Dim finished = Await Task.WhenAny(running)
+                    running.Remove(finished)
+                    Dim finishedPath = runningPaths(finished)
+                    runningPaths.Remove(finished)
+                    Dim result = Await finished
+                    If result.ExitCode <> 0 Then
+                        failed = True
+                        failureMessage = CliErrorMessage(result.Errors, "模型下载失败")
+                        SetDownloadRowState(finishedPath,
+                            If(result.Errors.Contains("AUTH_REQUIRED|"), "需要认证", "下载失败"),
+                            "重试", UiDanger, UiAccent)
+                        If result.Errors.Contains("NO_NETWORK|") Then _downloadOnline = False
+                    Else
+                        completed += 1
+                        MarkDownloadInstalled(finishedPath)
+                    End If
+                    SetDownloadGroupState(category, completed & "/" & paths.Count & " 已完成",
+                        If(failed, "等待当前任务", "下载中"), If(failed, UiTextMuted, UiAccent))
+                End While
+            Finally
+                _activeDownloadGroups.Remove(category)
+            End Try
+
+            RefreshDownloadGroupSummary(category)
+            If Not _downloadOnline Then
+                SetDownloadActionsEnabled(False)
+                ShowOfflineDownloadStatus()
+                Return
+            End If
+            If failed Then
+                SetDownloadGroupState(category, completed & "/" & paths.Count & " 已完成", "继续下载", UiAccent)
+                ShowStatus("批量下载过程中有文件失败：" & failureMessage, True)
+            Else
+                ShowStatus("该分类 " & completed & " 个文件已全部下载完成", False)
+            End If
+        End Function
+
+        Private Async Function ExecuteDownloadAsync(exePath As String, relativePath As String,
+                                                     progress As Action(Of String),
+                                                     Optional forceBackendFull As Boolean = False) As Task(Of DownloadExecutionResult)
+            Try
+                Return Await Task.Run(Function() ExecuteModelDownload(exePath, relativePath, progress, forceBackendFull))
+            Finally
+                EndDownload(relativePath)
+            End Try
+        End Function
+
+        Private Function ExecuteModelDownload(exePath As String, relativePath As String, progress As Action(Of String),
+                                              Optional forceBackendFull As Boolean = False) As DownloadExecutionResult
+            Dim result As New DownloadExecutionResult()
+            Dim errors As New StringBuilder()
+            Try
+                Dim isBackendUpdate = DownloadCategory(relativePath).Equals("Backend", StringComparison.OrdinalIgnoreCase)
+                If isBackendUpdate AndAlso Not StopEnvironmentCheck(10000) Then
+                    errors.AppendLine("启动环境检查未能及时停止，请稍后重试")
+                    result.Errors = errors.ToString()
+                    Return result
+                End If
+                Dim psi As New ProcessStartInfo With {
+                    .FileName = exePath, .WorkingDirectory = Path.GetDirectoryName(exePath),
+                    .UseShellExecute = False, .RedirectStandardOutput = True,
+                    .RedirectStandardError = True, .CreateNoWindow = True,
+                    .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                }
+                PortableRuntime.ConfigureProcess(psi)
+                If isBackendUpdate Then
+                    psi.ArgumentList.Add("--update-backend")
+                    If forceBackendFull Then psi.ArgumentList.Add("--force-backend-full")
+                Else
+                    psi.ArgumentList.Add("--download-model")
+                    psi.ArgumentList.Add(relativePath)
+                End If
+                Using process As New Process With {.StartInfo = psi}
+                    AddHandler process.OutputDataReceived,
+                        Sub(s, ev)
+                            If ev.Data Is Nothing Then Return
+                            If ev.Data.StartsWith("DOWNLOAD_PROGRESS|", StringComparison.Ordinal) Then
+                                Dim parts = ev.Data.Split("|"c)
+                                If parts.Length > 1 Then progress(parts(1) & "%")
+                            ElseIf ev.Data.StartsWith("EXTRACT_COMPLETE|", StringComparison.Ordinal) Then
+                                progress("解压完成")
+                            ElseIf ev.Data.StartsWith("BACKEND_PATCH_START|", StringComparison.Ordinal) Then
+                                progress("下载增量补丁")
+                            ElseIf ev.Data.StartsWith("BACKEND_FULL_START|", StringComparison.Ordinal) Then
+                                progress("下载完整修复包")
+                            ElseIf ev.Data.StartsWith("BACKEND_PATCH_COMPLETE|", StringComparison.Ordinal) Then
+                                progress("补丁已应用")
+                            End If
+                        End Sub
+                    AddHandler process.ErrorDataReceived, Sub(s, ev) If ev.Data IsNot Nothing Then errors.AppendLine(ev.Data)
+                    process.Start()
+                    process.BeginOutputReadLine()
+                    process.BeginErrorReadLine()
+                    process.WaitForExit()
+                    result.ExitCode = process.ExitCode
+                End Using
+            Catch ex As Exception
+                errors.AppendLine(ex.Message)
+            End Try
+            result.Errors = errors.ToString()
+            Return result
+        End Function
+
+        Private Sub SetDownloadRowState(relativePath As String, status As String, action As String,
+                                        statusColor As Color, actionColor As Color)
+            Dim item As UltraDetailListView.ListItem = Nothing
+            If Not _downloadItemsByPath.TryGetValue(relativePath, item) Then Return
+            Dim changed = item.SubItems(2).Text <> status OrElse item.SubItems(DownloadActionColumn).Text <> action OrElse
+                item.SubItems(2).ForeColor <> statusColor OrElse item.SubItems(DownloadActionColumn).ForeColor <> actionColor
+            If Not changed Then Return
+            item.SubItems(2).Text = status
+            item.SubItems(2).ForeColor = statusColor
+            item.SubItems(DownloadActionColumn).Text = action
+            item.SubItems(DownloadActionColumn).ForeColor = actionColor
+            _downloadList.RefreshItems()
+        End Sub
+
+        Private Sub SetBackendFullRepairState(relativePath As String, fullSize As Long)
+            Dim item As UltraDetailListView.ListItem = Nothing
+            If Not _downloadItemsByPath.TryGetValue(relativePath, item) Then Return
+            item.SubItems(1).Text = If(fullSize > 0, FormatDownloadSize(fullSize), "-")
+            item.SubItems(2).Text = "增量补丁不适用"
+            item.SubItems(2).ForeColor = UiDanger
+            item.SubItems(DownloadActionColumn).Text = "下载完整修复包"
+            item.SubItems(DownloadActionColumn).ForeColor = UiAccent
+            _downloadList.RefreshItems()
+        End Sub
+
+        Private Sub SetDownloadGroupState(category As String, status As String, action As String, actionColor As Color)
+            Dim item As UltraDetailListView.ListItem = Nothing
+            If Not _downloadGroupItems.TryGetValue(category, item) Then Return
+            item.SubItems(2).Text = status
+            item.SubItems(DownloadActionColumn).Text = action
+            item.SubItems(DownloadActionColumn).ForeColor = actionColor
+            _downloadList.RefreshItems()
+        End Sub
+
+        Private Sub MarkDownloadInstalled(relativePath As String)
+            Dim item As UltraDetailListView.ListItem = Nothing
+            If Not _downloadItemsByPath.TryGetValue(relativePath, item) Then Return
+            Dim row = TryCast(item.Tag, DownloadListRowTag)
+            If row IsNot Nothing AndAlso row.Entry IsNot Nothing Then row.Entry.Installed = True
+            SetDownloadRowState(relativePath, "本地已安装", "已完成", UiSuccess, UiTextMuted)
+        End Sub
+
+        Private Sub RefreshDownloadGroupSummary(category As String)
+            Dim item As UltraDetailListView.ListItem = Nothing
+            If Not _downloadGroupItems.TryGetValue(category, item) Then Return
+            Dim row = TryCast(item.Tag, DownloadListRowTag)
+            If row Is Nothing OrElse row.BatchPaths Is Nothing Then Return
+            Dim installed = 0
+            For Each path In row.BatchPaths
+                Dim resourceItem As UltraDetailListView.ListItem = Nothing
+                If Not _downloadItemsByPath.TryGetValue(path, resourceItem) Then Continue For
+                Dim resourceRow = TryCast(resourceItem.Tag, DownloadListRowTag)
+                If resourceRow IsNot Nothing AndAlso resourceRow.Entry IsNot Nothing AndAlso resourceRow.Entry.Installed Then
+                    installed += 1
+                End If
+            Next
+            Dim allInstalled = installed = row.BatchPaths.Count
+            SetDownloadGroupState(category, installed & "/" & row.BatchPaths.Count & " 已存在",
+                If(allInstalled, "已全部存在", "下载本组"), If(allInstalled, UiTextMuted, UiAccent))
+        End Sub
+
+        Private Sub SetDownloadActionsEnabled(enabled As Boolean)
+            _downloadActionsEnabled = enabled
+            For Each item In _downloadList.Items
+                Dim row = TryCast(item.Tag, DownloadListRowTag)
+                If row Is Nothing Then Continue For
+                Dim available = enabled AndAlso _downloadOnline
+                If row.Entry IsNot Nothing Then
+                    item.SubItems(DownloadActionColumn).ForeColor = If(available AndAlso Not row.Entry.Installed, UiAccent, UiTextMuted)
+                ElseIf row.BatchPaths IsNot Nothing Then
+                    Dim allInstalled = row.BatchPaths.All(Function(path)
+                        Dim resourceItem As UltraDetailListView.ListItem = Nothing
+                        If Not _downloadItemsByPath.TryGetValue(path, resourceItem) Then Return False
+                        Dim resourceRow = TryCast(resourceItem.Tag, DownloadListRowTag)
+                        Return resourceRow IsNot Nothing AndAlso resourceRow.Entry IsNot Nothing AndAlso resourceRow.Entry.Installed
+                    End Function)
+                    item.SubItems(DownloadActionColumn).ForeColor = If(available AndAlso Not allInstalled, UiAccent, UiTextMuted)
+                End If
+            Next
+            _downloadList.RefreshItems()
+            UpdateDownloadUtilityButtons()
+        End Sub
+
+        Private Function TryBeginDownload(relativePath As String) As Boolean
+            If _downloadActiveCount >= MaxParallelDownloads OrElse _activeDownloadPaths.Contains(relativePath) Then Return False
+            _activeDownloadPaths.Add(relativePath)
+            _downloadActiveCount += 1
+            UpdateDownloadUtilityButtons()
+            Return True
+        End Function
+
+        Private Sub EndDownload(relativePath As String)
+            If _activeDownloadPaths.Remove(relativePath) Then
+                _downloadActiveCount = Math.Max(0, _downloadActiveCount - 1)
+            End If
+            UpdateDownloadUtilityButtons()
+        End Sub
+
+        Private Sub UpdateDownloadUtilityButtons()
+            _btnRefreshDownloads.Enabled = Not _downloadsLoading AndAlso
+                _downloadActiveCount = 0 AndAlso Not _archiveCleanupBusy
+            _btnDownloadPluginUpdate.Enabled = _downloadsLoaded AndAlso _downloadActionsEnabled AndAlso
+                _downloadOnline AndAlso _downloadActiveCount = 0 AndAlso Not _archiveCleanupBusy
+            _btnCleanArchives.Enabled = _downloadActiveCount = 0 AndAlso Not _archiveCleanupBusy
+        End Sub
+
+        Private Sub ShowOfflineDownloadStatus()
+            Try
+                _statusClearTimer.Stop()
+            Catch
+            End Try
+            If _downloadList.Items.Count = 0 Then
+                AddDownloadMessage("暂时无法连接模型镜像", "检查网络后刷新资源", UiDanger)
+            End If
+            _lblStatus.Text = "<font color=#E07878>无法连接 ModelScope，请检查网络或代理设置</font>"
+            SetDownloadActionsEnabled(False)
+            UpdateDownloadUtilityButtons()
+        End Sub
+
+        Private Async Sub OnCleanDownloadArchives(sender As Object, e As EventArgs)
+            If _archiveCleanupBusy OrElse _downloadActiveCount > 0 Then
+                ShowStatus("请等待当前模型下载完成后再清理压缩包。", True)
+                Return
+            End If
+            If Not File.Exists(_config.ExePath) Then
+                ShowStatus("请先指定有效的 videoenhancer.exe", True)
+                Return
+            End If
+            _archiveCleanupBusy = True
+            SetDownloadActionsEnabled(False)
+            _btnCleanArchives.Enabled = False
+            ShowStatus("正在清理下载压缩包…", False)
+            Dim output = New StringBuilder()
+            Dim errors = New StringBuilder()
+            Dim exitCode = Await Task.Run(
+                Function()
+                    Try
+                        Dim psi As New ProcessStartInfo With {
+                            .FileName = _config.ExePath,
+                            .WorkingDirectory = Path.GetDirectoryName(_config.ExePath),
+                            .UseShellExecute = False, .CreateNoWindow = True,
+                            .RedirectStandardOutput = True, .RedirectStandardError = True,
+                            .StandardOutputEncoding = Encoding.UTF8, .StandardErrorEncoding = Encoding.UTF8
+                        }
+                        PortableRuntime.ConfigureProcess(psi)
+                        psi.ArgumentList.Add("--clean-download-archives")
+                        Using process As New Process With {.StartInfo = psi}
+                            process.Start()
+                            output.Append(process.StandardOutput.ReadToEnd())
+                            errors.Append(process.StandardError.ReadToEnd())
+                            process.WaitForExit()
+                            Return process.ExitCode
+                        End Using
+                    Catch ex As Exception
+                        errors.Append(ex.Message)
+                        Return -1
+                    End Try
+                End Function)
+            _archiveCleanupBusy = False
+            SetDownloadActionsEnabled(True)
+            UpdateDownloadUtilityButtons()
+            Dim complete = output.ToString().Split(New Char() {Convert.ToChar(13), Convert.ToChar(10)}, StringSplitOptions.RemoveEmptyEntries).
+                FirstOrDefault(Function(line) line.StartsWith("CLEAN_COMPLETE|", StringComparison.Ordinal))
+            If exitCode = 0 AndAlso complete IsNot Nothing Then
+                Dim parts = complete.Split("|"c)
+                Dim count = If(parts.Length > 1, parts(1), "0")
+                ShowStatus("已清理 " & count & " 个下载压缩包", False)
+            Else
+                ShowStatus("清理失败：" & LastNonEmptyLine(errors.ToString()), True)
+            End If
+        End Sub
+    End Class
+
+End Namespace

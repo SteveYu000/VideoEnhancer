@@ -4,6 +4,13 @@ import unittest
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+PLUGIN = ROOT / "VideoEnhancerPlugin"
+
+
+def read_plugin_panel_sources():
+    paths = [PLUGIN / "PluginPanel.vb"]
+    paths.extend(sorted((PLUGIN / "Pages").glob("PluginPanel.*Page.vb")))
+    return "\n".join(path.read_text(encoding="utf-8-sig") for path in paths)
 
 
 class UserModelImportContractTests(unittest.TestCase):
@@ -26,7 +33,7 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertNotIn("6GB", source)
 
     def test_plugin_uses_lakeui_submenus_and_expected_tab_order(self):
-        source = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
+        source = read_plugin_panel_sources()
         self.assertIn("ModernContextMenu.ModernMenuItem", source)
         self.assertIn(".SubMenu = submenu", source)
         expected = ["超分工作台", "实时预览", "模型下载", "模型转换", "模型导入", "分段超分", "右键超分", "使用教程"]
@@ -36,8 +43,8 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertNotIn('ModernTab("模型指南")', source)
 
     def test_segmented_page_and_shell_per_item_delete_are_wired(self):
-        panel = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
-        segmented = (ROOT / "VideoEnhancerPlugin" / "SegmentedUpscalePage.vb").read_text(encoding="utf-8")
+        panel = read_plugin_panel_sources()
+        segmented = (PLUGIN / "Pages" / "PluginPanel.SegmentedUpscalePage.vb").read_text(encoding="utf-8")
         config = (ROOT / "VideoEnhancerPlugin" / "PluginConfig.vb").read_text(encoding="utf-8")
         queue = (ROOT / "VideoEnhancerPlugin" / "QueueHook.vb").read_text(encoding="utf-8")
         program = (ROOT / "cli" / "Program.cs").read_text(encoding="utf-8")
@@ -100,7 +107,7 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertNotIn("ResolveCoreRoot", portable_paths)
 
     def test_import_page_lists_models_and_exposes_capability_editor(self):
-        source = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
+        source = read_plugin_panel_sources()
         self.assertIn("Private ReadOnly _importModelList As New UltraDetailListView()", source)
         self.assertIn("_importModelList.ItemDoubleClick", source)
         self.assertIn("用户模型（双击修正 / Delete 删除）", source)
@@ -132,7 +139,7 @@ class UserModelImportContractTests(unittest.TestCase):
 
     def test_download_catalog_keeps_latest_runtime_and_supports_safe_local_delete(self):
         program = (ROOT / "cli" / "Program.cs").read_text(encoding="utf-8")
-        panel = (ROOT / "VideoEnhancerPlugin" / "PluginPanel.vb").read_text(encoding="utf-8")
+        panel = read_plugin_panel_sources()
         self.assertIn("KeepLatestVersionedArchive", program)
         self.assertIn("RTXVideoRuntime_(?<version>", program)
         self.assertIn('case "--delete-download-model"', program)
@@ -150,6 +157,33 @@ class UserModelImportContractTests(unittest.TestCase):
         self.assertIn("Return remoteVersion > installedVersion", updater)
         self.assertIn("info.Length <> manifest.Package.Size", updater)
         self.assertIn("SHA256.HashData(stream)", updater)
+
+    def test_each_plugin_page_has_own_runtime_source(self):
+        project = (PLUGIN / "VideoEnhancerPlugin.vbproj").read_text(encoding="utf-8")
+        runtime_pages = {
+            "PluginPanel.UpscalePage.vb": "BuildOfficialUpscalePage",
+            "PluginPanel.PreviewPage.vb": "BuildOfficialPreviewPage",
+            "PluginPanel.ImagePage.vb": "BuildOfficialImagePage",
+            "PluginPanel.ModelDownloadPage.vb": "BuildOfficialModelDownloadPage",
+            "PluginPanel.ModelConverterPage.vb": "BuildOfficialConverterPage",
+            "PluginPanel.ModelImportPage.vb": "BuildOfficialImporterPage",
+            "PluginPanel.SegmentedUpscalePage.vb": "BuildOfficialSegmentedPage",
+            "PluginPanel.ShellPage.vb": "BuildOfficialShellPage",
+            "PluginPanel.TutorialPage.vb": "BuildMarkdownPage",
+        }
+        panel = (PLUGIN / "PluginPanel.vb").read_text(encoding="utf-8-sig")
+        for file_name, build_method in runtime_pages.items():
+            page_path = PLUGIN / "Pages" / file_name
+            self.assertTrue(page_path.is_file(), file_name)
+            self.assertIn(build_method, page_path.read_text(encoding="utf-8-sig"))
+            self.assertNotIn(f"Private Sub {build_method}", panel)
+        self.assertFalse((PLUGIN / "DesignerPages").exists())
+        self.assertNotIn("Visual Studio designer pages", project)
+        self.assertGreaterEqual(project.count("<Private>false</Private>"), 2)
+        self.assertGreaterEqual(project.count("<ExternallyResolved>true</ExternallyResolved>"), 2)
+        self.assertNotIn("layoutOnly", panel)
+        self.assertNotIn("AttachDesignerPage", panel)
+        self.assertNotIn("RebindDesignerBackgroundSources", panel)
 
     def test_builtin_catalog_remains_valid_json(self):
         document = json.loads((ROOT / "cli" / "model-capabilities.json").read_text(encoding="utf-8"))

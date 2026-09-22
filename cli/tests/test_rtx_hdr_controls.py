@@ -8,6 +8,12 @@ PLUGIN = ROOT / "VideoEnhancerPlugin"
 CLI = ROOT / "cli"
 
 
+def read_plugin_panel_sources():
+    paths = [PLUGIN / "PluginPanel.vb"]
+    paths.extend(sorted((PLUGIN / "Pages").glob("PluginPanel.*Page.vb")))
+    return "\n".join(path.read_text(encoding="utf-8-sig") for path in paths)
+
+
 class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
     def test_hdr_config_defaults_and_clamp_contract(self):
         config = (PLUGIN / "PluginConfig.vb").read_text(encoding="utf-8-sig")
@@ -25,7 +31,7 @@ class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
         self.assertIn("ClampRtxHdrMaxLuminance", config)
 
     def test_hdr_ui_uses_editable_integer_numeric_controls_and_layout(self):
-        panel = (PLUGIN / "PluginPanel.vb").read_text(encoding="utf-8-sig")
+        panel = read_plugin_panel_sources()
         self.assertEqual(4, panel.count("New RtxHdrNumericUpDown()"))
         self.assertIn("Inherits ModernNumericUpDown", panel)
         self.assertIn("Protected Overrides Sub OnMouseWheel", panel)
@@ -70,7 +76,8 @@ class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
     def test_queue_access_does_not_bind_old_list_getter(self):
         sources = [
             path.read_text(encoding="utf-8-sig")
-            for path in PLUGIN.glob("*.vb")
+            for path in PLUGIN.rglob("*.vb")
+            if "bin" not in path.parts and "obj" not in path.parts
         ]
         joined = "\n".join(sources)
         self.assertNotIn("编码队列_v6.队列", joined)

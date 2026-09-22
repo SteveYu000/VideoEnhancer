@@ -9,6 +9,7 @@
 [Pp]ublish/
 .publish/
 .vs/
+*.user
 
 # 本地回退归档与 Python 运行缓存不进入功能提交
 /archive/
