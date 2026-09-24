@@ -73,6 +73,11 @@ try {
     $exe = Join-Path $hostRoot 'Plugin\videoenhancer\videoenhancer.exe'
     if ((Get-FileHash -LiteralPath $dll).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'VideoEnhancerPlugin\obj\plugin-artifact\videoenhancer.3fui.dll')).Hash) { throw '插件 DLL 哈希不一致' }
     if ((Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'Artifacts\videoenhancer.exe')).Hash) { throw '运行 EXE 哈希不一致' }
+    $installedLicense = Join-Path $hostRoot 'Plugin\videoenhancer\LICENSE.txt'
+    if (-not (Test-Path -LiteralPath $installedLicense -PathType Leaf) -or
+        (Get-FileHash -LiteralPath $installedLicense).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'LICENSE')).Hash) {
+        throw '安装后的项目许可证缺失或内容不一致'
+    }
     $dllHash = (Get-FileHash -LiteralPath $dll).Hash
     $exeHash = (Get-FileHash -LiteralPath $exe).Hash
     $env:VIDEOENHANCER_INSTALL_FAIL_AFTER = '2'

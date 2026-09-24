@@ -10,7 +10,7 @@
 `3FUI\Plugin\videoenhancer\videoenhancer.exe`，并在同级建立 `models`、`python`、`bin`
 三个便携核心目录；插件 DLL 单独保留在 `3FUI\Plugin` 根目录，3FUI 加载后会自动识别子目录 EXE。
 配置、缓存、临时文件和更新文件分别保存在同级的 `videoenhancer.plugin.json`、`cache`、`.work` 和 `.update` 中。
-普通运行不会向 AppData 写文件。插件首次启动时可迁移当前用户的旧版 AppData 配置；安装链不创建项目专用的安装位置键，WiX Burn 窗口仍会留下隐藏的缓存记录。
+普通运行不会向 AppData 写文件。插件首次启动时可迁移当前用户的旧版 AppData 配置。
 
 ## 构建（单文件）
 
@@ -128,7 +128,7 @@ PowerShell 示例：
 
 插件以 GitHub Release 为唯一版本标准：优先读取 `maxzrb/VideoEnhancer` 的 `releases/latest` 及其 `stable.json` 清单资产；GitHub 不可达时读取 ModelScope `stable.json` 兜底。可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖检查仓库，`VIDEOENHANCER_UPDATE_GITHUB_TOKEN` 供私有仓库或提高 API 限频使用。更新包下载首选 ModelScope 数据集 `AerithDream/VideoEnhancer-Releases`（可用 `VIDEOENHANCER_UPDATE_DATASET=owner/name` 切换），失败时回退 GitHub Release 资产；两源都校验清单中的大小与 SHA-256。发现更高 SemVer 后必须由用户确认。
 
-更新资产是内嵌插件 DLL 的版本化运行 EXE。下载并校验后，用户在插件界面确认，临时运行的更新 EXE 等待 3FUI 退出，再事务替换 EXE/DLL 并重新启动 3FUI。独立的 `aria2-next`、模型和用户配置不参与本体更新。首次安装器只帮助选择包含 `FFmpegFreeUI.exe` 的目录；更新不依赖它。
+发现新版本后，用户在插件界面确认，程序下载并校验运行 EXE，等待 3FUI 退出后更新 EXE/DLL 并重启 3FUI。独立的 `aria2-next`、模型和用户配置会保留。
 
 ## 目录结构
 

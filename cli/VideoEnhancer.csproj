@@ -43,6 +43,7 @@
     <RuntimeArtifactPath>$(ArtifactsDirectory)videoenhancer.exe</RuntimeArtifactPath>
     <ManualPackagePath>$(ArtifactsDirectory)VideoEnhancer.zip</ManualPackagePath>
     <ThirdPartyNoticePath>$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticePath>
+    <ProjectLicensePath>$(VideoEnhancerRepositoryRoot)LICENSE</ProjectLicensePath>
     <Aria2NextLicensePath>$(MSBuildProjectDirectory)\third-party\aria2-next\COPYING</Aria2NextLicensePath>
     <Aria2NextAuthorsPath>$(MSBuildProjectDirectory)\third-party\aria2-next\AUTHORS</Aria2NextAuthorsPath>
     <Aria2NextSourcePath>$(MSBuildProjectDirectory)\third-party\aria2-next\SOURCE.txt</Aria2NextSourcePath>
@@ -77,6 +78,8 @@
                       Condition="'$(BuildingSolutionFile)' == 'true'" />
     <EmbeddedResource Include="$(ThirdPartyNoticePath)"
                       LogicalName="VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt" />
+    <EmbeddedResource Include="$(ProjectLicensePath)"
+                      LogicalName="VideoEnhancer.Embedded.LICENSE.txt" />
     <EmbeddedResource Include="$(SharpCompressLicensePath)"
                       LogicalName="VideoEnhancer.Embedded.SharpCompress.LICENSE.txt" />
     <EmbeddedResource Include="embedded-tools\rve-ordered-backend.py"
@@ -98,6 +101,8 @@
   <Target Name="ValidateThirdPartyMetadata"
           BeforeTargets="PrepareForBuild"
           Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="!Exists('$(ProjectLicensePath)')"
+           Text="缺少 VideoEnhancer 项目许可证：$(ProjectLicensePath)" />
     <Error Condition="!Exists('$(ThirdPartyNoticePath)')"
            Text="缺少第三方组件声明：$(ThirdPartyNoticePath)" />
     <Error Condition="!Exists('$(Aria2NextLicensePath)')"
@@ -172,6 +177,8 @@
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe" />
     <Copy SourceFiles="$(ThirdPartyNoticePath)"
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\THIRD-PARTY-NOTICES.txt" />
+    <Copy SourceFiles="$(ProjectLicensePath)"
+          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\LICENSE.txt" />
     <Copy SourceFiles="$(Aria2NextLicensePath)"
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\COPYING" />
     <Copy SourceFiles="$(Aria2NextAuthorsPath)"
@@ -191,6 +198,8 @@
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe" />
     <Copy SourceFiles="$(ThirdPartyNoticePath)"
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\THIRD-PARTY-NOTICES.txt" />
+    <Copy SourceFiles="$(ProjectLicensePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\LICENSE.txt" />
     <Copy SourceFiles="$(Aria2NextLicensePath)"
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\COPYING" />
     <Copy SourceFiles="$(Aria2NextAuthorsPath)"

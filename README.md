@@ -55,8 +55,8 @@ stable.json
 
 1. 安装或准备可运行的 3FUI。
 2. 从 GitHub Release 下载 `VideoEnhancerInstaller-<version>-win-x64.exe`。
-3. 双击安装器，在 PR #7 的安装窗口点击“选择目录”，选中包含 `FFmpegFreeUI.exe` 的 3FUI 根目录。窗口会显示目标 `Plugin` 目录；未选择目录时“安装”按钮不可用，选错目录也不会写入插件文件。安装完成后可以删除安装器，后续更新由插件自身负责。
-4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
+3. 双击安装程序，点击“选择目录”，选中包含 `FFmpegFreeUI.exe` 的 3FUI 根目录，然后点击“安装”。
+4. 启动 3FUI，打开「视频超分」插件页面。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 
 插件配置固定保存在：
@@ -65,9 +65,9 @@ stable.json
 Plugin\videoenhancer\videoenhancer.plugin.json
 ```
 
-插件首次启动时会尝试把旧版 `%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json` 迁入便携配置；安装器只处理所选 3FUI 的 `Plugin` 目录，避免在管理员账户下误操作另一个用户的配置。已有模型和用户文件会保留。
+插件首次启动时会尝试迁移旧版配置；已有模型和用户文件会保留。
 
-应用文件与配置保存在 `Plugin` 或 `Plugin\videoenhancer`。安装链不使用 MSI，不写项目专用的 HKLM 安装位置键，也不在 Windows“已安装的应用”中显示；WiX Burn 为运行 PR #7 窗口仍会留下隐藏的注册与缓存记录。用户如需移除插件，应先关闭 3FUI，再删除插件 DLL 和 `Plugin\videoenhancer` 目录；删除前请备份其中的模型与配置。旧版 MSI 安装记录需通过 Windows 正常卸载。
+如需移除插件，先关闭 3FUI，再删除 `Plugin\videoenhancer.3fui.dll` 和 `Plugin\videoenhancer` 目录；删除前请备份其中的模型与配置。
 
 ### 核心目录
 
@@ -182,7 +182,7 @@ AerithDream/VideoEnhancer-Models
 - `VIDEOENHANCER_UPDATE_GITHUB_TOKEN`
 - `VIDEOENHANCER_UPDATE_DATASET=owner/name`
 
-更新必须由用户在插件界面确认；首次安装器和手动 ZIP 不参与自动更新。
+发现新版本后，可在插件界面确认更新。
 
 ## 故障排查
 
@@ -233,7 +233,7 @@ dotnet publish .\VideoEnhancer.slnx -c Release `
 
 `HostBin` 也可以通过环境变量 `VIDEOENHANCER_HOST_BIN` 设置。若仓库与
 `FFmpegFreeUI` 并列放置，项目会优先自动发现相邻的 Release、其次 Debug 输出。
-解决方案发布会暂存手动安装布局，生成便携复制载荷并封装进 PR #7 的 WiX 安装窗口，在仓库根目录的 `Artifacts` 中生成：
+解决方案发布会生成图形安装程序、运行 EXE 和手动安装 ZIP，并放在仓库根目录的 `Artifacts`：
 
 ```text
 Artifacts\
@@ -320,7 +320,9 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 
 ## 许可证和第三方资源
 
-本项目代码、3FUI 宿主、RVE 后端、预训练权重、FFmpeg、Python 依赖和其他运行资源可能具有不同的许可证和再分发条件。使用或再分发前，请分别查看对应项目和资源的许可证、NOTICE 或来源说明；项目版本号或仓库标签不代表第三方模型权重获得了统一授权。
+VideoEnhancer 项目源码采用 [MIT 许可证](LICENSE)，保留原作者及各贡献者的版权。可用 `videoenhancer.exe --license` 查看运行 EXE 内嵌的许可证全文；首次安装器和手动安装 ZIP 也会安装 `Plugin\videoenhancer\LICENSE.txt`。
+
+此许可证不替代第三方材料的许可。3FUI 宿主、独立的 aria2-next、SharpCompress、RVE 后端、预训练权重、FFmpeg、Python 依赖和其他运行资源仍分别遵循其自身许可证及再分发条件；项目版本号或仓库标签不代表第三方模型权重获得了统一授权。
 
 安装后的 `THIRD-PARTY-NOTICES.txt` 汇总本体直接分发的第三方组件。`aria2-next` 的 GPLv2 全文、作者与贡献者声明、二进制 SHA-256、上游标签/提交和对应源码地址位于 `licenses\aria2-next`；SharpCompress 的 MIT 许可证位于 `licenses\SharpCompress`。也可运行 `videoenhancer.exe --third-party-notices` 查看内嵌托管组件的声明。正式发布脚本会校验并同时上传 `aria2-next-2.5.6-source.tar.gz`。
 

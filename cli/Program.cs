@@ -37,6 +37,7 @@ internal static class Program
         return assembly?.GetName().Version?.ToString(3) ?? "0.0.0";
     }
     private const string EmbeddedThirdPartyNoticesResource = "VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt";
+    private const string EmbeddedProjectLicenseResource = "VideoEnhancer.Embedded.LICENSE.txt";
     private const string EmbeddedSharpCompressLicenseResource = "VideoEnhancer.Embedded.SharpCompress.LICENSE.txt";
     private const string EmbeddedOrderedBackendResource = "VideoEnhancer.Embedded.rve-ordered-backend.py";
     private const string EmbeddedInterpolationInspectorResource = "VideoEnhancer.Embedded.inspect_interpolation_models.py";
@@ -964,6 +965,11 @@ internal static class Program
             PrintThirdPartyNotices(Console.Out);
             return 0;
         }
+        if (args.Length == 1 && args[0].Equals("--license", StringComparison.Ordinal))
+        {
+            PrintProjectLicense(Console.Out);
+            return 0;
+        }
         if (args.Length == 0)
         {
             if (InstallerManager.IsInstaller()) return InstallerManager.RunInteractive();
@@ -1447,6 +1453,14 @@ internal static class Program
             writer.WriteLine(reader.ReadToEnd().TrimEnd());
             writer.WriteLine();
         }
+    }
+
+    private static void PrintProjectLicense(TextWriter writer)
+    {
+        using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream(EmbeddedProjectLicenseResource)
+            ?? throw new InvalidOperationException("缺少项目许可证资源：" + EmbeddedProjectLicenseResource);
+        using var reader = new StreamReader(source, Encoding.UTF8, true, leaveOpen: false);
+        writer.WriteLine(reader.ReadToEnd().TrimEnd());
     }
 
     private static Options ParseArgs(string[] args)
@@ -7137,6 +7151,7 @@ internal static class Program
         writer.WriteLine("  videoenhancer.exe --download-url <链接> --download-output <文件>");
         writer.WriteLine("  videoenhancer.exe --extract-archive <压缩包> [--extract-output <目录>]");
         writer.WriteLine("  videoenhancer.exe --third-party-notices");
+        writer.WriteLine("  videoenhancer.exe --license");
         writer.WriteLine("  videoenhancer.exe --version");
         writer.WriteLine();
         writer.WriteLine("必需参数");
@@ -7220,6 +7235,7 @@ internal static class Program
         writer.WriteLine("  --download-url <链接> --download-output <文件>  使用独立安装的 aria2-next 下载任意直链");
         writer.WriteLine("  --extract-archive <文件> [--extract-output <目录>]  使用 SharpCompress 托管解压");
         writer.WriteLine("  --third-party-notices  显示第三方组件和许可证信息");
+        writer.WriteLine("  --license  显示 VideoEnhancer 项目 MIT 许可证");
         writer.WriteLine("  --image-input <文件>  添加一个图片输入（可重复）");
         writer.WriteLine("  --image-folder <目录>  递归添加目录及其子目录图片（可重复）");
         writer.WriteLine("  --image-output <目录>  指定图片输出目录；或用 --image-output-original 输出到原目录");

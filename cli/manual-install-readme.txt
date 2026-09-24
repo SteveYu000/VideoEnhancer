@@ -1,13 +1,13 @@
 VideoEnhancer 手动安装包
 ========================
 
-本包不注册 MSI 产品，也不写入注册表。本包内的目录结构与 3FUI 安装布局一致：
+本包内的目录结构与 3FUI 安装布局一致：
 
 先完全退出 3FUI。
 把解压出的 plugin 文件夹整体复制到 3FUI 根目录（与 FFmpegFreeUI.exe 同级），
 如提示已有同名文件选择覆盖即可。完成后启动 3FUI，在插件里执行一次环境检查。
-插件会固定使用 plugin\videoenhancer\videoenhancer.exe；请保持包内目录结构，
-无需也不能另外指定 EXE 或核心资源目录。配置与运行缓存都保存在该 videoenhancer 目录内。
+请保持包内目录结构。插件配置与运行缓存保存在 plugin\videoenhancer 目录内。
+项目 MIT 许可证在 plugin\videoenhancer\LICENSE.txt；第三方声明及对应许可证在同目录下。
 
 如果从旧版平铺目录升级，可在 3FUI 根目录打开 PowerShell，复制完成后执行：
 

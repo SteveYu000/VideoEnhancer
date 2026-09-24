@@ -1,12 +1,14 @@
 # Project Status
 
-Last updated: 2026-09-24 18:57
+Last updated: 2026-09-24 19:20
 Updated by: Codex
 
 ## Current Snapshot
 
-- Latest FFmpeg routing (2026-09-24 18:57): 用户指出 3FUI 可将 FFmpeg 放在独立“工作目录”。已查 3FUI 官方设置代码确认 `设置_v6.获取有效工作目录()` 与根目录 `Settings.json` 的 `工作目录` 字段。插件预览、四宫格、分段探测、时长探测统一优先读取当前生效工作目录中的 ffmpeg/ffprobe；插件排队时把解析路径传给 CLI。CLI 独立运行时优先读取 3FUI Settings.json 工作目录，再查宿主根目录，最后兼容 PATH/旧私带目录；显式环境变量/命令行路径覆盖仍可用。源码/文档暂未提交推送、未发布；版本仍 1.3.5。
-- Latest FFmpeg verification: Release build 0 警告/0 错误；单独 CLI publish 成功；临时 3FUI 根目录同时放置 ffmpeg.exe 且 Settings.json 指向独立工作目录时，`--check` 报告使用独立目录；Python 33/33；git diff --check 无错误。真实 3FUI 实机预览/四宫格/分段及完整视频处理仍待验收。当前 main 对齐 fork/main 的基线 3bf2951，工作树有本次未提交改动；旧具名 stash 仍保留。
+- Latest license task (2026-09-24 19:20): 用户已确认获得 user-Wing/ARXChem 和 SteveYu000 对现有贡献按 MIT 发布的同意。根目录新增标准 MIT `LICENSE`；项目许可证嵌入运行 EXE 并通过 `--license` 输出，也随首次安装器和手动 ZIP 安装为 `Plugin\videoenhancer\LICENSE.txt`。第三方组件维持自身许可证。README/插件说明/安装窗口 RTF 等用户界面描述已去掉有关 Burn、MSI、是否保留安装器等防御性文字，保留直接操作步骤及 MIT 全文。版本仍 1.3.5，未发布新 Release。
+- Latest license verification: 解决方案 Release publish 与最终 WiX 重建 0 警告/0 错误；运行 EXE `--license`、手动 ZIP、安装后 LICENSE 全文/哈希一致；安装器 RTF 静态校验包含 MIT 全文且不含旧防御性文案；release/test-installer.ps1 通过空目录/错误目录/有效目录/许可证/哈希/回滚；git diff --check 无错误。当前许可证和文案改动待提交推送；真实 3FUI/UAC 安装及新 RTF 的可见窗口目视仍待验收。
+- Latest FFmpeg routing (2026-09-24 19:01): 插件预览、四宫格、分段探测、时长探测统一优先读取 3FUI 当前工作目录中的 ffmpeg/ffprobe；排队时把路径传给 CLI，CLI 独立运行时读取宿主 Settings.json。源码/记录提交 f57a5ba 已推送至 fork/main，并核实远端同提交；工作树在此提交后曾干净。旧具名 stash 仍保留。
+- Latest FFmpeg verification: Release build 0 警告/0 错误；单独 CLI publish 成功；临时 3FUI 根目录同时放置 ffmpeg.exe 且 Settings.json 指向独立工作目录时，`--check` 报告使用独立目录；Python 33/33；git diff --check 无错误。真实 3FUI 实机预览/四宫格/分段及完整视频处理仍待验收。
 
 - Latest local sync (2026-09-24 18:37): fork/main 与本地主工作树 main 均已快进到交接提交 3da8ba4，PR #7 远端已 MERGED；隔离分支也在 3da8ba4。两处工作树同步后均干净。主工作树同步前独有的两份 HandShake 记录已经合并进远端交接历史，原样另存为具名 git stash（pre-PR7-merge HandShake records 2026-09-24），未丢失。后续作者从 main 即可接手；不必恢复该旧 stash，除非需要审计当时的记录。
 
@@ -2344,3 +2346,22 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Changes: 新增 `VideoEnhancerPlugin/FfmpegToolResolver.vb`；预览、四宫格、分段探测、时长探测统一查当前 3FUI 工作目录，再查宿主根目录、当前目录/PATH、旧插件目录。排队时将 ffmpeg/ffprobe 解析路径传给 CLI；CLI 新增可选路径参数，独立运行时读取宿主 `Settings.json` 工作目录；更新两处缺失提示和 README。修改文件：`VideoEnhancerPlugin/FfmpegToolResolver.vb`、`PreviewEngine.vb`、`QuadGridForm.vb`、`QueueHook.vb`、`Pages/PluginPanel.SegmentedUpscalePage.vb`、`VideoEnhancerPlugin/README.md`、`cli/Program.cs`、`cli/README.md`、本 STATUS 与 `version/工作进度.md`。下载页的旧 FFmpeg 包安装状态检查未改，因为它只代表独立下载资源是否存在。
 - Verification: `dotnet build VideoEnhancer.slnx -c Release -p:HostBin=...` 0 警告/0 错误；`dotnet publish cli/VideoEnhancer.csproj -c Release -p:HostBin=...` 成功；临时 3FUI/Settings.json 夹具中根目录与自定义工作目录同时放置 ffmpeg.exe，`--check` 选择自定义工作目录；`python -m unittest discover -s cli/tests -p test_*.py -q` 33/33；`git diff --check` 无错误。初次编译出现 VB 局部变量 `path` 遮蔽 `Path` 错误，已改名并重新编译通过。
 - Remaining/Git: 真实 3FUI 中四类插件功能和真实编码/UAC 安装仍需人工验收；未发布新版本。当前 main 工作树有本次源码/记录改动，未提交、未推送，切换工具或设备前建议提交。旧具名 stash 未动。
+
+### 2026-09-24 19:01 - Codex
+
+- Follow-up: 用户要求提交推送此前完成的 3FUI 工作目录 FFmpeg 路径改动。复核 main/fork/main 基线 3bf2951、改动文件和 `git diff --check`；修正两处注释后提交 f57a5ba `fix: follow 3FUI FFmpeg working directory`。`git push fork main` 快进 3bf2951..f57a5ba；`git ls-remote fork refs/heads/main` 精确等于 f57a5ba；本地工作树当时干净。origin=user-Wing 未推送；未发布新版本。
+
+### 2026-09-24 19:17 - Codex
+
+- Request: 用户指出插件缺少许可证，授权选择合适许可证；异步确认已取得 user-Wing/ARXChem 与 SteveYu000 对现有贡献使用 MIT 的同意。随后要求清除用户可见描述中的 Burn/MSI/安装器保留等防御性解释。
+- Research/decision: 查 GitHub/Choose a License 官方 MIT 文本、3FUI 官方 MIT 状态、仓库贡献历史、现有第三方声明。选择标准 MIT，版权归 VideoEnhancer contributors 各自所有；aria2-next GPL-2.0-or-later、SharpCompress MIT、模型/FFmpeg/Python 等仍按各自许可处理。
+- Changes: 新增根目录 `LICENSE`，`cli/VideoEnhancer.csproj` 把它嵌入运行 EXE 并放入安装器与手动 ZIP；`cli/Program.cs` 新增 `--license` 展示全文；`release/test-installer.ps1` 检查安装后的 LICENSE 哈希；更新 README、插件/CLI README、手动安装说明、ModelScope 说明、WiX 中文文案和发布流程，用户可见文本改成直接安装/更新步骤。
+- Verification: `dotnet publish VideoEnhancer.slnx -c Release -p:HostBin=...` 成功，WiX Bundle 重建 0 警告/0 错误；EXE `--license` 与根目录 LICENSE 按行一致，手动 ZIP LICENSE 按行一致；`release/test-installer.ps1` 通过包含安装后许可证哈希、有效/无效目录、回滚的门禁；`git diff --check` 无错误。首次 EXE 全文比较因 PowerShell `Out-String` 换行格式误报，改为按行比较后通过。
+- Git/remaining: 许可证、文案和本次记录尚待提交推送至 fork/main；版本保持 1.3.5，未创建 Release/标签。真实 UAC/3FUI 安装仍待人工验收；不修改 `version/版本迭代记录.md`。
+
+### 2026-09-24 19:20 - Codex
+
+- Steering: 用户补充要求移除各种插件描述中的防御性安装解释，点名安装器 RTF 中关于“可删除安装器/Burn 缓存/已安装应用”的段落。
+- Changes: 精简 `README.md`、`VideoEnhancerPlugin/README.md`、`cli/README.md`、`cli/manual-install-readme.txt`、`release/modelscope-README.md` 和 `installer/Bundle/VideoEnhancerTheme.zh-CN.wxl` 的用户文字；重写 `installer/Package/InstallerNotice.rtf` 为直接安装步骤、标准 MIT 全文与第三方组件许可名称。开发专用的 `release/发布流程.md` 保留安装机制事实。
+- Verification: 最终 WiX Bundle 重建 0 警告/0 错误，`release/test-installer.ps1` 通过；RTF 解码检查含 MIT 全文且无旧防御性措辞；`git diff --check` 无错误。真实窗口仍需目视确认滚动内容。
+- Git: 本轮许可证及文案改动尚未提交推送，接下来提交到 fork/main；没有新版本或 Release。

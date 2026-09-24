@@ -26,7 +26,7 @@
   <String Id="OverallProgressPackageText" Value="正在初始化…" />
   <String Id="ProgressCancelButton" Value="取消(&amp;C)" />
   <String Id="ModifyHeader" Value="VideoEnhancer 已复制到 3FUI；后续更新请在插件中操作。" />
-  <String Id="ModifyPortableText" Value="这个安装程序只用于首次选择 3FUI 目录。需要重新安装时，请下载新版安装包；移除插件时请关闭 3FUI 后手动删除 Plugin 中的对应文件。" />
+  <String Id="ModifyPortableText" Value="如需重新安装，请选择 3FUI 根目录。移除插件前请先关闭 3FUI。" />
   <String Id="ModifyRepairButton" Value="修复(&amp;R)" />
   <String Id="ModifyUninstallButton" Value="卸载(&amp;U)" />
   <String Id="ModifyCancelButton" Value="取消(&amp;C)" />
