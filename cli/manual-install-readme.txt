@@ -20,8 +20,8 @@ VideoEnhancer 手动安装包
 plugin\videoenhancer；同名不同内容不会覆盖，并会保留在原位置供人工处理。
 它还会迁移旧 AppData 配置、删除旧 INI 和已知临时更新器残留。
 
-请勿删除 bin\aria2-next：它是以独立进程运行的 GPL 下载组件。
-第三方组件声明位于 THIRD-PARTY-NOTICES.txt，许可证、作者声明与精确来源位于 licenses 目录。
+下载功能使用 bin\aria2-next\aria2-next.exe。第三方组件声明位于
+THIRD-PARTY-NOTICES.txt，许可证与来源信息位于 licenses 目录。
 
 模型与后端（Python 环境等）体积较大，不在本包内；
 装好插件后在模型下载页按需获取。

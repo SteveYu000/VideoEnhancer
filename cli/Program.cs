@@ -5303,8 +5303,7 @@ internal static class Program
         if (prepared.Any(segment => !IsSegmentModelBackend(segment.Backend)))
         {
             Console.WriteLine(
-                "[分段超分] FFmpeg / Anime4K 段使用 FFmpeg 直接读取源视频并处理；"
-                + "不再进入 Python 逐帧 pipe。连续模型段仍复用优化模型后端。");
+                "[分段超分] FFmpeg / Anime4K 段正在直接处理源视频，模型段使用对应的推理后端。");
             return RunHybridSegmentedVideo(
                 input, outputFile, prepared, video, secondsMode, encoderArguments,
                 overwrite, pauseShm, stopWatcher, tileSize, segmentedPrecision);

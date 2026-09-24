@@ -99,7 +99,7 @@ internal static class InstallerManager
             var hostRoot = ValidateRoot(Path.GetDirectoryName(executable)!);
             var target = Path.Combine(hostRoot, "Plugin");
             var confirmation = "将 VideoEnhancer 插件安装到：\n\n" + target +
-                "\n\n只复制插件文件，不注册 Windows 应用。确定安装吗？";
+                "\n\n确定安装吗？";
             if (MessageBox(IntPtr.Zero, confirmation, "VideoEnhancer 插件安装", 0x24) != 6) return 0;
             var result = Install(hostRoot, skipLegacyCleanup: false);
             MessageBox(IntPtr.Zero, result, "VideoEnhancer 插件安装", 0x40);

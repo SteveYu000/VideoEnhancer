@@ -1,9 +1,11 @@
 # Project Status
 
-Last updated: 2026-09-24 19:22
+Last updated: 2026-09-24 19:33
 Updated by: Codex
 
 ## Current Snapshot
+
+- Latest copy audit (2026-09-24 19:33): 用户追问是否仍有防御性文字。审查 README、插件 README/教程、安装器 RTF/WiX、备用安装确认框、CLI/手动安装说明、第三方声明与 ModelScope 说明。清理备用确认框“不注册 Windows 应用”、教程“不是故障/设计上的能力限制”、README 的长否定式目录/授权解释、插件 README/CLI README 中多余实现历史、日志里的 Python pipe 解释、第三方声明里的二进制边界辩解。必要的兼容限制、错误原因、迁移冲突规则和第三方许可证保留。完整 Release publish 0/0，安装器目录/哈希/回滚门禁通过，`--third-party-notices` 输出新文字，git diff --check 无错误。源码及记录待提交推送；无新版本/Release。
 
 - Latest license task (2026-09-24 19:20): 用户已确认获得 user-Wing/ARXChem 和 SteveYu000 对现有贡献按 MIT 发布的同意。根目录新增标准 MIT `LICENSE`；项目许可证嵌入运行 EXE 并通过 `--license` 输出，也随首次安装器和手动 ZIP 安装为 `Plugin\videoenhancer\LICENSE.txt`。第三方组件维持自身许可证。README/插件说明/安装窗口 RTF 等用户界面描述已去掉有关 Burn、MSI、是否保留安装器等防御性文字，保留直接操作步骤及 MIT 全文。版本仍 1.3.5，未发布新 Release。
 - Latest license verification/Git: 解决方案 Release publish 与最终 WiX 重建 0 警告/0 错误；运行 EXE `--license`、手动 ZIP、安装后 LICENSE 全文/哈希一致；安装器 RTF 静态校验包含 MIT 全文且不含旧防御性文案；release/test-installer.ps1 通过空目录/错误目录/有效目录/许可证/哈希/回滚；git diff --check 无错误。源码与文案提交 aa0a728 已推送至 fork/main，`git ls-remote` 核对一致，GitHub API 识别仓库许可证为 MIT。真实 3FUI/UAC 安装及新 RTF 的可见窗口目视仍待验收。
@@ -2371,3 +2373,11 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Closeout: MIT 许可证、安装器 RTF、用户文案及打包变更提交为 aa0a728 `docs: license VideoEnhancer under MIT`，`git push fork main` 快进 f57a5ba..aa0a728；`git ls-remote fork refs/heads/main` 等于 aa0a728，GitHub license API 返回 MIT。此后工作树曾验证干净，版本仍 1.3.5，未创建新 Release 或标签；origin=user-Wing 未推送。
 - Verification summary: Release 解决方案 publish、最终 WiX rebuild 0 警告/0 错误；EXE/ZIP/安装后 LICENSE 一致；安装器空/错误/有效目录、许可证哈希及回滚门禁通过；新 RTF 静态全文与文案检查通过。人工可见窗口、真实 3FUI/UAC 安装仍待验收。
 - Handoff: 本次仅剩当前状态记录收尾提交并推送 fork/main；切换工具或设备时以远端 main 最新提交为准。旧具名 stash 不需恢复。
+
+### 2026-09-24 19:33 - Codex
+
+- Request: 用户追问是否还有防御性文字，按已有会话偏好继续清理用户可见描述。
+- Orientation/sync: 同工具续作；复核 STATUS 与 Git，`git pull --ff-only fork main` 已最新，基线 6e62d36 且工作树干净。
+- Audit/changes: 搜索 README、插件教程、CLI、安装器主题/RTF、手动安装说明、第三方声明和发布页。修改 `README.md`、`VideoEnhancerPlugin/README.md`、`Pages/PluginPanel.TutorialPage.vb`、`cli/README.md`、`cli/InstallerManager.cs`、`cli/Program.cs`、`cli/THIRD-PARTY-NOTICES.txt`、`cli/manual-install-readme.txt`；删除多余的系统注册、故障辩解、PR 编号和实现细节。保留模型/后端真实限制、无效目录提示、迁移冲突规则与第三方许可正文。源码注释及发布流程中的 Burn/MSI 信息是维护者记录，不出现在用户说明中。
+- Verification: `dotnet publish VideoEnhancer.slnx -c Release -p:HostBin=...` 成功（WiX 0 警告/0 错误）；`release/test-installer.ps1` 空/错误/有效目录、文件哈希和回滚通过；运行 EXE `--third-party-notices` 输出新文本；`git diff --check` 无错误。未做真实 3FUI/UAC 目视安装。
+- Git/remaining: 当前 main 有本轮源码、文案及交接记录改动，待提交推送 fork/main；版本保持 1.3.5，无新 Release。

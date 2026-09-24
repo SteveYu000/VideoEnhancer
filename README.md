@@ -95,7 +95,7 @@ Plugin\
 
 首次运行时，安装程序可以创建 `models`、`python` 和 `bin` 目录；模型下载页也可以按资源类别自动放置文件。
 
-`CoreRoot` 永远等于当前 `videoenhancer.exe` 所在目录。程序不读取或写入 `videoenhancer.ini`，也不能通过配置把 `python`、`models` 或 `bin` 指向其他目录。除用户明确选择的输入、输出和模型导入源外，插件配置、更新文件、工具副本、计算缓存与临时文件均写入上述便携目录，不向 `AppData` 写入新文件。Python、FFmpeg、RTX sidecar 等子进程的常见临时/缓存环境变量也会重定向到 `.work` 和 `cache`。
+插件文件、配置、更新文件和运行缓存保存在 `Plugin\videoenhancer`。临时文件和子进程缓存分别使用其中的 `.work` 与 `cache` 目录。
 
 ## 推理后端
 
@@ -270,7 +270,7 @@ dotnet build .\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj -c Release `
 
 ## 模型来源与致谢
 
-VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责模型发现、下载、格式适配和调用；模型名称中的 PTH、ONNX、NCNN、TensorRT 等格式可能是原作者文件，也可能是社区转换文件。相同模型的格式转换不会改变其原作者与原始授权条件。
+下表列出模型及其来源。模型文件可能由原作者发布，也可能由社区转换；具体许可与引用要求以对应项目说明为准。
 
 ### 使用的程序与组件
 
@@ -316,13 +316,13 @@ VideoEnhancer **不声称拥有下列模型或训练成果**。项目只负责�
 | GIMM-VFI：F、F-LPIPS、R、R-LPIPS（PyTorch） | GSeanCDAT 等 | [GIMM-VFI](https://github.com/GSeanCDAT/GIMM-VFI) | 代码与权重条件分别以原项目为准 |
 | GMFSS Fortuna：Base、Union、Union-AnimeRun（PyTorch） | 98mxr | [GMFSS_Fortuna](https://github.com/98mxr/GMFSS_Fortuna) | 代码与权重条件分别以原项目为准 |
 
-完整镜像与文件级来源仍在持续审计。模型作者不等于模型架构论文作者；表内致谢不会取代原项目的论文引用要求。研究或公开发布结果时，请继续引用原项目 README 中列出的论文。
+研究或公开发布结果时，请按原项目要求引用相关论文。
 
 ## 许可证和第三方资源
 
 VideoEnhancer 项目源码采用 [MIT 许可证](LICENSE)，保留原作者及各贡献者的版权。可用 `videoenhancer.exe --license` 查看运行 EXE 内嵌的许可证全文；首次安装器和手动安装 ZIP 也会安装 `Plugin\videoenhancer\LICENSE.txt`。
 
-此许可证不替代第三方材料的许可。3FUI 宿主、独立的 aria2-next、SharpCompress、RVE 后端、预训练权重、FFmpeg、Python 依赖和其他运行资源仍分别遵循其自身许可证及再分发条件；项目版本号或仓库标签不代表第三方模型权重获得了统一授权。
+3FUI 宿主、aria2-next、SharpCompress、RVE 后端、预训练权重、FFmpeg 和 Python 依赖分别使用各自的许可证。模型权重的许可条件请查看对应项目说明。
 
 安装后的 `THIRD-PARTY-NOTICES.txt` 汇总本体直接分发的第三方组件。`aria2-next` 的 GPLv2 全文、作者与贡献者声明、二进制 SHA-256、上游标签/提交和对应源码地址位于 `licenses\aria2-next`；SharpCompress 的 MIT 许可证位于 `licenses\SharpCompress`。也可运行 `videoenhancer.exe --third-party-notices` 查看内嵌托管组件的声明。正式发布脚本会校验并同时上传 `aria2-next-2.5.6-source.tar.gz`。
 

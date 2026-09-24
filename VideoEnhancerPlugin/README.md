@@ -1,8 +1,6 @@
 ﻿# videoenhancer.3fui.dll — FFmpegFreeUI（3FUI）视频超分插件
 
-为 3FUI 主程序（FFmpegFreeUI.exe / VideoEnhancerGUI.exe）提供的插件：
-在左侧导航最底部新增「视频超分」页面，启用后把「准备文件 → 加入编码队列」的
-点击处理器替换为 videoenhancer.exe 中转，使队列任务经由 AI 超分 / 补帧后端执行。
+为 3FUI 提供视频超分、运动补帧、模型管理和实时预览。启用后，在 3FUI 中添加任务即可使用插件处理视频。
 
 ## 安装
 
@@ -14,8 +12,6 @@
    <主程序目录>\Plugin\videoenhancer\python\...
    <主程序目录>\Plugin\videoenhancer\models\...
    ```
-   （文件名必须以 `.3fui.dll` 结尾，宿主按 `*.3fui.dll` 扫描加载；
-   程序集名保持 `videoenhancer`，入口类型为 `videoenhancer.Entry`。）
 2. 重启主程序，左侧最下方出现「视频超分」页面。
 
 ## 使用
