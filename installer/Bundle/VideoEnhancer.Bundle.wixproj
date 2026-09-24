@@ -7,18 +7,12 @@
     <Platform>x64</Platform>
     <Cultures>zh-CN</Cultures>
     <ProductVersion Condition="'$(ProductVersion)' == ''">1.0.0</ProductVersion>
-    <DefineConstants>ProductVersion=$(ProductVersion)</DefineConstants>
+    <DefineConstants>ProductVersion=$(ProductVersion);PortablePayloadPath=$(PortablePayloadPath)</DefineConstants>
     <OutputPath Condition="'$(InstallerOutputDirectory)' != ''">$(InstallerOutputDirectory)</OutputPath>
   </PropertyGroup>
 
-  <ItemGroup Label="Project references">
-    <ProjectReference Include="..\Package\VideoEnhancer.Package.wixproj"
-                      AdditionalProperties="ProductVersion=$(ProductVersion);InstallerInputRoot=$(InstallerInputRoot)" />
-  </ItemGroup>
-
   <ItemGroup Label="WiX extensions">
     <PackageReference Include="WixToolset.Bal.wixext" Version="6.0.2" />
-    <PackageReference Include="WixToolset.Util.wixext" Version="6.0.2" />
   </ItemGroup>
 
 </Project>

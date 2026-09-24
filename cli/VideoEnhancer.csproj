@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <PropertyGroup Label="Publish">
-    <!-- 单文件自包含运行程序；安装由 installer 下的 WiX MSI + Burn 工程负责。 -->
+    <!-- 单文件自包含运行程序；便携安装器只负责首次安装。 -->
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
@@ -38,8 +38,9 @@
     <InstalledExecutableFileName>videoenhancer.exe</InstalledExecutableFileName>
     <PluginArtifactPath>$(VideoEnhancerRepositoryRoot)VideoEnhancerPlugin\obj\plugin-artifact\$(PluginArtifactFileName)</PluginArtifactPath>
     <ManualInstallReadmePath>$(MSBuildProjectDirectory)\manual-install-readme.txt</ManualInstallReadmePath>
-    <InstallerBundleProjectPath>$(VideoEnhancerRepositoryRoot)installer\Bundle\VideoEnhancer.Bundle.wixproj</InstallerBundleProjectPath>
     <InstallerArtifactPath>$(ArtifactsDirectory)VideoEnhancerInstaller.exe</InstallerArtifactPath>
+    <PortablePayloadPath>$(ArtifactsDirectory).installer\VideoEnhancerPortablePayload.exe</PortablePayloadPath>
+    <RuntimeArtifactPath>$(ArtifactsDirectory)videoenhancer.exe</RuntimeArtifactPath>
     <ManualPackagePath>$(ArtifactsDirectory)VideoEnhancer.zip</ManualPackagePath>
     <ThirdPartyNoticePath>$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticePath>
     <Aria2NextLicensePath>$(MSBuildProjectDirectory)\third-party\aria2-next\COPYING</Aria2NextLicensePath>
@@ -71,6 +72,9 @@
   </ItemGroup>
 
   <ItemGroup Label="Embedded resources">
+    <EmbeddedResource Include="$(PluginArtifactPath)"
+                      LogicalName="VideoEnhancer.Embedded.videoenhancer.3fui.dll"
+                      Condition="'$(BuildingSolutionFile)' == 'true'" />
     <EmbeddedResource Include="$(ThirdPartyNoticePath)"
                       LogicalName="VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt" />
     <EmbeddedResource Include="$(SharpCompressLicensePath)"
@@ -146,7 +150,7 @@
     <PropertyGroup>
       <PublishedExecutable>$(PublishDir)$(AssemblyName).exe</PublishedExecutable>
       <ManualPackageStage>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)manual-install'))</ManualPackageStage>
-      <InstallerBuildOutput>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)installer-build'))\</InstallerBuildOutput>
+      <InstallerPayloadStage>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)installer-payload'))</InstallerPayloadStage>
     </PropertyGroup>
     <Error Condition="!Exists('$(PublishedExecutable)')"
            Text="发布产物不存在：$(PublishedExecutable)" />
@@ -154,11 +158,11 @@
            Text="手动安装包缺少插件 DLL：$(PluginArtifactPath)" />
     <Error Condition="!Exists('$(ManualInstallReadmePath)')"
            Text="手动安装说明不存在：$(ManualInstallReadmePath)" />
-    <Error Condition="!Exists('$(InstallerBundleProjectPath)')"
-           Text="WiX Burn 工程不存在：$(InstallerBundleProjectPath)" />
     <MakeDir Directories="$(ArtifactsDirectory)" />
+    <Copy SourceFiles="$(PublishedExecutable)"
+          DestinationFiles="$(RuntimeArtifactPath)" />
     <RemoveDir Directories="$(ManualPackageStage)" />
-    <RemoveDir Directories="$(InstallerBuildOutput)" />
+    <RemoveDir Directories="$(InstallerPayloadStage)" />
     <MakeDir Directories="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress" />
     <Copy SourceFiles="$(PluginArtifactPath)"
           DestinationFiles="$(ManualPackageStage)\plugin\$(PluginArtifactFileName)" />
@@ -177,28 +181,40 @@
     <Copy SourceFiles="$(SharpCompressLicensePath)"
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt" />
 
-    <Delete Files="$(InstallerArtifactPath)" />
-    <Exec Command="dotnet build &quot;$(InstallerBundleProjectPath)&quot; --configuration &quot;$(Configuration)&quot; --property:ProductVersion=&quot;$(Version)&quot; --property:InstallerInputRoot=&quot;$(ManualPackageStage)&quot; --property:InstallerOutputDirectory=&quot;$(InstallerBuildOutput)&quot;" />
-    <Error Condition="!Exists('$(InstallerBuildOutput)VideoEnhancerInstaller.exe')"
-           Text="WiX Burn 未生成预期文件：$(InstallerBuildOutput)VideoEnhancerInstaller.exe" />
-    <Copy SourceFiles="$(InstallerBuildOutput)VideoEnhancerInstaller.exe"
-          DestinationFiles="$(InstallerArtifactPath)" />
-    <Message Importance="high" Text="WiX Burn 安装程序：$(InstallerArtifactPath)" />
-
     <Copy SourceFiles="$(ManualInstallReadmePath)"
           DestinationFiles="$(ManualPackageStage)\手动安装说明.txt" />
     <ZipDirectory SourceDirectory="$(ManualPackageStage)"
                   DestinationFile="$(ManualPackagePath)"
                   Overwrite="true" />
+    <MakeDir Directories="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next;$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next;$(InstallerPayloadStage)\plugin\videoenhancer\licenses\SharpCompress" />
+    <Copy SourceFiles="$(Aria2NextExecutablePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe" />
+    <Copy SourceFiles="$(ThirdPartyNoticePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\THIRD-PARTY-NOTICES.txt" />
+    <Copy SourceFiles="$(Aria2NextLicensePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\COPYING" />
+    <Copy SourceFiles="$(Aria2NextAuthorsPath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\AUTHORS" />
+    <Copy SourceFiles="$(Aria2NextSourcePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\SOURCE.txt" />
+    <Copy SourceFiles="$(SharpCompressLicensePath)"
+          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt" />
+    <MakeDir Directories="$(ArtifactsDirectory).installer" />
+    <Delete Files="$(InstallerArtifactPath);$(PortablePayloadPath)" />
+    <Exec Command="&quot;$(PublishedExecutable)&quot; --create-installer-bundle &quot;$(PublishedExecutable)&quot; &quot;$(PortablePayloadPath)&quot; &quot;$(InstallerPayloadStage)&quot;" />
+    <Exec Command="dotnet build &quot;$(VideoEnhancerRepositoryRoot)installer\Bundle\VideoEnhancer.Bundle.wixproj&quot; -c $(Configuration) -p:ProductVersion=$(Version) -p:PortablePayloadPath=&quot;$(PortablePayloadPath)&quot; -p:InstallerOutputDirectory=&quot;$(ArtifactsDirectory)&quot;" />
+    <Error Condition="!Exists('$(InstallerArtifactPath)')"
+           Text="便携安装器未生成预期文件：$(InstallerArtifactPath)" />
+    <Message Importance="high" Text="便携插件安装程序：$(InstallerArtifactPath)" />
     <RemoveDir Directories="$(ManualPackageStage)" />
-    <RemoveDir Directories="$(InstallerBuildOutput)" />
+    <RemoveDir Directories="$(InstallerPayloadStage)" />
     <Message Importance="high" Text="手动安装包：$(ManualPackagePath)" />
   </Target>
 
   <Target Name="CleanSolutionArtifacts"
           AfterTargets="Clean"
           Condition="'$(BuildingSolutionFile)' == 'true'">
-    <Delete Files="$(InstallerArtifactPath);$(ManualPackagePath)" />
+    <Delete Files="$(InstallerArtifactPath);$(PortablePayloadPath);$(ManualPackagePath);$(RuntimeArtifactPath)" />
   </Target>
 
 </Project>

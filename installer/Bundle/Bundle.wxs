@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Burn 只封装一个带完整 UI 的主 MSI。 -->
+<!-- 保留 PR #7 的安装窗口；实际文件复制由便携载荷完成。 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+     xmlns:bal="http://wixtoolset.org/schemas/v4/wxs/bal">
   <Bundle Name="VideoEnhancer"
           Manufacturer="VideoEnhancer contributors"
           Version="$(var.ProductVersion)"
           UpgradeCode="519D1BAF-FB98-4C44-8EBE-753B0451ABD5"
+          DisableModify="yes"
+          DisableRemove="yes"
           Compressed="yes">
     <BootstrapperApplication>
       <bal:WixStandardBootstrapperApplication
@@ -18,43 +19,21 @@
           SuppressOptionsUI="no" />
     </BootstrapperApplication>
 
-    <!--
-      WixStdBA 只识别大小写敏感的 InstallFolder。首次安装不提供固定默认值；
-      MSI 在执行层校验 3FUI 宿主 EXE，避免界面按钮条件失效时误装。
-    -->
+    <!-- 没有默认目录；用户必须在窗口中选择 3FUI 根目录。 -->
     <Variable Name="InstallFolder"
               Type="string"
               Value=""
-              Persisted="yes"
-              bal:Overridable="yes" />
-    <!-- 新版本优先从 MSI 维护的项目键回填上次选择；卸载时该键由 MSI 组件删除。 -->
-    <util:RegistrySearch Id="PreviousInstallRootSearch"
-                         Variable="InstallFolder"
-                         Root="HKLM"
-                         Key="Software\VideoEnhancer"
-                         Value="InstallRoot"
-                         Result="value"
-                         Bitness="always64"
-                         Condition="NOT InstallFolder" />
-    <!-- 仅供无副作用的安装器门禁使用；普通安装与插件更新保持为 0。 -->
-    <Variable Name="SKIPLEGACYCLEANUP"
-              Type="numeric"
-              Value="0"
-              Hidden="yes"
               bal:Overridable="yes" />
 
     <Chain>
-      <MsiPackage SourceFile="$(var.VideoEnhancer.Package.TargetPath)"
+      <ExePackage Id="PortablePlugin"
+                  SourceFile="$(var.PortablePayloadPath)"
                   Compressed="yes"
-                  Visible="no"
-                  Vital="yes">
-        <MsiProperty Name="THREEFUIROOT"
-                     Value="[InstallFolder]"
-                     Condition="InstallFolder" />
-        <MsiProperty Name="SKIPLEGACYCLEANUP"
-                     Value="[SKIPLEGACYCLEANUP]"
-                     Condition="SKIPLEGACYCLEANUP" />
-      </MsiPackage>
+                  PerMachine="no"
+                  Permanent="yes"
+                  DetectCondition="0"
+                  Vital="yes"
+                  InstallArguments='--install-folder "[InstallFolder]" --quiet' />
     </Chain>
   </Bundle>
 </Wix>

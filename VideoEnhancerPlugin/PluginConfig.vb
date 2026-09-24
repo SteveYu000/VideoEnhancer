@@ -87,15 +87,28 @@ Namespace videoenhancer
 
         Public Shared Function Load() As PluginConfig
             Dim cfg As PluginConfig = Nothing
+            Dim loadedLegacyConfig As Boolean = False
             Try
-                If File.Exists(ConfigPath) Then
-                    cfg = JsonSerializer.Deserialize(Of PluginConfig)(File.ReadAllText(ConfigPath))
+                Dim sourcePath = ConfigPath
+                If Not File.Exists(sourcePath) Then
+                    Dim localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData)
+                    If Not String.IsNullOrWhiteSpace(localAppData) Then
+                        Dim legacyPath = Path.Combine(localAppData, "FFmpegFreeUI", "videoenhancer.plugin.json")
+                        If File.Exists(legacyPath) Then
+                            sourcePath = legacyPath
+                            loadedLegacyConfig = True
+                        End If
+                    End If
+                End If
+                If File.Exists(sourcePath) Then
+                    cfg = JsonSerializer.Deserialize(Of PluginConfig)(File.ReadAllText(sourcePath))
                 End If
             Catch
                 ' 配置损坏时回退到默认
             End Try
             If cfg Is Nothing Then cfg = New PluginConfig()
-            If cfg.NormalizeRtxHdrParameters() Then cfg.Save()
+            Dim configChanged = cfg.NormalizeRtxHdrParameters()
+            If configChanged OrElse loadedLegacyConfig Then cfg.Save()
             Return cfg
         End Function
 

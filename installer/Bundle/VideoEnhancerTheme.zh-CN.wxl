@@ -15,7 +15,7 @@
   <String Id="InstallInstallButton" Value="安装(&amp;I)" />
   <String Id="InstallCancelButton" Value="取消(&amp;C)" />
   <String Id="InstallFolderRequired" Value="首次安装必须先选择包含 FFmpegFreeUI.exe 的 3FUI 根目录。" />
-  <String Id="InstallFolderSelected" Value="已确定 3FUI 根目录；如需修改，请点击“选择目录”。" />
+  <String Id="InstallFolderSelected" Value="将安装到 [InstallFolder]\Plugin；如需修改，请点击“选择目录”。" />
   <String Id="OptionsHeader" Value="选择 3FUI 根目录" />
   <String Id="OptionsLocationLabel" Value="请选择包含 FFmpegFreeUI.exe 的目录。不要选择 Plugin 或 Plugin\videoenhancer 目录。" />
   <String Id="OptionsBrowseButton" Value="浏览(&amp;B)" />
@@ -25,7 +25,8 @@
   <String Id="ProgressLabel" Value="正在处理：" />
   <String Id="OverallProgressPackageText" Value="正在初始化…" />
   <String Id="ProgressCancelButton" Value="取消(&amp;C)" />
-  <String Id="ModifyHeader" Value="维护 VideoEnhancer" />
+  <String Id="ModifyHeader" Value="VideoEnhancer 已复制到 3FUI；后续更新请在插件中操作。" />
+  <String Id="ModifyPortableText" Value="这个安装程序只用于首次选择 3FUI 目录。需要重新安装时，请下载新版安装包；移除插件时请关闭 3FUI 后手动删除 Plugin 中的对应文件。" />
   <String Id="ModifyRepairButton" Value="修复(&amp;R)" />
   <String Id="ModifyUninstallButton" Value="卸载(&amp;U)" />
   <String Id="ModifyCancelButton" Value="取消(&amp;C)" />
@@ -43,6 +44,7 @@
   <String Id="SuccessRestartButton" Value="重新启动(&amp;R)" />
   <String Id="SuccessCloseButton" Value="关闭(&amp;C)" />
   <String Id="FailureHeader" Value="操作失败" />
+  <String Id="FailureInstallGuidance" Value="请点击“选择目录”，选择包含 FFmpegFreeUI.exe 的 3FUI 根目录，并确认插件目录可写。若文件正在使用，请关闭 3FUI 后重试。" />
   <String Id="FailureCacheHeader" Value="缓存失败" />
   <String Id="FailureInstallHeader" Value="安装失败" />
   <String Id="FailureLayoutHeader" Value="创建本地副本失败" />

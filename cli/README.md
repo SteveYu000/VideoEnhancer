@@ -6,11 +6,11 @@
 
 ## 配置
 
-`CoreRoot` 永远固定为 `videoenhancer.exe` 所在目录，不读取或写入路径 INI。WiX 安装程序会把任意版本化发行 EXE 中的运行文件安装为
+`CoreRoot` 永远固定为 `videoenhancer.exe` 所在目录，不读取或写入路径 INI。便携安装器会把运行文件复制为
 `3FUI\Plugin\videoenhancer\videoenhancer.exe`，并在同级建立 `models`、`python`、`bin`
 三个便携核心目录；插件 DLL 单独保留在 `3FUI\Plugin` 根目录，3FUI 加载后会自动识别子目录 EXE。
 配置、缓存、临时文件和更新文件分别保存在同级的 `videoenhancer.plugin.json`、`cache`、`.work` 和 `.update` 中。
-普通运行不会向 AppData 写文件。安装时只会读取并清理旧版本的已知 AppData 残留；项目自有安装位置键和执行卸载用户的 `VideoEnhancer.Upscale` 图片右键菜单会在 MSI 卸载时删除。
+普通运行不会向 AppData 写文件。插件首次启动时可迁移当前用户的旧版 AppData 配置；安装链不创建项目专用的安装位置键，WiX Burn 窗口仍会留下隐藏的缓存记录。
 
 ## 构建（单文件）
 
@@ -32,11 +32,9 @@ dotnet publish .\VideoEnhancer.slnx -c Release `
 ```
 
 `HostBin` 可改用环境变量 `VIDEOENHANCER_HOST_BIN`；相邻 FFmpegFreeUI
-Release/Debug 输出也会被自动发现。解决方案发布会构建插件和 CLI、通过 NuGet 还原 WiX 6，
-先生成 MSI 再封装 Burn；完成后在仓库根目录的 `Artifacts` 中生成
-`VideoEnhancerInstaller.exe`，以及包含 DLL、EXE 和安装说明的
-`VideoEnhancer.zip`。`installer\Package` 和 `installer\Bundle` 由发布目标在载荷暂存完成后调用，
-因此不作为普通解决方案项目直接并行构建。作为 3FUI 插件使用时，ZIP 内的程序放在
+Release/Debug 输出也会被自动发现。解决方案发布会构建插件和 CLI，生成自解包便携载荷，再封装进 PR #7 的 WiX 安装窗口；在仓库根目录的 `Artifacts` 中生成
+`videoenhancer.exe`、`VideoEnhancerInstaller.exe` 和包含 DLL、EXE 与安装说明的
+`VideoEnhancer.zip`。作为 3FUI 插件使用时，ZIP 内的程序放在
 `Plugin\videoenhancer` 中运行，并与 `bin\`、`python\`、`models\` 同级。
 
 ## 用法
@@ -130,7 +128,7 @@ PowerShell 示例：
 
 插件以 GitHub Release 为唯一版本标准：优先读取 `maxzrb/VideoEnhancer` 的 `releases/latest` 及其 `stable.json` 清单资产；GitHub 不可达时读取 ModelScope `stable.json` 兜底。可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖检查仓库，`VIDEOENHANCER_UPDATE_GITHUB_TOKEN` 供私有仓库或提高 API 限频使用。更新包下载首选 ModelScope 数据集 `AerithDream/VideoEnhancer-Releases`（可用 `VIDEOENHANCER_UPDATE_DATASET=owner/name` 切换），失败时回退 GitHub Release 资产；两源都校验清单中的大小与 SHA-256。发现更高 SemVer 后必须由用户确认。
 
-更新资产是版本化的 WiX Burn 安装器。下载和 SHA-256 校验成功后，插件以 `InstallFolder=<当前 3FUI 根目录>` 启动安装器并关闭 3FUI；用户在中文安装界面确认后，由内嵌 MSI 更新 EXE、DLL、独立组件，迁移旧平铺目录并清理旧配置残留。首次手动安装必须自行选择 3FUI 根目录，后续安装会从项目注册表键回填上次位置，该键随卸载删除。安装结束后需要手动重新启动 3FUI。旧 `--apply-update`、`--update-package` 等私有自更新参数已经删除。
+更新资产是内嵌插件 DLL 的版本化运行 EXE。下载并校验后，用户在插件界面确认，临时运行的更新 EXE 等待 3FUI 退出，再事务替换 EXE/DLL 并重新启动 3FUI。独立的 `aria2-next`、模型和用户配置不参与本体更新。首次安装器只帮助选择包含 `FFmpegFreeUI.exe` 的目录；更新不依赖它。
 
 ## 目录结构
 

@@ -8,6 +8,7 @@ Imports System.Net.Http
 Imports System.Net.Http.Headers
 Imports System.Reflection
 Imports System.Security.Cryptography
+Imports System.Text
 Imports System.Text.Json
 Imports System.Text.Json.Serialization
 Imports System.Threading.Tasks
@@ -161,7 +162,7 @@ Namespace videoenhancer
             Dim remoteVersion As Version = Nothing
             If Not Version.TryParse(CurrentVersion, installedVersion) OrElse
                 Not Version.TryParse(manifest.Version, remoteVersion) Then Return False
-            ' 清单哈希描述的是 Burn 安装器，不再与已安装的运行 EXE 比较。
+            ' 更新包是内嵌插件 DLL 的运行 EXE，版本号决定是否下载。
             Return remoteVersion > installedVersion
         End Function
 
@@ -213,32 +214,57 @@ Namespace videoenhancer
             End Try
         End Function
 
-        Public Shared Sub StartUpdate(packagePath As String, pluginRoot As String)
+        Public Shared Sub StartUpdate(packagePath As String,
+                                      pluginRoot As String, waitPid As Integer,
+                                      restartExe As String)
             Dim canonicalPluginRoot = Path.GetFullPath(PluginConfig.PluginRoot)
             If Not Path.GetFullPath(pluginRoot).Equals(canonicalPluginRoot, StringComparison.OrdinalIgnoreCase) Then
                 Throw New InvalidOperationException("更新目标必须是当前插件 DLL 所在目录")
             End If
-            Dim installer = Path.GetFullPath(packagePath)
-            If Not File.Exists(installer) Then Throw New FileNotFoundException("更新安装器不存在", installer)
-            If Not Path.GetExtension(installer).Equals(".exe", StringComparison.OrdinalIgnoreCase) Then
-                Throw New InvalidDataException("更新包必须是 Burn EXE 安装器")
-            End If
-            Dim hostRoot = Directory.GetParent(canonicalPluginRoot)?.FullName
-            If String.IsNullOrWhiteSpace(hostRoot) Then
-                Throw New InvalidOperationException("无法从 Plugin 目录确定 3FUI 根目录")
-            End If
-
+            Dim updaterDirectory = Path.Combine(
+                PortableRuntime.UpdateRoot, "updater", Guid.NewGuid().ToString("N"))
+            Directory.CreateDirectory(updaterDirectory)
+            Dim updaterExe = Path.Combine(updaterDirectory, "videoenhancer-updater.exe")
+            ' 将已校验的运行 EXE 复制为临时更新器，等待宿主退出后替换本体和插件 DLL。
+            File.Copy(packagePath, updaterExe, True)
+            Dim resultPath = GetResultPath()
+            Try
+                If File.Exists(resultPath) Then File.Delete(resultPath)
+            Catch
+            End Try
             Dim startInfo As New ProcessStartInfo With {
-                .FileName = installer,
-                .UseShellExecute = True,
-                .WorkingDirectory = Path.GetDirectoryName(installer)
+                .FileName = updaterExe,
+                .UseShellExecute = False,
+                .CreateNoWindow = True,
+                .WorkingDirectory = updaterDirectory
             }
-            ' Burn 允许通过 Variable=Value 覆盖变量；ArgumentList 会正确处理含空格的目录。
-            startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)
+            PortableRuntime.ConfigureProcess(startInfo)
+            startInfo.ArgumentList.Add("--apply-update")
+            startInfo.ArgumentList.Add("--update-package")
+            startInfo.ArgumentList.Add(packagePath)
+            startInfo.ArgumentList.Add("--update-target")
+            startInfo.ArgumentList.Add(pluginRoot)
+            startInfo.ArgumentList.Add("--wait-pid")
+            startInfo.ArgumentList.Add(waitPid.ToString(Globalization.CultureInfo.InvariantCulture))
+            startInfo.ArgumentList.Add("--restart-exe")
+            startInfo.ArgumentList.Add(restartExe)
             If Process.Start(startInfo) Is Nothing Then
-                Throw New InvalidOperationException("无法启动 VideoEnhancer 安装器")
+                Throw New InvalidOperationException("无法启动 VideoEnhancer 更新器")
             End If
         End Sub
+
+        Public Shared Function ConsumeUpdateResult() As String
+            Dim resultPath = GetResultPath()
+            Try
+                If Not File.Exists(resultPath) Then Return ""
+                Dim value = File.ReadAllText(resultPath, Encoding.UTF8).Trim()
+                File.Delete(resultPath)
+                CleanupCompletedUpdaterCopies()
+                Return value
+            Catch
+                Return ""
+            End Try
+        End Function
 
         Private Shared Function ParseManifest(json As String) As UpdateManifest
             Dim manifest = JsonSerializer.Deserialize(Of UpdateManifest)(json, JsonOptions)
@@ -362,6 +388,28 @@ Namespace videoenhancer
                 normalized.Split("/"c).Any(Function(part) part.Length = 0 OrElse part = "." OrElse part = "..") Then
                 Throw New InvalidDataException("更新文件路径不安全：" & relativePath)
             End If
+        End Sub
+
+        Private Shared Function GetResultPath() As String
+            Return Path.Combine(PortableRuntime.UpdateRoot, "update-result.txt")
+        End Function
+
+        Private Shared Sub CleanupCompletedUpdaterCopies()
+            Try
+                Dim updaterRoot = Path.Combine(PortableRuntime.UpdateRoot, "updater")
+                If Directory.Exists(updaterRoot) Then
+                    For Each childDirectory As String In Directory.EnumerateDirectories(updaterRoot)
+                        Try
+                            Directory.Delete(childDirectory, True)
+                        Catch
+                        End Try
+                    Next
+                    If Not Directory.EnumerateFileSystemEntries(updaterRoot).Any() Then
+                        Directory.Delete(updaterRoot)
+                    End If
+                End If
+            Catch
+            End Try
         End Sub
 
     End Class

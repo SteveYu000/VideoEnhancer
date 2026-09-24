@@ -929,6 +929,12 @@ internal static class Program
 
     private static int Run(string[] args)
     {
+        if (args.Length > 0 && args[0].Equals("--create-installer-bundle", StringComparison.Ordinal))
+            return InstallerManager.Create(args);
+        if (args.Length > 0 && args[0].Equals("--install-folder", StringComparison.Ordinal))
+            return InstallerManager.InstallCommand(args);
+        if (args.Length > 0 && args[0].Equals("--apply-update", StringComparison.Ordinal))
+            return SelfUpdateManager.Apply(args);
         if (args.Length > 0 && args[0].Equals("--create-7z", StringComparison.Ordinal))
             return CreateSevenZip(args);
         if (args.Length == 1 && args[0].Equals("--third-party-notices", StringComparison.Ordinal))
@@ -938,6 +944,7 @@ internal static class Program
         }
         if (args.Length == 0)
         {
+            if (InstallerManager.IsInstaller()) return InstallerManager.RunInteractive();
             PrintHelp(Console.Out);
             return 0;
         }
@@ -957,7 +964,7 @@ internal static class Program
             return 0;
         }
 
-        // 由 MSI 在安装结束前调用，只迁移/删除旧版已知残留，不参与普通处理流程。
+        // 便携安装器在首次复制后调用，仅处理旧版已知残留。
         if (o.CleanupLegacyResidue)
         {
             return CleanupLegacyResidue(o);
@@ -1735,7 +1742,7 @@ internal static class Program
         return (arg, null);
     }
 
-    /// <summary>由 WiX MSI 调用：迁移旧配置并清除可明确识别的旧版残留。</summary>
+    /// <summary>由便携安装器调用：迁移旧布局并清除可明确识别的旧版残留。</summary>
     private static int CleanupLegacyResidue(Options o)
     {
         if (string.IsNullOrWhiteSpace(o.PluginRoot))
@@ -1768,7 +1775,7 @@ internal static class Program
         return 0;
     }
 
-    /// <summary>由 MSI 卸载调用：移除当前用户由插件创建的图片右键菜单。</summary>
+    /// <summary>旧版兼容命令：移除当前用户由插件创建的图片右键菜单。</summary>
     private static int CleanupRegistryResidue()
     {
         const string shellRoot = @"Software\Classes\SystemFileAssociations\image\shell";

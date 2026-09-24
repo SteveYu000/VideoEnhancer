@@ -1,145 +1,76 @@
-param(
-    [string]$Version = '',
-    [string]$Package = ''
-)
+param([string]$Version = '', [string]$Package = '')
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-
-function Get-ProjectVersion([string]$projectPath) {
-    $document = [System.Xml.XmlDocument]::new()
-    $document.Load($projectPath)
-    $nodes = @($document.SelectNodes('/Project/PropertyGroup/Version'))
-    if ($nodes.Count -ne 1 -or [string]::IsNullOrWhiteSpace($nodes[0].InnerText)) {
-        throw "项目必须声明且只能声明一个 Version：$projectPath"
-    }
-    return $nodes[0].InnerText.Trim()
+if (-not $Package) { $Package = Join-Path $root 'Artifacts\videoenhancer.exe' }
+$Package = [IO.Path]::GetFullPath($Package)
+if (-not (Test-Path -LiteralPath $Package -PathType Leaf)) { throw "缺少运行时更新包：$Package" }
+$source = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'VideoEnhancerPlugin\PluginUpdater.vb')
+foreach ($part in @('SHA256.HashData(stream)', '"--apply-update"', '"--wait-pid"', 'ConsumeUpdateResult')) {
+    if (-not $source.Contains($part)) { throw "插件更新协议缺少：$part" }
 }
+if ($source.Contains('VideoEnhancerInstaller.exe')) { throw '更新器仍依赖首次安装器' }
 
-function Assert-Contains([string]$source, [string[]]$needles, [string]$description) {
-    foreach ($needle in $needles) {
-        if (-not $source.Contains($needle, [System.StringComparison]::Ordinal)) {
-            throw "$description 缺少契约：$needle"
-        }
-    }
-}
-
-function Assert-NotContains([string]$source, [string[]]$needles, [string]$description) {
-    foreach ($needle in $needles) {
-        if ($source.Contains($needle, [System.StringComparison]::Ordinal)) {
-            throw "$description 仍包含已废弃协议：$needle"
-        }
-    }
-}
-
-function Invoke-BurnLayout([string]$installer, [string]$layoutRoot, [string]$hostRoot) {
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName = $installer
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-    foreach ($argument in @(
-            '-quiet', '-norestart', '-layout', $layoutRoot,
-            "InstallFolder=$hostRoot", 'SKIPLEGACYCLEANUP=1')) {
-        $startInfo.ArgumentList.Add($argument)
-    }
-    $process = [System.Diagnostics.Process]::Start($startInfo)
-    if ($null -eq $process) { throw "无法启动更新安装器：$installer" }
-    try {
-        $stdout = $process.StandardOutput.ReadToEndAsync()
-        $stderr = $process.StandardError.ReadToEndAsync()
-        $process.WaitForExit()
-        $output = (($stdout.GetAwaiter().GetResult(), $stderr.GetAwaiter().GetResult()) |
-            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }) -join [Environment]::NewLine
-        if (-not [string]::IsNullOrWhiteSpace($output)) { Write-Host $output }
-        return $process.ExitCode
-    } finally {
-        $process.Dispose()
-    }
-}
-
-$pluginVersion = Get-ProjectVersion (Join-Path $root 'VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj')
-$cliVersion = Get-ProjectVersion (Join-Path $root 'cli\VideoEnhancer.csproj')
-if ([string]::IsNullOrWhiteSpace($Version)) { $Version = $pluginVersion }
-if ($pluginVersion -ne $Version -or $cliVersion -ne $Version) {
-    throw "项目版本不一致：插件=$pluginVersion，CLI=$cliVersion，测试版本=$Version"
-}
-if ([string]::IsNullOrWhiteSpace($Package)) {
-    $Package = Join-Path $root 'Artifacts\VideoEnhancerInstaller.exe'
-}
-$Package = [System.IO.Path]::GetFullPath($Package)
-if (-not (Test-Path -LiteralPath $Package -PathType Leaf)) {
-    throw "缺少待测更新安装器：$Package"
-}
-
-$updaterPath = Join-Path $root 'VideoEnhancerPlugin\PluginUpdater.vb'
-$programPath = Join-Path $root 'cli\Program.cs'
-$bundlePath = Join-Path $root 'installer\Bundle\Bundle.wxs'
-$msiPath = Join-Path $root 'installer\Package\Package.wxs'
-$updater = Get-Content -Raw -Encoding UTF8 $updaterPath
-$program = Get-Content -Raw -Encoding UTF8 $programPath
-$bundle = Get-Content -Raw -Encoding UTF8 $bundlePath
-$msi = Get-Content -Raw -Encoding UTF8 $msiPath
-
-Assert-Contains $updater @(
-    'Return remoteVersion > installedVersion',
-    '.UseShellExecute = True',
-    'startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)',
-    'Path.GetExtension(installer).Equals(".exe"',
-    'SHA256.HashData(stream)') '插件更新器'
-Assert-NotContains $updater @(
-    '--apply-update',
-    '--update-package',
-    '--update-target',
-    '--wait-pid',
-    '--restart-exe',
-    'update-result.txt') '插件更新器'
-Assert-NotContains $program @(
-    '--create-installer-bundle',
-    '--apply-update',
-    '--update-package',
-    '--update-target',
-    '--wait-pid',
-    '--restart-exe') 'CLI'
-Assert-Contains $bundle @(
-    'Name="InstallFolder"',
-    'Persisted="yes"',
-    'bal:Overridable="yes"',
-    '<MsiProperty Name="THREEFUIROOT"',
-    'Value="[InstallFolder]"') 'Burn Bundle'
-Assert-Contains $msi @(
-    'Name="InstallRoot"',
-    'Value="[THREEFUIROOT]"',
-    '<RemoveRegistryKey Id="RemoveVideoEnhancerRegistryKey"',
-    '--cleanup-legacy-residue --plugin-root',
-    'ACTION &lt;&gt; &quot;ADMIN&quot;') 'MSI'
-
-$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('VideoEnhancerBurnUpdateTest-' + [guid]::NewGuid().ToString('N'))
-$resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
-$resolvedTest = [System.IO.Path]::GetFullPath($testRoot)
-if (-not $resolvedTest.StartsWith($resolvedTemp, [System.StringComparison]::OrdinalIgnoreCase)) {
-    throw "测试目录不在系统临时目录：$resolvedTest"
-}
-New-Item -ItemType Directory -Force -Path $resolvedTest | Out-Null
+$tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
+$testRoot = [IO.Path]::GetFullPath((Join-Path $tempBase ('VideoEnhancerSelfUpdateTest-' + [guid]::NewGuid().ToString('N'))))
+if (-not $testRoot.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) { throw '测试目录超出临时目录' }
+New-Item -ItemType Directory -Path $testRoot | Out-Null
 try {
-    $layoutRoot = Join-Path $resolvedTest 'layout'
-    $selectedHost = Join-Path $resolvedTest 'FFmpegFreeUI with spaces'
-    New-Item -ItemType Directory -Force -Path $layoutRoot, $selectedHost | Out-Null
-    $exitCode = Invoke-BurnLayout $Package $layoutRoot $selectedHost
-    if ($exitCode -ne 0) { throw "带 InstallFolder 的 Burn layout 失败，退出码：$exitCode" }
-    $laidOutPackage = Join-Path $layoutRoot ([System.IO.Path]::GetFileName($Package))
-    if (-not (Test-Path -LiteralPath $laidOutPackage -PathType Leaf)) {
-        throw "Burn 更新安装器没有生成布局输出：$laidOutPackage"
+    $hostRoot = Join-Path $testRoot 'FFmpegFreeUI with spaces'
+    $pluginRoot = Join-Path $hostRoot 'Plugin'
+    $coreRoot = Join-Path $pluginRoot 'videoenhancer'
+    New-Item -ItemType Directory -Force -Path $coreRoot | Out-Null
+    [IO.File]::WriteAllText((Join-Path $hostRoot 'FFmpegFreeUI.exe'), 'test host', [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $coreRoot 'aria2-next-keep.txt'), 'unchanged', [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $coreRoot 'videoenhancer.exe'), 'old exe', [Text.UTF8Encoding]::new($false))
+    [IO.File]::WriteAllText((Join-Path $pluginRoot 'videoenhancer.3fui.dll'), 'old dll', [Text.UTF8Encoding]::new($false))
+    $updater = Join-Path $testRoot 'videoenhancer-updater.exe'
+    Copy-Item -LiteralPath $Package -Destination $updater
+    $start = [Diagnostics.ProcessStartInfo]::new($updater)
+    $start.UseShellExecute = $false
+    $start.CreateNoWindow = $true
+    $start.RedirectStandardOutput = $true
+    $start.RedirectStandardError = $true
+    foreach ($argument in @('--apply-update', '--update-package', $Package, '--update-target', $pluginRoot, '--wait-pid', '0', '--restart-exe', '')) {
+        $start.ArgumentList.Add($argument)
     }
-    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $laidOutPackage).Hash -ne
-        (Get-FileHash -Algorithm SHA256 -LiteralPath $Package).Hash) {
-        throw 'Burn 更新安装器的布局输出哈希不一致'
+    $process = [Diagnostics.Process]::Start($start)
+    $stdout = $process.StandardOutput.ReadToEnd()
+    $stderr = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) { throw "自更新失败：$($process.ExitCode)；$stdout $stderr" }
+    if ((Get-FileHash -LiteralPath (Join-Path $coreRoot 'videoenhancer.exe')).Hash -ne (Get-FileHash -LiteralPath $Package).Hash) {
+        throw '更新后运行 EXE 哈希不一致'
     }
-
-    Write-Host 'UPDATER_TESTS_PASS|version-only-check|sha256-download|burn-launch|install-folder-forwarding|legacy-protocol-removed'
+    if ((Get-FileHash -LiteralPath (Join-Path $pluginRoot 'videoenhancer.3fui.dll')).Hash -ne
+        (Get-FileHash -LiteralPath (Join-Path $root 'VideoEnhancerPlugin\obj\plugin-artifact\videoenhancer.3fui.dll')).Hash) {
+        throw '更新后插件 DLL 哈希不一致'
+    }
+    if ((Get-Content -Raw -Encoding UTF8 (Join-Path $coreRoot 'aria2-next-keep.txt')) -ne 'unchanged') {
+        throw '更新误改了独立组件'
+    }
+    if ((Get-Content -Raw -Encoding UTF8 (Join-Path $coreRoot '.update\update-result.txt')) -ne "OK|$Version") {
+        throw '更新结果记录不正确'
+    }
+    $exeHash = (Get-FileHash -LiteralPath (Join-Path $coreRoot 'videoenhancer.exe')).Hash
+    $dllHash = (Get-FileHash -LiteralPath (Join-Path $pluginRoot 'videoenhancer.3fui.dll')).Hash
+    $oldBin = Join-Path $pluginRoot 'bin'
+    New-Item -ItemType Directory -Path $oldBin | Out-Null
+    [IO.File]::WriteAllText((Join-Path $oldBin 'keep.txt'), 'old layout', [Text.UTF8Encoding]::new($false))
+    $env:VIDEOENHANCER_TEST_LAYOUT_FAIL_AFTER_MOVE = '1'
+    try {
+        $failed = [Diagnostics.Process]::Start($start)
+        $failed.StandardOutput.ReadToEnd() | Out-Null
+        $failed.StandardError.ReadToEnd() | Out-Null
+        $failed.WaitForExit()
+        if ($failed.ExitCode -eq 0) { throw '注入迁移故障后更新仍报告成功' }
+    } finally { Remove-Item Env:VIDEOENHANCER_TEST_LAYOUT_FAIL_AFTER_MOVE -ErrorAction SilentlyContinue }
+    if ((Get-FileHash -LiteralPath (Join-Path $coreRoot 'videoenhancer.exe')).Hash -ne $exeHash -or
+        (Get-FileHash -LiteralPath (Join-Path $pluginRoot 'videoenhancer.3fui.dll')).Hash -ne $dllHash) {
+        throw '更新失败后未恢复 EXE/DLL'
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $oldBin 'keep.txt'))) { throw '更新失败后旧目录未恢复' }
+    Write-Host 'UPDATER_TESTS_PASS|self-update|exe-dll-hashes|independent-component-preserved|rollback'
 } finally {
-    if (Test-Path -LiteralPath $resolvedTest) {
-        Remove-Item -LiteralPath $resolvedTest -Recurse -Force
-    }
+    if (Test-Path -LiteralPath $testRoot) { Remove-Item -LiteralPath $testRoot -Recurse -Force }
 }

@@ -104,57 +104,24 @@ class RtxHdrAndQueueCompatibilityTests(unittest.TestCase):
         )
         self.assertIn("更新包优先走 ModelScope", download)
 
-    def test_update_launches_wix_burn_and_forwards_portable_install_root(self):
+    def test_update_uses_runtime_and_portable_installer_requires_host(self):
         updater = (PLUGIN / "PluginUpdater.vb").read_text(encoding="utf-8-sig")
-        bundle = (ROOT / "installer" / "Bundle" / "Bundle.wxs").read_text(
+        installer = (CLI / "InstallerManager.cs").read_text(
             encoding="utf-8-sig"
         )
-        package = (ROOT / "installer" / "Package" / "Package.wxs").read_text(
-            encoding="utf-8-sig"
-        )
-        theme = (ROOT / "installer" / "Bundle" / "VideoEnhancerTheme.xml").read_text(
-            encoding="utf-8-sig"
-        )
-        localization = (
-            ROOT / "installer" / "Bundle" / "VideoEnhancerTheme.zh-CN.wxl"
-        ).read_text(encoding="utf-8-sig")
         program = (CLI / "Program.cs").read_text(encoding="utf-8-sig")
         self.assertIn("Return remoteVersion > installedVersion", updater)
-        self.assertIn(".UseShellExecute = True", updater)
-        self.assertIn(
-            'startInfo.ArgumentList.Add("InstallFolder=" & hostRoot)', updater
-        )
-        self.assertIn('Name="InstallFolder"', bundle)
-        self.assertNotIn('[ProgramFiles64Folder]FFmpegFreeUI', bundle)
-        self.assertIn('Variable="InstallFolder"', bundle)
-        self.assertIn('Value="InstallRoot"', bundle)
-        self.assertIn('Value=""', bundle)
-        self.assertIn('Condition="NOT InstallFolder"', bundle)
+        self.assertIn('startInfo.ArgumentList.Add("--apply-update")', updater)
+        self.assertIn('SelfUpdateManager.Apply(args)', program)
+        self.assertNotIn("VideoEnhancerInstaller.exe", updater)
+        self.assertIn('Path.Combine(root, "FFmpegFreeUI.exe")', installer)
+        bundle = (ROOT / "installer/Bundle/Bundle.wxs").read_text(encoding="utf-8")
+        theme = (ROOT / "installer/Bundle/VideoEnhancerTheme.xml").read_text(encoding="utf-8")
+        self.assertIn('<ExePackage Id="PortablePlugin"', bundle)
+        self.assertNotIn("--show-errors", bundle)
+        self.assertNotIn("<MsiPackage", bundle)
         self.assertIn('VisibleCondition="InstallFolder"', theme)
-        self.assertIn(
-            '<BrowseDirectoryAction VariableName="InstallFolder"', theme
-        )
-        self.assertIn('Culture="zh-CN" Language="2052"', localization)
-        self.assertIn("首次安装必须先选择包含 FFmpegFreeUI.exe", localization)
-        self.assertIn('Persisted="yes"', bundle)
-        self.assertIn('bal:Overridable="yes"', bundle)
-        self.assertIn('<MsiProperty Name="THREEFUIROOT"', bundle)
-        self.assertIn('<RemoveRegistryKey Id="RemoveVideoEnhancerRegistryKey"', package)
-        self.assertIn('Id="CleanupCurrentUserRegistryResidue"', package)
-        self.assertIn('ExeCommand="--cleanup-registry-residue"', package)
-        self.assertIn('case "--cleanup-registry-residue"', program)
-        self.assertIn('DeleteSubKeyTree("VideoEnhancer.Upscale"', program)
-        self.assertIn('ExeCommand="[CustomActionData]"', package)
-        for obsolete in (
-            "--create-installer-bundle",
-            "--apply-update",
-            "--update-package",
-            "--update-target",
-            "--wait-pid",
-            "--restart-exe",
-        ):
-            self.assertNotIn(obsolete, program)
-            self.assertNotIn(obsolete, updater)
+        self.assertIn('Name="InstallUnavailableButton"', theme)
 
     def test_stop_graceful_then_force_contract(self):
         stop = (PLUGIN / "StopControl.vb").read_text(encoding="utf-8-sig")

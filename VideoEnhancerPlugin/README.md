@@ -6,7 +6,7 @@
 
 ## 安装
 
-1. 双击 GitHub Release 中的版本化 WiX Burn 安装器。首次安装没有固定默认目录，点击“选择目录”并选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录后才能安装；后续安装会自动回填上次选择的位置。内嵌 MSI 会生成：
+1. 双击 GitHub Release 中的版本化安装器，在 PR #7 窗口点击“选择目录”，选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录。未选择时安装按钮不可用，选错目录时复制载荷会拒绝安装。安装器不使用 MSI，也不在 Windows“已安装的应用”中显示；WiX Burn 仍会留下隐藏的缓存记录。安装后可以删除安装器。目录结构为：
    ```
    <主程序目录>\Plugin\videoenhancer.3fui.dll
    <主程序目录>\Plugin\videoenhancer\videoenhancer.exe
@@ -167,7 +167,7 @@
 
 模型下载页会显示 `Plugin/videoenhancer.exe` 资源，但“下载全部”会排除当前插件 EXE；正式升级使用底部“检查更新”入口。插件本体不混入模型解压目录。
 
-Release 分发版本化 WiX Burn 安装器。插件下载并校验安装器后，把当前 3FUI 根目录作为 `InstallFolder` 启动安装器并退出 3FUI；用户确认安装后，内嵌 MSI 更新运行 EXE、插件 DLL 和独立组件。旧 `Plugin` 平铺目录会安全合并到 `Plugin\videoenhancer`，同名不同内容保留原文件；旧 AppData/INI/临时更新器残留由安装阶段清理。安装完成后需要手动重新启动 3FUI。下载首选 ModelScope 镜像，失败回退 GitHub Release 资产（`VIDEOENHANCER_UPDATE_DATASET=owner/name` 可覆盖）；版本检查首选 GitHub、失败时使用 ModelScope，检查仓库可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖；配置中的 `AutoCheckUpdates` 可关闭启动后台检查。
+Release 分别提供运行时更新 EXE 和首次安装器。插件下载并校验更新 EXE 后，等待 3FUI 退出，由 `videoenhancer.exe` 自行替换运行 EXE 与插件 DLL、失败时回滚并重新启动 3FUI；安装器可以删除，不影响更新。`aria2-next`、模型和配置不会随本体更新覆盖。下载首选 ModelScope 镜像，失败回退 GitHub Release 资产（`VIDEOENHANCER_UPDATE_DATASET=owner/name` 可覆盖）；版本检查首选 GitHub、失败时使用 ModelScope，检查仓库可用 `VIDEOENHANCER_UPDATE_GITHUB_REPO=owner/name` 覆盖；配置中的 `AutoCheckUpdates` 可关闭启动后台检查。
 
 ## 构建
 

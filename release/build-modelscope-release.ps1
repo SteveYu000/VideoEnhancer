@@ -164,11 +164,16 @@ if ($actualAria2NextSourceHash -ne $aria2NextSourceSha256) {
     throw "aria2-next 对应源码校验失败：期望 $aria2NextSourceSha256，实际 $actualAria2NextSourceHash"
 }
 
-$exeSource = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
+$exeSource = Join-Path $artifactsRoot 'videoenhancer.exe'
 if (-not (Test-Path -LiteralPath $exeSource)) { throw "缺少发布文件：$exeSource" }
 $packageName = "VideoEnhancer-$Version-win-x64.exe"
 $packagePath = Join-Path $versionRoot $packageName
 Copy-Item -LiteralPath $exeSource -Destination $packagePath -Force
+$installerSource = Join-Path $artifactsRoot 'VideoEnhancerInstaller.exe'
+if (-not (Test-Path -LiteralPath $installerSource -PathType Leaf)) { throw "缺少首次安装程序：$installerSource" }
+$installerName = "VideoEnhancerInstaller-$Version-win-x64.exe"
+$installerPath = Join-Path $versionRoot $installerName
+Copy-Item -LiteralPath $installerSource -Destination $installerPath -Force
 $manualSource = Join-Path $artifactsRoot 'VideoEnhancer.zip'
 if (-not (Test-Path -LiteralPath $manualSource -PathType Leaf)) {
     throw "缺少手动安装包：$manualSource"
@@ -199,12 +204,13 @@ $releaseNotesPath = Join-Path $distRoot 'release-notes.txt'
 [System.IO.File]::WriteAllLines($releaseNotesPath, $noteLines, $utf8NoBom)
 
 Write-Host "OK: $packagePath"
+Write-Host "OK: $installerPath"
 Write-Host "OK: $manualPath"
 Write-Host "OK: $aria2NextSourcePath"
 Write-Host "OK: $stablePath"
 
-# WiX 安装门禁：Burn 可布局、MSI 可展开、载荷哈希一致，并验证旧插件迁移与更新启动契约。
-& (Join-Path $PSScriptRoot 'test-installer.ps1') -Installer $packagePath
+# 首次安装程序与运行时更新包分别验证。
+& (Join-Path $PSScriptRoot 'test-installer.ps1') -Installer $installerPath
 & (Join-Path $PSScriptRoot 'test-updater.ps1') -Version $Version -Package $packagePath
 
 # 原生命令在 EAP=Stop 下写 stderr 会被当成终止错误，发布前临时放宽。
@@ -270,7 +276,7 @@ if ($PublishGithub) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         throw '未找到 gh CLI；请安装 GitHub CLI 并 gh auth login 后重试'
     }
-    $code = Invoke-Native { gh release create "v$Version" $packagePath $manualPath $aria2NextSourcePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
+    $code = Invoke-Native { gh release create "v$Version" $packagePath $installerPath $manualPath $aria2NextSourcePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
     if ($code -ne 0) { throw "gh release create v$Version 失败（$GithubRepo）" }
     Write-Host "OK: GitHub Release v$Version 已创建（$GithubRepo）"
 }
@@ -290,7 +296,7 @@ if ($PublishModelScope) {
 if (-not $PublishGithub -and -not $PublishModelScope) {
     Write-Host "ModelScope 上传目录：$distRoot"
     Write-Host '手动发布命令：'
-    Write-Host "  gh release create v$Version `"$packagePath`" `"$manualPath`" `"$aria2NextSourcePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
+    Write-Host "  gh release create v$Version `"$packagePath`" `"$installerPath`" `"$manualPath`" `"$aria2NextSourcePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
     Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$distRoot`" --repo_type dataset"
     Write-Host "  modelscope upload $ModelScopeModelsDataset `"$packagePath`" Plugin/videoenhancer.exe --repo_type dataset --no-cache"
 }

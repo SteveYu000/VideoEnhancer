@@ -3,7 +3,7 @@
 VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件和命令行程序使用。它负责连接 FFmpeg、RVE 后端、推理模型与任务队列，提供视频超分辨率、运动补帧、RTX VSR / RTX Video HDR、图片推理和批处理能力。
 原作者：[user-wing](https://github.com/user-Wing/VideoEnhancer)
 
-当前稳定版本及发行日期以 [GitHub Releases](https://github.com/SteveYu000/VideoEnhancer/releases) 为准。
+当前稳定版本及发行日期以 [GitHub Releases](https://github.com/maxzrb/VideoEnhancer/releases) 为准。
 
 ## 功能概览
 
@@ -19,7 +19,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - TensorRT Engine 按 GPU、运行时版本、输入尺寸、倍率、分块、精度和转换配置隔离缓存，并在失效时重建。
 - 模型列表支持从 ModelScope 镜像读取、下载、校验和解压。
 - RTX 任务支持暂停与恢复，输出容器按输出扩展名直连（mkv/mp4/webm 等全部 FFmpeg 封装器），3FUI 编码参数（预设、调优、码率、CQ）直接传入 RTX 编码器。
-- 插件更新检查使用 GitHub Release 首选、ModelScope 兜底；更新包下载使用 ModelScope 首选、GitHub 兜底，均带 SHA-256 校验，并交给 WiX Burn/MSI 执行升级和回滚。
+- 插件更新检查使用 GitHub Release 首选、ModelScope 兜底；更新包下载使用 ModelScope 首选、GitHub 兜底，均带 SHA-256 校验，由 `videoenhancer.exe` 自行升级和回滚。
 
 ## 下载
 
@@ -27,16 +27,17 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 本体镜像：[VideoEnhancer-Releases](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases)
 - 模型镜像：[VideoEnhancer-Models](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Models)
 
-每个 Release 发布版本化安装器、手动安装 ZIP、更新清单以及与 GPL 下载组件精确对应的源码归档：
+每个 Release 分别发布运行时更新包、首次安装器、手动安装 ZIP、更新清单及第三方组件对应源码：
 
 ```text
 VideoEnhancer-<version>-win-x64.exe
+VideoEnhancerInstaller-<version>-win-x64.exe
 VideoEnhancer-<version>-manual-install.zip
 aria2-next-2.5.6-source.tar.gz
 stable.json
 ```
 
-版本化 EXE 是 WiX Burn 引导程序，内嵌标准 MSI；MSI 包含插件 DLL、纯运行版 `videoenhancer.exe`、独立的 `aria2-next`、第三方许可证和来源说明。模型、Python 运行环境、FFmpeg 和其他大型资源不包含在本体 Release 中，需要在模型下载页按需获取。`PotPlayer.7z` 不属于本项目分发内容。
+`VideoEnhancer-<version>-win-x64.exe` 是内嵌插件 DLL 的运行时更新包；`VideoEnhancerInstaller-<version>-win-x64.exe` 是首次安装器，内含插件 DLL、运行 EXE、独立的 `aria2-next` 及许可材料。模型、Python、FFmpeg 和其他大型资源需按需获取。
 
 ## 系统要求
 
@@ -53,8 +54,8 @@ stable.json
 ### 使用 3FUI 插件
 
 1. 安装或准备可运行的 3FUI。
-2. 从 GitHub Release 下载 `VideoEnhancer-<version>-win-x64.exe`，无需手动改名或移动。
-3. 双击版本化 EXE。首次安装先点击“选择目录”，选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录。MSI 会在写入文件前校验该 EXE；未选目录或选错目录会报错并停止，不会安装到 Program Files 的默认位置。安装器会创建 `Plugin\videoenhancer`，安装固定名称 `videoenhancer.exe` 和独立下载组件，并将插件 DLL 放在 `Plugin` 根目录。后续安装会从项目注册表键回填上次选择的位置，正常卸载会删除该记录。
+2. 从 GitHub Release 下载 `VideoEnhancerInstaller-<version>-win-x64.exe`。
+3. 双击安装器，在 PR #7 的安装窗口点击“选择目录”，选中包含 `FFmpegFreeUI.exe` 的 3FUI 根目录。窗口会显示目标 `Plugin` 目录；未选择目录时“安装”按钮不可用，选错目录也不会写入插件文件。安装完成后可以删除安装器，后续更新由插件自身负责。
 4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 
@@ -64,9 +65,9 @@ stable.json
 Plugin\videoenhancer\videoenhancer.plugin.json
 ```
 
-安装器发现旧版 `%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json` 时，会把仍可读取的设置迁移到上述便携位置，并丢弃已废弃的 `ExePath` 字段。安装阶段还会把旧版平铺在 `Plugin` 下的 `bin`、`models`、`python`、缓存和更新目录合并到 `Plugin\videoenhancer`：同名同内容只去掉旧副本，同名不同内容保留原文件并报告，避免覆盖用户数据。随后清理旧 INI、旧更新状态、旧内置工具和更新器副本；配置迁移失败时会保留原文件。
+插件首次启动时会尝试把旧版 `%LocalAppData%\FFmpegFreeUI\videoenhancer.plugin.json` 迁入便携配置；安装器只处理所选 3FUI 的 `Plugin` 目录，避免在管理员账户下误操作另一个用户的配置。已有模型和用户文件会保留。
 
-应用自身的全部文件与配置只写入 `Plugin` 或 `Plugin\videoenhancer`。安装器仅在 `HKLM\Software\VideoEnhancer` 记录安装位置；插件按用户明确操作创建的图片右键菜单位于当前用户注册表。正常卸载会删除项目自有 HKLM 键和执行卸载用户的 `VideoEnhancer.Upscale` 菜单树；Windows Installer/Burn 的产品注册和安装缓存由系统安装服务管理。若不希望注册 MSI 产品，可使用手动安装 ZIP。
+应用文件与配置保存在 `Plugin` 或 `Plugin\videoenhancer`。安装链不使用 MSI，不写项目专用的 HKLM 安装位置键，也不在 Windows“已安装的应用”中显示；WiX Burn 为运行 PR #7 窗口仍会留下隐藏的注册与缓存记录。用户如需移除插件，应先关闭 3FUI，再删除插件 DLL 和 `Plugin\videoenhancer` 目录；删除前请备份其中的模型与配置。旧版 MSI 安装记录需通过 Windows 正常卸载。
 
 ### 核心目录
 
@@ -171,9 +172,9 @@ AerithDream/VideoEnhancer-Models
 2. GitHub 检查失败时，从 ModelScope `AerithDream/VideoEnhancer-Releases` 读取 `stable.json`。
 3. 下载更新包时优先使用 ModelScope 镜像，失败后使用 GitHub Release 资产。
 4. 下载完成后校验 EXE 大小和 SHA-256。
-5. 插件把已校验的 WiX Burn 安装器以 `InstallFolder=<当前 3FUI 目录>` 启动，然后关闭 3FUI。
-6. 用户确认安装/UAC；内嵌 MSI 升级运行 EXE、插件 DLL 和独立组件，并安全迁移旧平铺目录、清理旧配置残留。安装失败由 Windows Installer 回滚。
-7. 安装完成后重新启动 3FUI。
+5. 用户确认后，插件复制已校验的运行 EXE 为临时更新器，关闭 3FUI。
+6. 更新器等待 3FUI 退出，替换运行 EXE 和插件 DLL；失败时按事务日志恢复旧文件。独立的 `aria2-next` 和模型不参与本体更新。
+7. 更新器重新启动 3FUI，插件显示更新结果。
 
 可配置环境变量：
 
@@ -181,7 +182,7 @@ AerithDream/VideoEnhancer-Models
 - `VIDEOENHANCER_UPDATE_GITHUB_TOKEN`
 - `VIDEOENHANCER_UPDATE_DATASET=owner/name`
 
-更新不会静默替换运行文件，需要用户在标准 WiX 安装界面确认，也不会自动重启 3FUI。手动 ZIP 不参与自动更新。
+更新必须由用户在插件界面确认；首次安装器和手动 ZIP 不参与自动更新。
 
 ## 故障排查
 
@@ -208,11 +209,11 @@ BasicVSR++ 不支持与补帧组合。切换到 TensorRT、CUDA、NCNN 或其他
 
 ### 自动更新失败
 
-确认安装器未被安全软件拦截，安装选项中的目录是 3FUI 根目录，并允许完成 UAC 提权。`videoenhancer.3fui.dll` 应位于 `Plugin`，`videoenhancer.exe` 应位于 `Plugin\videoenhancer`。版本检查会先尝试 GitHub，再回退 ModelScope；下载包会先尝试 ModelScope，再回退 GitHub；两源都失败时不会启动安装。
+确认 3FUI 已退出、当前用户可写 `Plugin` 目录，且 `videoenhancer.3fui.dll` 位于 `Plugin`、`videoenhancer.exe` 位于 `Plugin\videoenhancer`。如安装在受保护目录，需由用户使用有权限的账户运行 3FUI。更新失败结果保存在 `Plugin\videoenhancer\.update\update-result.txt`。
 
 ## 从源码构建
 
-要求安装 .NET 10 SDK。WiX 6 SDK 与 UI/Burn 扩展由项目通过 NuGet 还原，不要求另装 WiX 命令行工具。插件还需要 3FUI 构建目录中的
+要求安装 .NET 10 SDK。插件还需要 3FUI 构建目录中的
 `FFmpegFreeUI.dll` 和 LakeUI 5.1+（仅支持 5.x）。
 
 仓库根目录的 `VideoEnhancer.slnx` 包含插件与 CLI；CLI 对插件声明了构建依赖，
@@ -232,11 +233,12 @@ dotnet publish .\VideoEnhancer.slnx -c Release `
 
 `HostBin` 也可以通过环境变量 `VIDEOENHANCER_HOST_BIN` 设置。若仓库与
 `FFmpegFreeUI` 并列放置，项目会优先自动发现相邻的 Release、其次 Debug 输出。
-解决方案发布会先暂存一次手动安装布局，再由 `installer\Package` 构建 MSI、由 `installer\Bundle` 封装 Burn，最后在仓库根目录的 `Artifacts` 中生成：
+解决方案发布会暂存手动安装布局，生成便携复制载荷并封装进 PR #7 的 WiX 安装窗口，在仓库根目录的 `Artifacts` 中生成：
 
 ```text
 Artifacts\
   VideoEnhancerInstaller.exe
+  videoenhancer.exe
   VideoEnhancer.zip
 ```
 

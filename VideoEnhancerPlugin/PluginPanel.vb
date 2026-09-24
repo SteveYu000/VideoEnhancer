@@ -409,6 +409,12 @@ Namespace videoenhancer
         Private Sub OnPanelLoad(sender As Object, e As EventArgs)
             _uiReady = True
             RefreshUi()
+            Dim updateResult = PluginUpdater.ConsumeUpdateResult()
+            If updateResult.StartsWith("OK|", StringComparison.Ordinal) Then
+                ShowStatus("VideoEnhancer 已更新至 v" & updateResult.Substring(3), False)
+            ElseIf updateResult.StartsWith("ERROR|", StringComparison.Ordinal) Then
+                ShowStatus("上次更新失败：" & updateResult.Substring(6), True)
+            End If
             ' 状态提示定时清除（红色错误 5 秒后自动消失）
             AddHandler _statusClearTimer.Tick, AddressOf OnStatusClearTick
             AddHandler _tabs.SelectedIndexChanged, AddressOf OnTabChanged
@@ -465,7 +471,7 @@ Namespace videoenhancer
                     Environment.NewLine & "当前版本：" & PluginUpdater.CurrentVersion &
                     Environment.NewLine & "更新包：" & FormatDownloadSize(manifest.Package.Size)
                 message &= Environment.NewLine & Environment.NewLine &
-                    "下载完成并校验后会再次询问是否关闭 3FUI 并打开标准安装器。" & Environment.NewLine &
+                    "下载完成并校验后会再次询问是否关闭 3FUI 并由 VideoEnhancer 自行更新。" & Environment.NewLine &
                     "现在下载更新包吗？"
                 If Not ShowLakeConfirm(Me, message, "发现新版本", defaultYes:=True) Then Return
                 userAccepted = True
@@ -482,24 +488,25 @@ Namespace videoenhancer
                 ShowStatus("正在下载 VideoEnhancer v" & manifest.Version & "…", False)
                 Dim packagePath = Await PluginUpdater.DownloadPackageAsync(manifest,
                     Sub(percent) ShowStatus("正在下载更新：" & percent & "%", False))
-                ShowStatus("更新包已下载并校验，等待确认安装…", False)
+                ShowStatus("更新包已下载并校验，等待确认更新…", False)
                 Dim restartMessage = "VideoEnhancer " & manifest.Version & " 已下载并通过校验。" &
                     Environment.NewLine & Environment.NewLine &
-                    "现在将打开 WiX 安装器并关闭 3FUI；安装完成后请手动重新打开 3FUI。" & Environment.NewLine &
+                    "现在将关闭 3FUI，由 VideoEnhancer 更新自身并重新打开 3FUI。" & Environment.NewLine &
                     "请先停止编码与视频处理任务，并保存尚未完成的操作。" & Environment.NewLine & Environment.NewLine &
-                    "确定现在打开安装器吗？"
+                    "确定现在更新吗？"
                 If Not ShowLakeConfirm(Me, restartMessage, "确认安装更新", defaultYes:=False) Then
-                    ShowStatus("更新包已下载；已取消本次安装", False)
+                    ShowStatus("更新包已下载；已取消本次更新", False)
                     Return
                 End If
-                ShowStatus("用户已确认，正在打开 WiX 安装器…", False)
+                ShowStatus("用户已确认，正在启动 VideoEnhancer 更新器…", False)
                 If Not StopEnvironmentCheck(10000) Then
                     Throw New InvalidOperationException("启动环境检查未能及时停止，请稍后重试")
                 End If
-                PluginUpdater.StartUpdate(packagePath, targetDirectory)
+                PluginUpdater.StartUpdate(packagePath, targetDirectory,
+                    Process.GetCurrentProcess().Id, Application.ExecutablePath)
                 Application.Exit()
             Catch ex As Exception
-                If Not silent OrElse userAccepted Then ShowStatus("检查或安装更新失败：" & ex.Message, True)
+                If Not silent OrElse userAccepted Then ShowStatus("检查或执行更新失败：" & ex.Message, True)
             Finally
                 _updateCheckBusy = False
                 If Not IsDisposed Then
