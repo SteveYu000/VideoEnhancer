@@ -54,7 +54,7 @@ stable.json
 
 1. 安装或准备可运行的 3FUI。
 2. 从 GitHub Release 下载 `VideoEnhancer-<version>-win-x64.exe`，无需手动改名或移动。
-3. 双击版本化 EXE。首次安装不预设固定目录，“安装”按钮会保持隐藏；点击“选择目录”，选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录后才能安装。安装器会创建 `Plugin\videoenhancer`，安装固定名称 `videoenhancer.exe` 和独立下载组件，并将插件 DLL 放在 `Plugin` 根目录。后续安装会从项目注册表键回填上次选择的位置，正常卸载会删除该记录。
+3. 双击版本化 EXE。首次安装先点击“选择目录”，选择包含 `FFmpegFreeUI.exe` 的 3FUI 根目录。MSI 会在写入文件前校验该 EXE；未选目录或选错目录会报错并停止，不会安装到 Program Files 的默认位置。安装器会创建 `Plugin\videoenhancer`，安装固定名称 `videoenhancer.exe` 和独立下载组件，并将插件 DLL 放在 `Plugin` 根目录。后续安装会从项目注册表键回填上次选择的位置，正常卸载会删除该记录。
 4. 启动 3FUI；插件固定使用自身所在 `Plugin` 目录下的 `videoenhancer\videoenhancer.exe`，不再提供手动指定其他 EXE 的入口。
 5. 在模型下载页刷新远端清单，按当前后端下载需要的模型和运行环境。
 

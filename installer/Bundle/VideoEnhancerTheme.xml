@@ -32,7 +32,7 @@
         <Text>#(loc.InstallOptionsButton)</Text>
         <ChangePageAction Page="Options" />
       </Button>
-      <!-- WixStdBA 会自行处理许可勾选；VisibleCondition 额外保证首次安装必须先保存 InstallFolder。 -->
+      <!-- 此按钮条件只改善界面提示；真正的目录门禁由 MSI 在写文件前执行。 -->
       <Button Name="InstallButton" X="-91" Y="-11" Width="75" Height="23" TabStop="yes" FontId="0" VisibleCondition="InstallFolder">#(loc.InstallInstallButton)</Button>
       <Button Name="InstallCancelButton" X="-11" Y="-11" Width="75" Height="23" TabStop="yes" FontId="0">
         <Text>#(loc.InstallCancelButton)</Text>

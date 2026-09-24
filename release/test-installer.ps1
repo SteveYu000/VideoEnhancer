@@ -198,6 +198,15 @@ try {
     Assert-FileHash (Join-Path $installedApplicationRoot 'licenses\aria2-next\SOURCE.txt') (Join-Path $root 'cli\third-party\aria2-next\SOURCE.txt') 'aria2-next 源码说明'
     Assert-FileHash (Join-Path $installedApplicationRoot 'licenses\SharpCompress\LICENSE.txt') (Join-Path $root 'cli\third-party\SharpCompress\LICENSE.txt') 'SharpCompress 许可证'
 
+    # 审计成品 MSI，而非仅检查源文件：拒绝缺失或错误的 3FUI 根目录。
+    $decompiledMsi = Join-Path $resolvedTest 'compiled-package.wxs'
+    $decompileExitCode = Invoke-NativeProcess $wixTool @('msi', 'decompile', $Msi, '-o', $decompiledMsi)
+    if ($decompileExitCode -ne 0) { throw "MSI 反编译失败，退出码：$decompileExitCode" }
+    Assert-SourceContains $decompiledMsi @(
+        '<Launch Condition="ACTION = &quot;ADMIN&quot; OR REMOVE~=&quot;ALL&quot; OR VALID3FUIROOT"',
+        '<DirectorySearch Id="Selected3FuiRootSearch" Path="[THREEFUIROOT]" Depth="0">',
+        '<FileSearch Id="Selected3FuiExeSearch" Name="FFmpegFreeUI.exe" />')
+
     # 直接调用 MSI 使用的隐藏入口，验证旧平铺数据迁移到便携目录且外部旧残留只被清理、不产生新文件。
     $legacyPluginRoot = Join-Path $resolvedTest 'legacy-host\Plugin'
     $legacyApplicationRoot = Join-Path $legacyPluginRoot 'videoenhancer'
@@ -273,6 +282,10 @@ try {
         'Scope="perMachine"',
         'UpgradeCode="A9404409-2388-428B-95CC-AA456B7378BA"',
         'InstallDirectory="THREEFUIROOT"',
+        '<Property Id="VALID3FUIROOT">',
+        'Path="[THREEFUIROOT]" Depth="0"',
+        'Name="FFmpegFreeUI.exe"',
+        'OR REMOVE~=&quot;ALL&quot; OR VALID3FUIROOT',
         '<CreateFolder />',
         'Name="InstallRoot"',
         '<RemoveRegistryKey Id="RemoveVideoEnhancerRegistryKey"',
@@ -286,6 +299,10 @@ try {
         'REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE',
         'ACTION &lt;&gt; &quot;ADMIN&quot;',
         'NOT SKIPLEGACYCLEANUP')
+    if ((Get-Content -Raw -Encoding UTF8 $packageSource).Contains(
+            '<SetProperty Id="THREEFUIROOT"', [System.StringComparison]::Ordinal)) {
+        throw 'MSI 不得通过旧注册表或默认目录自动回填缺失的 3FUI 根目录'
+    }
     Assert-SourceContains $bundleSource @(
         'UpgradeCode="519D1BAF-FB98-4C44-8EBE-753B0451ABD5"',
         'Name="InstallFolder"',

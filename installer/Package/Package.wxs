@@ -13,19 +13,14 @@
     <MajorUpgrade DowngradeErrorMessage="已安装相同或更高版本的 VideoEnhancer。" />
     <MediaTemplate EmbedCab="yes" />
 
-    <!-- 只在注册表记录安装位置；该值和项目自有键均由 MSI 在卸载时移除。 -->
-    <Property Id="PREVIOUSINSTALLROOT">
-      <RegistrySearch Id="PreviousInstallRootSearch"
-                      Root="HKLM"
-                      Key="Software\VideoEnhancer"
-                      Name="InstallRoot"
-                      Type="raw"
-                      Bitness="always64" />
+    <!-- Burn 必须显式传入 3FUI 根目录；MSI 执行前确认宿主 EXE 确实存在。 -->
+    <Property Id="VALID3FUIROOT">
+      <DirectorySearch Id="Selected3FuiRootSearch" Path="[THREEFUIROOT]" Depth="0">
+        <FileSearch Id="Selected3FuiExeSearch" Name="FFmpegFreeUI.exe" />
+      </DirectorySearch>
     </Property>
-    <SetProperty Id="THREEFUIROOT"
-                 Value="[PREVIOUSINSTALLROOT]"
-                 Before="CostInitialize"
-                 Condition="NOT THREEFUIROOT AND PREVIOUSINSTALLROOT" />
+    <Launch Condition="ACTION = &quot;ADMIN&quot; OR REMOVE~=&quot;ALL&quot; OR VALID3FUIROOT"
+            Message="请选择包含 FFmpegFreeUI.exe 的 3FUI 根目录，再重新运行安装程序。" />
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="THREEFUIROOT" Name="FFmpegFreeUI">

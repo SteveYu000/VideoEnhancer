@@ -19,8 +19,8 @@
     </BootstrapperApplication>
 
     <!--
-      WixStdBA 只识别大小写敏感的 InstallFolder。首次安装不提供固定默认值，
-      中文主题会隐藏“安装”按钮，直到用户在“选择目录”页确认 3FUI 根目录。
+      WixStdBA 只识别大小写敏感的 InstallFolder。首次安装不提供固定默认值；
+      MSI 在执行层校验 3FUI 宿主 EXE，避免界面按钮条件失效时误装。
     -->
     <Variable Name="InstallFolder"
               Type="string"
