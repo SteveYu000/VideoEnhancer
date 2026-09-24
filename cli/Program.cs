@@ -77,9 +77,11 @@ internal static class Program
     private static string UpscaleInspectorScript => Path.Combine(CoreRoot, "python", "backend", "inspect_upscale_models.py");
     private static string RifeTensorRTPrepareScript => Path.Combine(CoreRoot, "python", "backend", "prepare_rife_tensorrt.py");
     private static string Aria2NextExe => Path.Combine(CoreRoot, "bin", "aria2-next", "aria2-next.exe");
-    // 最终编码复用 3FUI 的 FFmpeg：先查宿主目录与 PATH，插件私带 bin\ffmpeg 仅作旧版回退。
+    // 最终编码复用 3FUI 的 FFmpeg：显式覆盖除外，先查 3FUI 工作目录，再查其他路径。
     private static string FfmpegExe => Resolve3FuiFfmpegTool("ffmpeg.exe");
     private static string FfprobeExe => Resolve3FuiFfmpegTool("ffprobe.exe");
+    private static string FfmpegPathOverride = "";
+    private static string FfprobePathOverride = "";
     private static string RtxVideoBackendExe => RtxVideoBackendClient.FindBackend(CoreRoot);
     private static string ModelsDir => Path.Combine(CoreRoot, "models");
     private static string FrameInterpolationDir => Path.Combine(ModelsDir, "Frame-Interpolation");
@@ -95,6 +97,9 @@ internal static class Program
     private static string Resolve3FuiFfmpegTool(string fileName)
     {
         var candidates = new List<string>();
+        var suppliedPath = fileName.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase)
+            ? FfmpegPathOverride : FfprobePathOverride;
+        if (!string.IsNullOrWhiteSpace(suppliedPath)) candidates.Add(suppliedPath);
         var explicitFfmpeg = Environment.GetEnvironmentVariable("VIDEOENHANCER_FFMPEG")?.Trim().Trim('"');
         if (!string.IsNullOrWhiteSpace(explicitFfmpeg))
         {
@@ -102,16 +107,31 @@ internal static class Program
                 ? explicitFfmpeg
                 : Path.Combine(Path.GetDirectoryName(explicitFfmpeg) ?? "", fileName));
         }
-        candidates.Add(Path.Combine(Environment.CurrentDirectory, fileName));
         try
         {
             // 标准安装：<3FUI>\Plugin\videoenhancer，因此向上两级就是宿主 EXE 目录。
-            candidates.Add(Path.Combine(Path.GetFullPath(Path.Combine(CoreRoot, "..", "..")), fileName));
+            var hostRoot = Path.GetFullPath(Path.Combine(CoreRoot, "..", ".."));
+            var settingsPath = Path.Combine(hostRoot, "Settings.json");
+            if (File.Exists(settingsPath))
+            {
+                using var settings = JsonDocument.Parse(File.ReadAllText(settingsPath));
+                if (settings.RootElement.TryGetProperty("工作目录", out var configured) &&
+                    configured.ValueKind == JsonValueKind.String)
+                {
+                    var workingDirectory = configured.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(workingDirectory) && Directory.Exists(workingDirectory))
+                        candidates.Add(Path.Combine(workingDirectory, fileName));
+                }
+            }
+            candidates.Add(Path.Combine(hostRoot, fileName));
         }
         catch
         {
-            // 目录层级异常时继续按 PATH 与旧版目录解析。
+            // 设置文件无效或目录异常时继续按宿主目录、PATH 与旧版目录解析。
+            try { candidates.Add(Path.Combine(Path.GetFullPath(Path.Combine(CoreRoot, "..", "..")), fileName)); }
+            catch { }
         }
+        candidates.Add(Path.Combine(Environment.CurrentDirectory, fileName));
         var pathValue = Environment.GetEnvironmentVariable("PATH") ?? "";
         foreach (var rawDirectory in pathValue.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
@@ -832,6 +852,8 @@ internal static class Program
         public bool HasModel;
         public string FfmpegSettings = "";
         public bool HasFfmpegSettings;
+        public string FfmpegPath = "";
+        public string FfprobePath = "";
         public string ScaleOverride = "";
         public bool HasScaleOverride;
         public string PauseShm = "";
@@ -950,6 +972,8 @@ internal static class Program
         }
 
         var o = ParseArgs(args);
+        FfmpegPathOverride = o.FfmpegPath;
+        FfprobePathOverride = o.FfprobePath;
 
         if (o.ShowVersion)
         {
@@ -1581,6 +1605,12 @@ internal static class Program
                 case "--ffmpeg-settings":
                     o.FfmpegSettings = TakeValue(args, ref i, name, inlineValue);
                     o.HasFfmpegSettings = true;
+                    break;
+                case "--ffmpeg-path":
+                    o.FfmpegPath = TakeValue(args, ref i, name, inlineValue);
+                    break;
+                case "--ffprobe-path":
+                    o.FfprobePath = TakeValue(args, ref i, name, inlineValue);
                     break;
                 case "-scale":
                 case "--scale":

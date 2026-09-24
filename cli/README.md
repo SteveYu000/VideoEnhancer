@@ -104,7 +104,7 @@ PowerShell 示例：
 
 启动时自动检测（任一缺失即报错退出）：
 
-- `bin\ffmpeg\ffmpeg.exe`
+- 3FUI“工作目录”中的 `ffmpeg.exe` / `ffprobe.exe`（默认也可放在 3FUI 根目录；插件旧版 `bin\ffmpeg` 仅作为回退）
 - `python\python\python.exe` + `python\backend\rve-backend.py` + python 库
 - `models\` 模型库（含 `.param` / `.bin` 的模型文件夹）
 - `models\Frame-Interpolation\` 补帧模型库（NCNN：含 `.param/.bin` 的子文件夹；CUDA：`*.pth/*.pt/*.pkl`；TensorRT：`RIFE/*.pth/*.pt/*.pkl`，Engine 首次使用自动生成；缺失时仅提示，不影响纯超分）
@@ -141,7 +141,7 @@ FFmpegFreeUI\Plugin\
   videoenhancer.3fui.dll
   videoenhancer\
     videoenhancer.exe
-    bin\ffmpeg\ffmpeg.exe
+    bin\ffmpeg\ffmpeg.exe   # 仅旧版兼容回退，可不安装
     python\python\python.exe
     python\backend\rve-backend.py
     models\...

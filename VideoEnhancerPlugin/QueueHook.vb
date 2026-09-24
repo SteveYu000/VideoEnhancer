@@ -784,7 +784,7 @@ Namespace videoenhancer
                     effectiveHdr = False
                 End If
                 Dim allowMixedSegmentBackends = segmentConfig IsNot Nothing AndAlso segmentConfig.AllowMixedModelBackends
-                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64, cfg.RtxHdrContrast, cfg.RtxHdrSaturation, cfg.RtxHdrMiddleGray, cfg.RtxHdrMaxLuminance, allowMixedSegmentBackends)
+                Dim args = BuildCliArgs(input, output, effectiveModel, settings, pauseShm, stopShm, effectiveUpscale, cfg.InterpModel, effectiveInterp, effectiveBackend, cfg.InterpFactor, cfg.ProcessOrder, cfg.InterpBackend, cfg.InterpDynamicScaledOpticalFlow, cfg.SceneDetectThreshold, cfg.UpscaleTileSize, cfg.UpscaleHalfPrecision, cfg.InterpHalfPrecision, effectiveHdr, cfg.RtxTarget, cfg.RtxQuality, segmentsBase64, cfg.RtxHdrContrast, cfg.RtxHdrSaturation, cfg.RtxHdrMiddleGray, cfg.RtxHdrMaxLuminance, allowMixedSegmentBackends, FfmpegToolResolver.Resolve("ffmpeg.exe"), FfmpegToolResolver.Resolve("ffprobe.exe"))
                 AddQueueTask(args, Path.GetFileName(input), output, input)
                 added += 1
             Next
@@ -979,7 +979,7 @@ Namespace videoenhancer
         ' ────────────────────────── 命令构建 ──────────────────────────
 
         ''' <summary>构建 videoenhancer.exe 的参数：-i / -modelpath / -ffmpeg-settings / -pause-shm / -stop-shm / -interp-model / -no-upscale。</summary>
-        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "", Optional rtxHdrContrast As Integer = 100, Optional rtxHdrSaturation As Integer = 100, Optional rtxHdrMiddleGray As Integer = 44, Optional rtxHdrMaxLuminance As Integer = 1000, Optional allowMixedSegmentBackends As Boolean = False) As String
+        Public Shared Function BuildCliArgs(input As String, output As String, model As String, ffmpegSettings As String, Optional pauseShm As String = "", Optional stopShm As String = "", Optional upscaleOn As Boolean = True, Optional interpModel As String = "", Optional interpOn As Boolean = False, Optional backend As String = "ncnn", Optional interpFactor As Double = 2.0, Optional processOrder As String = "upscale-first", Optional interpBackend As String = "ncnn", Optional dynamicOpticalFlow As Boolean = False, Optional sceneThreshold As Double = 4.0, Optional tileSize As Integer = 0, Optional upscaleHalfPrecision As Boolean = True, Optional interpHalfPrecision As Boolean = True, Optional rtxHdr As Boolean = False, Optional rtxTarget As String = "2x", Optional rtxQuality As Integer = 3, Optional segmentsBase64 As String = "", Optional rtxHdrContrast As Integer = 100, Optional rtxHdrSaturation As Integer = 100, Optional rtxHdrMiddleGray As Integer = 44, Optional rtxHdrMaxLuminance As Integer = 1000, Optional allowMixedSegmentBackends As Boolean = False, Optional ffmpegPath As String = "", Optional ffprobePath As String = "") As String
             Dim sb As New StringBuilder()
             sb.Append("-i ").Append(Arg(input))
             If upscaleOn AndAlso Not String.IsNullOrWhiteSpace(model) Then
@@ -1041,6 +1041,8 @@ Namespace videoenhancer
                 sb.Append(" -tile-size ").Append(tileSize.ToString(System.Globalization.CultureInfo.InvariantCulture))
             End If
             sb.Append(" -ffmpeg-settings ").Append(Arg(ffmpegSettings))
+            If Not String.IsNullOrWhiteSpace(ffmpegPath) Then sb.Append(" --ffmpeg-path ").Append(Arg(ffmpegPath))
+            If Not String.IsNullOrWhiteSpace(ffprobePath) Then sb.Append(" --ffprobe-path ").Append(Arg(ffprobePath))
             If Not String.IsNullOrWhiteSpace(pauseShm) Then
                 sb.Append(" -pause-shm ").Append(Arg(pauseShm))
             End If
@@ -1135,14 +1137,11 @@ Namespace videoenhancer
             Return basePath
         End Function
 
-        ''' <summary>用 videoenhancer.exe 自带的 ffprobe 解析媒体总时长（仅当模板含占位符时调用）。</summary>
+        ''' <summary>优先用 3FUI 的 ffprobe 解析媒体总时长（仅当模板含占位符时调用）。</summary>
         Private Shared Function ResolveDuration(input As String) As String
             Try
-                Dim exeDir = Path.GetDirectoryName(PluginConfig.Load().ExePath)
-                Dim ffprobe = If(exeDir Is Nothing, "ffprobe", Path.Combine(exeDir, "bin", "ffmpeg", "ffprobe.exe"))
-                If Not File.Exists(ffprobe) Then
-                    ffprobe = "ffprobe"
-                End If
+                Dim ffprobe = FfmpegToolResolver.Resolve("ffprobe.exe")
+                If ffprobe = "" Then ffprobe = "ffprobe"
                 Dim psi As New ProcessStartInfo With {
                     .FileName = ffprobe,
                     .UseShellExecute = False,

@@ -182,7 +182,7 @@ Namespace videoenhancer
             Try
                 ResolveTools()
                 If _ffmpeg = "" Then
-                    RaiseStatus("未找到 ffmpeg：请确认 videoenhancer.exe 同级已安装 bin 核心组件", True)
+                    RaiseStatus("未找到 ffmpeg：请检查 3FUI 设置中的工作目录是否包含 ffmpeg.exe", True)
                     Return
                 End If
 
@@ -824,7 +824,7 @@ Private Function EstimateFpsByTime(taskId As String, seconds As Double) As Doubl
         End Function
 
         ''' <summary>
-        ''' 从 videoenhancer.exe 同级的 bin 目录定位 ffmpeg 与 ffprobe。
+        ''' 优先从 3FUI 当前工作目录定位 ffmpeg 与 ffprobe。
         ''' </summary>
         Private Sub ResolveTools()
             If _ffmpeg <> "" AndAlso File.Exists(_ffmpeg) Then
@@ -833,27 +833,8 @@ Private Function EstimateFpsByTime(taskId As String, seconds As Double) As Doubl
             _ffmpeg = ""
             _ffprobe = ""
             Try
-                Dim exePath = If(_config Is Nothing, "", _config.ExePath)
-                Dim exeDir = ""
-                If Not String.IsNullOrWhiteSpace(exePath) Then
-                    exeDir = Path.GetDirectoryName(exePath)
-                End If
-                If exeDir = "" Then exeDir = PortableRuntime.ApplicationRoot
-                Dim core As String = exeDir
-                Dim ff1 = Path.Combine(core, "bin", "ffmpeg", "ffmpeg.exe")
-                Dim ff2 = Path.Combine(core, "bin", "ffmpeg.exe")
-                If File.Exists(ff1) Then
-                    _ffmpeg = ff1
-                ElseIf File.Exists(ff2) Then
-                    _ffmpeg = ff2
-                End If
-                Dim fp1 = Path.Combine(core, "bin", "ffmpeg", "ffprobe.exe")
-                Dim fp2 = Path.Combine(core, "bin", "ffprobe.exe")
-                If File.Exists(fp1) Then
-                    _ffprobe = fp1
-                ElseIf File.Exists(fp2) Then
-                    _ffprobe = fp2
-                End If
+                _ffmpeg = FfmpegToolResolver.Resolve("ffmpeg.exe")
+                _ffprobe = FfmpegToolResolver.Resolve("ffprobe.exe")
             Catch
             End Try
         End Sub

@@ -1728,7 +1728,7 @@ Namespace videoenhancer
 
         Private Sub StartEncode(inputs As List(Of String), outputPath As String)
             If _ffmpeg = "" Then
-                SetStatusText("未找到 ffmpeg（请确认 videoenhancer.exe 同级已安装 bin 核心组件）", True)
+                SetStatusText("未找到 ffmpeg（请检查 3FUI 设置中的工作目录是否包含 ffmpeg.exe）", True)
                 Return
             End If
             Dim w As Integer = 0
@@ -2045,26 +2045,8 @@ Namespace videoenhancer
 
         Private Sub ResolveFfmpeg()
             Try
-                Dim exePath = If(_config Is Nothing, "", _config.ExePath)
-                Dim exeDir = ""
-                If Not String.IsNullOrWhiteSpace(exePath) Then
-                    exeDir = System.IO.Path.GetDirectoryName(exePath)
-                End If
-                If exeDir = "" Then exeDir = PortableRuntime.ApplicationRoot
-                Dim core As String = exeDir
-                Dim ff1 = System.IO.Path.Combine(core, "bin", "ffmpeg", "ffmpeg.exe")
-                Dim ff2 = System.IO.Path.Combine(core, "bin", "ffmpeg.exe")
-                If File.Exists(ff1) Then
-                    _ffmpeg = ff1
-                ElseIf File.Exists(ff2) Then
-                    _ffmpeg = ff2
-                ElseIf File.Exists(System.IO.Path.Combine(core, "ffmpeg.exe")) Then
-                    _ffmpeg = System.IO.Path.Combine(core, "ffmpeg.exe")
-                End If
-                If _ffmpeg <> "" Then
-                    Dim probe = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(_ffmpeg), "ffprobe.exe")
-                    If File.Exists(probe) Then _ffprobe = probe
-                End If
+                _ffmpeg = FfmpegToolResolver.Resolve("ffmpeg.exe")
+                _ffprobe = FfmpegToolResolver.Resolve("ffprobe.exe")
             Catch
             End Try
         End Sub

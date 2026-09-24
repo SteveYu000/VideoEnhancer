@@ -1,9 +1,12 @@
 # Project Status
 
-Last updated: 2026-09-24 18:37
+Last updated: 2026-09-24 18:57
 Updated by: Codex
 
 ## Current Snapshot
+
+- Latest FFmpeg routing (2026-09-24 18:57): 用户指出 3FUI 可将 FFmpeg 放在独立“工作目录”。已查 3FUI 官方设置代码确认 `设置_v6.获取有效工作目录()` 与根目录 `Settings.json` 的 `工作目录` 字段。插件预览、四宫格、分段探测、时长探测统一优先读取当前生效工作目录中的 ffmpeg/ffprobe；插件排队时把解析路径传给 CLI。CLI 独立运行时优先读取 3FUI Settings.json 工作目录，再查宿主根目录，最后兼容 PATH/旧私带目录；显式环境变量/命令行路径覆盖仍可用。源码/文档暂未提交推送、未发布；版本仍 1.3.5。
+- Latest FFmpeg verification: Release build 0 警告/0 错误；单独 CLI publish 成功；临时 3FUI 根目录同时放置 ffmpeg.exe 且 Settings.json 指向独立工作目录时，`--check` 报告使用独立目录；Python 33/33；git diff --check 无错误。真实 3FUI 实机预览/四宫格/分段及完整视频处理仍待验收。当前 main 对齐 fork/main 的基线 3bf2951，工作树有本次未提交改动；旧具名 stash 仍保留。
 
 - Latest local sync (2026-09-24 18:37): fork/main 与本地主工作树 main 均已快进到交接提交 3da8ba4，PR #7 远端已 MERGED；隔离分支也在 3da8ba4。两处工作树同步后均干净。主工作树同步前独有的两份 HandShake 记录已经合并进远端交接历史，原样另存为具名 git stash（pre-PR7-merge HandShake records 2026-09-24），未丢失。后续作者从 main 即可接手；不必恢复该旧 stash，除非需要审计当时的记录。
 
@@ -2333,3 +2336,11 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Closeout sync: 代码提交 169abb9、交接提交 3da8ba4 已推至 maxzrb/VideoEnhancer:main；GitHub PR #7 状态 MERGED，SteveYu000 原提交保留。主工作树原先仅有两份 HandShake 记录未提交，其 12:26/12:36/12:52 独有内容已并入交接提交；同步前用具名 stash 保存原样，再 git pull --ff-only fork main，主工作树快进至 3da8ba4。隔离分支亦在 3da8ba4，两处工作树均曾验证干净。
 - Remaining: 真实 3FUI/UAC 与最终 Burn 视觉验收仍待执行，issue #6 保持 OPEN，版本仍为 1.3.5、无新 Release。origin=user-Wing 上游未推送。旧测试 MSI 误装未动，Burn 隐藏缓存仍属当前方案限制。具名 stash 保留用于审计，后续无需直接应用到已同步 main。
 - Git handoff: 本次状态收尾会再形成一个 docs 提交并推送 fork/main；接手者以远端 main 最新提交为准，切换设备前确认工作树干净。
+
+### 2026-09-24 18:57 - Codex
+
+- Request: 用户要求所有 VideoEnhancer FFmpeg 用途优先复用 3FUI，随后纠正 3FUI FFmpeg 可位于自定义“工作目录”，不一定在 3FUI 根目录。
+- Orientation/sync: 同工具续作；读取 AGENTS.md、docs/codex/INDEX.md、STATUS.md、HandShake skill；`git pull --ff-only fork main` 显示已最新，起始 main=3bf2951 且干净。对照 3FUI 官方源码 `设置_v6.vb`、`编码任务_v6.vb`，确认当前工作目录 API 与 `Settings.json` 持久化字段；插件启用时会占用“替代进程文件名”，因此不能用该字段作为 FFmpeg 路径。
+- Changes: 新增 `VideoEnhancerPlugin/FfmpegToolResolver.vb`；预览、四宫格、分段探测、时长探测统一查当前 3FUI 工作目录，再查宿主根目录、当前目录/PATH、旧插件目录。排队时将 ffmpeg/ffprobe 解析路径传给 CLI；CLI 新增可选路径参数，独立运行时读取宿主 `Settings.json` 工作目录；更新两处缺失提示和 README。修改文件：`VideoEnhancerPlugin/FfmpegToolResolver.vb`、`PreviewEngine.vb`、`QuadGridForm.vb`、`QueueHook.vb`、`Pages/PluginPanel.SegmentedUpscalePage.vb`、`VideoEnhancerPlugin/README.md`、`cli/Program.cs`、`cli/README.md`、本 STATUS 与 `version/工作进度.md`。下载页的旧 FFmpeg 包安装状态检查未改，因为它只代表独立下载资源是否存在。
+- Verification: `dotnet build VideoEnhancer.slnx -c Release -p:HostBin=...` 0 警告/0 错误；`dotnet publish cli/VideoEnhancer.csproj -c Release -p:HostBin=...` 成功；临时 3FUI/Settings.json 夹具中根目录与自定义工作目录同时放置 ffmpeg.exe，`--check` 选择自定义工作目录；`python -m unittest discover -s cli/tests -p test_*.py -q` 33/33；`git diff --check` 无错误。初次编译出现 VB 局部变量 `path` 遮蔽 `Path` 错误，已改名并重新编译通过。
+- Remaining/Git: 真实 3FUI 中四类插件功能和真实编码/UAC 安装仍需人工验收；未发布新版本。当前 main 工作树有本次源码/记录改动，未提交、未推送，切换工具或设备前建议提交。旧具名 stash 未动。

@@ -221,7 +221,7 @@ CLI 发布时会将其作为 `videoenhancer.3fui.dll` 放入
 
 - 启用后队列任务不再直接执行 ffmpeg，而是执行 videoenhancer.exe
   （内部再调用 ffmpeg + rve-backend），请确保 videoenhancer.exe 的
-  bin\ffmpeg / python / models 环境完整（`videoenhancer.exe --check` 可检测）。
+  3FUI“工作目录”中有 FFmpeg，插件自身的 python / models 环境完整（`videoenhancer.exe --check` 可检测）。
 - 超分与补帧可同时开启；组合时可选择先超后补或先补后超，跨后端会使用 FFV1 无损中间视频。
 - 仅补帧模式（未开超分开关、仅开补帧开关）时任务命令会自动附加 `-no-upscale`。
 - CUDA 推理（`-backend cuda`）：超分需在 `models` 下放置 `.pth/.pt/.pkl` 放大模型，

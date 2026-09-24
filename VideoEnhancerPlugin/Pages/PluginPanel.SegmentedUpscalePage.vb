@@ -350,8 +350,7 @@ Namespace videoenhancer
                 Dim paths = QueueHook.GetCurrentPrepareFilePaths().
                     Where(Function(path) Not String.IsNullOrWhiteSpace(path) AndAlso File.Exists(path)).
                     Select(Function(filePath) IO.Path.GetFullPath(filePath)).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
-                Dim exePath = PluginConfig.ResolveInstalledExePath()
-                Dim ffprobe = ResolveSegmentFfprobe(exePath)
+                Dim ffprobe = FfmpegToolResolver.Resolve("ffprobe.exe")
                 Dim probed = Await Task.Run(Function()
                     Dim result As New List(Of SegmentVideoProbe)()
                     For Each filePath As String In paths
@@ -395,36 +394,6 @@ Namespace videoenhancer
                 _btnSegmentRefresh.Enabled = True
             End Try
         End Sub
-
-        Private Shared Function ResolveSegmentFfprobe(exePath As String) As String
-            Dim candidates As New List(Of String)()
-            If Not String.IsNullOrWhiteSpace(exePath) Then
-                Try
-                    Dim directory = Path.GetDirectoryName(Path.GetFullPath(exePath))
-                    For depth = 0 To 3
-                        If String.IsNullOrWhiteSpace(directory) Then Exit For
-                        candidates.Add(Path.Combine(directory, "ffprobe.exe"))
-                        candidates.Add(Path.Combine(directory, "bin", "ffmpeg", "ffprobe.exe"))
-                        Dim parent = IO.Directory.GetParent(directory)
-                        directory = If(parent Is Nothing, "", parent.FullName)
-                    Next
-                Catch
-                End Try
-            End If
-            Dim pathValue = Environment.GetEnvironmentVariable("PATH")
-            If Not String.IsNullOrWhiteSpace(pathValue) Then
-                For Each directory In pathValue.Split(Path.PathSeparator)
-                    If Not String.IsNullOrWhiteSpace(directory) Then candidates.Add(Path.Combine(directory.Trim(), "ffprobe.exe"))
-                Next
-            End If
-            For Each candidate In candidates
-                Try
-                    If File.Exists(candidate) Then Return Path.GetFullPath(candidate)
-                Catch
-                End Try
-            Next
-            Return ""
-        End Function
 
         Private Shared Function ProbeSegmentVideo(ffprobe As String, source As String) As SegmentVideoProbe
             If String.IsNullOrWhiteSpace(ffprobe) OrElse Not File.Exists(ffprobe) Then Return Nothing
@@ -675,8 +644,7 @@ Namespace videoenhancer
             If requestedMode = "frames" Then
                 _cmbSegmentMode.Enabled = False
                 _lblSegmentStatus.Text = "<font color=#B8B8B8>正在读取精确帧数…</font>"
-                Dim exePath = PluginConfig.ResolveInstalledExePath()
-                Dim ffprobe = ResolveSegmentFfprobe(exePath)
+                Dim ffprobe = FfmpegToolResolver.Resolve("ffprobe.exe")
                 Dim exactFrames = Await Task.Run(Function() ProbeSegmentFrameCount(ffprobe, config.Path))
                 _cmbSegmentMode.Enabled = True
                 If exactFrames <= 0 Then
