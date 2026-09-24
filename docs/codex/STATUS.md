@@ -1,12 +1,12 @@
 # Project Status
 
-Last updated: 2026-09-24 19:20
+Last updated: 2026-09-24 19:22
 Updated by: Codex
 
 ## Current Snapshot
 
 - Latest license task (2026-09-24 19:20): 用户已确认获得 user-Wing/ARXChem 和 SteveYu000 对现有贡献按 MIT 发布的同意。根目录新增标准 MIT `LICENSE`；项目许可证嵌入运行 EXE 并通过 `--license` 输出，也随首次安装器和手动 ZIP 安装为 `Plugin\videoenhancer\LICENSE.txt`。第三方组件维持自身许可证。README/插件说明/安装窗口 RTF 等用户界面描述已去掉有关 Burn、MSI、是否保留安装器等防御性文字，保留直接操作步骤及 MIT 全文。版本仍 1.3.5，未发布新 Release。
-- Latest license verification: 解决方案 Release publish 与最终 WiX 重建 0 警告/0 错误；运行 EXE `--license`、手动 ZIP、安装后 LICENSE 全文/哈希一致；安装器 RTF 静态校验包含 MIT 全文且不含旧防御性文案；release/test-installer.ps1 通过空目录/错误目录/有效目录/许可证/哈希/回滚；git diff --check 无错误。当前许可证和文案改动待提交推送；真实 3FUI/UAC 安装及新 RTF 的可见窗口目视仍待验收。
+- Latest license verification/Git: 解决方案 Release publish 与最终 WiX 重建 0 警告/0 错误；运行 EXE `--license`、手动 ZIP、安装后 LICENSE 全文/哈希一致；安装器 RTF 静态校验包含 MIT 全文且不含旧防御性文案；release/test-installer.ps1 通过空目录/错误目录/有效目录/许可证/哈希/回滚；git diff --check 无错误。源码与文案提交 aa0a728 已推送至 fork/main，`git ls-remote` 核对一致，GitHub API 识别仓库许可证为 MIT。真实 3FUI/UAC 安装及新 RTF 的可见窗口目视仍待验收。
 - Latest FFmpeg routing (2026-09-24 19:01): 插件预览、四宫格、分段探测、时长探测统一优先读取 3FUI 当前工作目录中的 ffmpeg/ffprobe；排队时把路径传给 CLI，CLI 独立运行时读取宿主 Settings.json。源码/记录提交 f57a5ba 已推送至 fork/main，并核实远端同提交；工作树在此提交后曾干净。旧具名 stash 仍保留。
 - Latest FFmpeg verification: Release build 0 警告/0 错误；单独 CLI publish 成功；临时 3FUI 根目录同时放置 ffmpeg.exe 且 Settings.json 指向独立工作目录时，`--check` 报告使用独立目录；Python 33/33；git diff --check 无错误。真实 3FUI 实机预览/四宫格/分段及完整视频处理仍待验收。
 
@@ -2365,3 +2365,9 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Changes: 精简 `README.md`、`VideoEnhancerPlugin/README.md`、`cli/README.md`、`cli/manual-install-readme.txt`、`release/modelscope-README.md` 和 `installer/Bundle/VideoEnhancerTheme.zh-CN.wxl` 的用户文字；重写 `installer/Package/InstallerNotice.rtf` 为直接安装步骤、标准 MIT 全文与第三方组件许可名称。开发专用的 `release/发布流程.md` 保留安装机制事实。
 - Verification: 最终 WiX Bundle 重建 0 警告/0 错误，`release/test-installer.ps1` 通过；RTF 解码检查含 MIT 全文且无旧防御性措辞；`git diff --check` 无错误。真实窗口仍需目视确认滚动内容。
 - Git: 本轮许可证及文案改动尚未提交推送，接下来提交到 fork/main；没有新版本或 Release。
+
+### 2026-09-24 19:22 - Codex
+
+- Closeout: MIT 许可证、安装器 RTF、用户文案及打包变更提交为 aa0a728 `docs: license VideoEnhancer under MIT`，`git push fork main` 快进 f57a5ba..aa0a728；`git ls-remote fork refs/heads/main` 等于 aa0a728，GitHub license API 返回 MIT。此后工作树曾验证干净，版本仍 1.3.5，未创建新 Release 或标签；origin=user-Wing 未推送。
+- Verification summary: Release 解决方案 publish、最终 WiX rebuild 0 警告/0 错误；EXE/ZIP/安装后 LICENSE 一致；安装器空/错误/有效目录、许可证哈希及回滚门禁通过；新 RTF 静态全文与文案检查通过。人工可见窗口、真实 3FUI/UAC 安装仍待验收。
+- Handoff: 本次仅剩当前状态记录收尾提交并推送 fork/main；切换工具或设备时以远端 main 最新提交为准。旧具名 stash 不需恢复。
