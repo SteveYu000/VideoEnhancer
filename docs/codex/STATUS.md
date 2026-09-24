@@ -1,10 +1,35 @@
 # Project Status
 
-Last updated: 2026-09-20 10:50
+Last updated: 2026-09-24 18:34
 Updated by: Codex
 
 ## Current Snapshot
 
+- Latest Git outcome (2026-09-24 18:34): 用户认可当前安装器候选并授权选择性合并 PR #7、推送方便其他作者接手。五个 SteveYu000 原提交连同本地目录门禁提交 d68d680 均保留历史；最终修正提交 169abb9 已快进推送到 fork/main，GitHub PR #7 已显示 MERGED，mergeCommit=9bdb378。origin=user-Wing 上游未推送，本次目标为 maxzrb/VideoEnhancer。当前版本仍 1.3.5，未创建新 Release 或标签。
+- Latest selection: 保留 PR 的统一版本元数据、PluginPanel 页面拆分、独立 aria2-next/SharpCompress 和 PR #7 的 WiX 中文窗口；最终安装链去掉 MSI、项目 HKLM 安装位置及卸载逻辑，窗口不出现在 Windows“已安装的应用”（Burn 仍留隐藏缓存）；安装器仅首次选择 3FUI 根目录，插件自身通过运行 EXE 事务更新 EXE/DLL，aria2-next 不参与本体更新。issue #6 仍 OPEN，未因本次合并关闭。
+- Latest verification/handoff: 最终 1.3.5 候选 Release publish 0 警告/0 错误，Python 33/33，安装器空目录/错误目录/有效目录哈希/回滚、自更新/回滚、后端更新器 6/6、发布门禁 5/5、git diff --check 均通过。真实 3FUI/UAC 安装、受保护目录和 Burn 窗口最后一次视觉验收未覆盖；旧测试 MSI 误装记录未擅自卸载。本地隔离 worktree 后续清理，main 工作树仅 HandShake 记录未提交且本地 main 尚未快进到远端。
+
+- Latest correction (2026-09-24 15:50): 用户实机指出错误弹窗与 PR #7 安装失败页重复。已从 Burn ExePackage 移除 --show-errors 条件参数，并从 InstallerManager.InstallCommand 移除错误 MessageBox 分支；安装失败只由原窗口 Failure 页展示中文目录/权限建议及日志入口，具体错误仍写 stderr/Burn 日志。最终安装器 11,779,980 bytes / SHA-256 CFD6C6ACAC019ED50A48CF5715F7DE23E2D94B7DABF587B0A2840876270C4838。
+- Latest verification: Release publish 0 警告/0 错误；安装器空目录/错误目录提示、有效目录哈希及回滚测试通过；Python 33/33；git diff --check 无错误。Burn 实机失败页目视仍可由用户复验；未发布。
+
+- Latest refinement (2026-09-24 15:44): PR #7 失败页移除只会显示“函数不正确”的原始系统错误控件，保留明确的中文目录/权限指引与日志链接。交互模式精确错误弹窗仍在。最终安装器 11,779,774 bytes / SHA-256 5D96341281250BB8CC398D4953B0454446986A88F877A2C2EEFB3C0B3DCC86D9；WiX build 0/0，安装器文案/目录/回滚测试通过。
+
+- Latest fix (2026-09-24 15:41): 用户指出 Burn 把无效目录错误显示成“函数不正确”。交互模式的 ExePackage 现条件传入 --show-errors，便携载荷弹出明确中文错误；空目录指引点击“选择目录”，错误目录说明需包含 FFmpegFreeUI.exe 且不能选 Plugin，权限不足单独提示。失败页也展示可操作的目录/权限建议。静默模式不弹窗。新安装器 11,779,640 bytes / SHA-256 FEB0F52EF2018F4E8ACDFF15DB163CC293D02C9F5D7413FCE04032A860389881。
+- Latest verification: Release publish 和最终 WiX rebuild 0 警告/0 错误；Win32 实际错误弹窗文字核对通过，空目录与错误目录 stderr 文案测试通过；Burn -quiet 空目录返回 1 且未传 --show-errors；安装器有效目录哈希/回滚、Python 33/33、git diff --check 通过。Burn 可见窗口前台弹窗位置和真实 UAC/3FUI 安装仍待人工验收。
+
+- Latest fix (2026-09-24 15:22): 用户实机确认“未选目录但勾选许可条款后安装按钮可点击”。WiX 标准 BA 会在勾选时强制启用 InstallButton，覆盖主题 EnableCondition。主题现仅在 InstallFolder 非空时显示真正的 InstallButton；空目录同位置显示无安装动作的禁用占位按钮。便携载荷继续拒绝空目录。新候选 11,780,040 bytes / SHA-256 EA08A96C4EFC781E9EE34C18F26000F6C3AB2F18A160936A52BA036419D5F342。
+- Latest verification: WiX Release build 0 警告/0 错误；Burn -quiet 空目录返回 1，日志确认空参数、载荷报错及缓存清理；安装器门禁/有效目录哈希/失败回滚通过；Python 33/33；git diff --check 无错误。可见窗口的按钮状态仍需用户关闭旧窗口并重新打开新候选目视复验。
+
+- Latest correction (2026-09-24 15:13): 用户明确要保留 PR #7 的完整 WiX 安装窗口。候选已恢复主题、目录选择、进度页及中文 RTF；Bundle 只调用便携复制载荷，不再使用 MSI 或项目 HKLM 安装位置键，也不在 Windows“已安装的应用”显示。WiX Burn 自身仍留下隐藏注册和缓存。
+- Latest verification: 安装器 11,779,936 bytes / SHA-256 5B1C410B92925817BD5225CBFBC2ECA22A5D0B48ECE527D5247FE6E6C5841943；Release 构建 0 警告/0 错误、安装器目录门禁/哈希/回滚、自更新回滚、Python 33/33 通过。真实窗口视觉、UAC 和实际 3FUI 安装待人工验收；未发布。
+
+- Latest fix (2026-09-24 14:42): 用户实机反馈双击轻量安装器会闪黑色命令行框。`InstallerBundle` 现只把外层安装器 PE 子系统改为 GUI，释放的运行 EXE 恢复为控制台；另对 Windows 临时占用造成的事务目录清理失败做短暂重试。最新安装器 19,688,567 bytes / SHA-256 `3DC4761624BC7B007548FE676A6F91F3168BB3CCEC1C11F38B98F8091A026543`。
+- Latest verification: PE 门禁确认安装器 GUI=2、运行 EXE Console=3；双击文件选择窗口截图目视；安装器两次完整门禁均通过（错误目录/有效目录/哈希/回滚/无事务残留），自更新及回滚通过；运行 EXE `--version`=1.3.5。仍未真实 UAC 安装或发布。
+- Latest correction (2026-09-24 14:22): 用户指出新 WinForms 安装器过大且难用。已删除该工程，改用 PR #7 迁移 WiX 前的 `InstallerBundle` 自解包格式，在现有 CLI 内提供系统 `FFmpegFreeUI.exe` 文件选择窗口和显示完整 Plugin 路径的确认框；双击候选 UI 已截图目视确认。安装器从 65,832,375 bytes 降至 19,688,089 bytes，SHA-256 `8B23BD93973B1A550379AB29BF0EB4F6831FAE7C7CBD68BC371359CE96DF5DA6`。插件自更新仍独立于安装器。
+- Latest verification: 改造后 Release publish、安装器错误目录/正确目录/文件哈希/回滚、自更新与回滚、Python 33/33 通过；真实 3FUI 安装与 UAC 目录仍未验收。源码/记录仍未提交、未推送、未合并、未发布；版本仍为 1.3.5 测试候选。
+- Latest objective/state (2026-09-24 13:29): 按用户要求将 PR #7 安装机制改为首次安装专用便携安装器；后续更新由插件下载内嵌 DLL 的 `videoenhancer.exe` 自行事务替换 EXE/DLL，用户删除安装器不影响更新。安装器不写 HKLM、不注册 Windows 应用；aria2-next 仅随首次安装或手动 ZIP 提供，本体更新不覆盖它。
+- Latest implementation/Git: 独立 worktree `C:\Codex Program\VideoEnhancer-pr7-installer-20260924`，分支 `fix/pr7-portable-installer`；沿用 PR #7 早期 `cli/InstallerBundle.cs`，新增 `cli/InstallerManager.cs`、`cli/SelfUpdateManager.cs`，恢复 `cli/ApplicationLayoutManager.cs`，移除不再使用的 WiX Bundle/Package 文件；发布脚本分别输出运行时更新包与首次安装器。源码与文档尚未提交、未推送、未合并、未发布。
+- Latest verification: Release 解决方案发布成功；Python 33/33、发布门禁 5/5；便携安装器错误目录/有效目录/哈希/故障回滚通过；自更新 EXE/DLL 哈希、aria2 保留、迁移故障回滚通过。仍需真实 3FUI 窗口目视检查和受保护目录/UAC 验收。旧 WiX 误装在 `C:\Program Files\FFmpegFreeUI\` 的 MSI 登记未擅自卸载。
 - Latest objective/state (2026-09-20 10:50): 1.3.5 已按正式流程发布完成；GitHub、ModelScope Releases、Models 备用 EXE、标签、远端分支和本机部署均已核验。
 - Latest files/Git: 分段页面高 DPI 列宽、开关比例、刷新按钮列宽与对齐修复已由发布提交 `070cd8b` 推送；`v1.3.5` 精确指向该提交。当前只剩本次发布收尾记录待提交。
 - Latest verification: 正式发布构建 0 警告/0 错误；Python 31/31、发布门禁 5/5、安装器五场景、更新器七场景、Backend 更新器 6/6；Backend 2026.09.19.1 审计 +0/~0/-0。GitHub 与 ModelScope 三资产实际下载及 Models 备用 EXE 哈希全部一致。
@@ -2208,3 +2233,95 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Remote verification: 最终 EXE 16,989,156 bytes / `38C606EC69B59E3B8E620280753BEE632A3D25BF56155E94C1A048AF291F910E`；手动 ZIP 14,003,730 bytes / `B6893EB0C73791767EF1121868FBD9A430DDDD3D7182182D81B812C831896B74`；stable.json 621 bytes / `032B4502993A5BACBF1DEDA49BEC91C9950D08744CF6A202C1FA12A07DD0A6A2`。GitHub API 摘要及实际下载、ModelScope Releases 三项实际下载、Models 备用 EXE 均一致。
 - Local deployment: 相关进程数为 0 时备份并覆盖本机 EXE/DLL；EXE 返回 1.3.5，DLL SHA-256 `9A7C658C68C921199323FF9030DAFC56CFDAD094D968299BD218243238299C63`；备份 `C:\Users\maxzr\AppData\Local\Temp\videoenhancer-1.3.5-before-final-release-deploy-20260920-104937`。
 - Git/next: 下一步提交并推送本条发布记录，随后核对工作树干净；用户重启 3FUI 后做最终视觉验收。
+
+### 2026-09-24 12:26 - Codex
+
+- Request: 审查 GitHub PR #7、issue #6、最新评论及安装器逻辑，列出手动调整和真实验收优先级；识别另一份庞大代码文件。
+- Orientation/Git: 新 Codex 会话；读取 `AGENTS.md`、`docs/codex/INDEX.md`、`docs/codex/STATUS.md` 和 HandShake skill；`git pull --ff-only` 为 Already up to date，`main`/`fork/main` 为 `1c0b493`，起始工作树干净。fetch PR #7 头 `9bdb378` 到只读引用 `fork/pr-7`。
+- Review: GitHub PR #7 为 open、非 draft、MERGEABLE；5 commits/52 files；SteveYu000 于 2026-09-22 评论安装逻辑需手动调整。审查 Bundle、Theme、MSI、旧版清理、更新器、相关测试和源码 diff；issue #6 仍 open，PR 采用 aria2-next 独立分发方案 B。
+- Findings: InstallFolder 仅以非空作为 Burn 门禁，未核验宿主 EXE；MSI 直接运行仍有 ProgramFiles64Folder 默认路径；commit 阶段旧配置迁移与清理 Return=ignore，需验证 UAC 账户上下文和失败可见性；HKLM 卸载清理、旧版文件冲突、回滚和残留需真实安装验证。PluginPanel.vb 已拆至 Pages；另一候选大文件为 `cli/Program.cs`（约 6804 行）。
+- Verification/next: `git diff --check main...fork/pr-7` 通过；未构建、未运行提权安装、升级、卸载或窗口视觉检查。下一步在隔离的真实 3FUI 测试目录进行按优先级验收，修复发现的问题后再考虑合并与发布；不得以现有自动化代替实机验收。
+
+### 2026-09-24 12:36 - Codex
+
+- Request: 用户要求先做一个安装器，供后续手动验收。
+- Git/worktree: `git pull --ff-only` 已同步且未改动主分支；从 PR #7 头 `9bdb378` 创建独立 detached worktree `C:\Codex Program\VideoEnhancer-pr7-installer-20260924`，未合并 PR。主工作树只有前轮及本轮 HandShake 记录修改；候选 worktree 源码干净。
+- Environment: .NET SDK 10.0.400。首次使用旧 `FFmpegFreeUI.6.1.39.extracted` HostBin 构建被 LakeUI 3.22 门禁拒绝；改用本机已验证的 `C:\Users\maxzr\AppData\Local\Temp\3fui-core-compat-host`（LakeUI 5.9.0.0）成功构建。这是本机路径，仅供本机会话参考。
+- Build: `dotnet publish .\VideoEnhancer.slnx -c Release -p:HostBin=...` 完成，0 警告/0 错误，自动获取并校验锁定版本 aria2-next；CLI `--version` 为 1.3.5。
+- Artifacts: Burn EXE 11,690,830 bytes / SHA-256 `7C22857C29094A259AD91BEE8CE8B5506D5DC6D1855B8FDB84599E4ED10395F3`；MSI 10,817,536 bytes / `F408797825F9C0A60719CFAEA4B6C90B20AEA91C2AE1A5BB446EFC6F88759350`；ZIP 11,934,874 bytes / `6A2969F38C0F18E6FC96D31E58DE9BA06BA67E1632955F95345ABF40F770B4FC`。均位于独立 worktree。
+- Verification: `release/test-installer.ps1`、`release/test-updater.ps1`、`release/test-release-gates.ps1` 均 PASS；`python -m unittest discover -s cli/tests -p 'test_*.py'` 33/33 OK；主工作树 `git diff --check` 通过。未运行需要 UAC 的安装/升级/卸载，也未目视检查窗口。
+- Next: 用户在隔离测试环境验收；特别检查错误安装目录能否被拒绝、UAC 下旧配置迁移、升级回滚与卸载残留。候选仍使用 1.3.5 版本号，不可误作高于已发布 1.3.5 的正式升级包。
+
+### 2026-09-24 12:52 - Codex
+
+- Request: 用户报告未选择目录仍能安装，要求修复路径风险，并解释 StevenYu000 在 PR #7 的实际改动。
+- Diagnosis: 只读查询 HKLM `Software\VideoEnhancer\InstallRoot` 得 `C:\Program Files\FFmpegFreeUI\`。该目录无宿主 `FFmpegFreeUI.exe`，却有 PR 安装的插件 DLL 与 CLI。Burn 日志 `VideoEnhancer_20260924123830.log` 显示 `InstallFolder` 初始化为空、传 MSI 的 `THREEFUIROOT` 因条件 false 被跳过；MSI 日志确认目录回落到 `ProgramFiles64Folder\FFmpegFreeUI` 并写入注册表。故此前主题按钮 VisibleCondition 不构成安装门禁。
+- Fix: 在独立 PR worktree 的 `installer/Package/Package.wxs` 增加 `VALID3FUIROOT` AppSearch/FileSearch 和 LaunchCondition，安装/修复必须能找到所选根目录的 `FFmpegFreeUI.exe`，卸载与管理映像例外；移除 MSI 内部注册表回填以要求 Burn 显式传参。更新 README、Burn 注释和安装测试，成品 MSI 反编译门禁纳入回归。提交到本地 `fix/pr7-root-guard` 分支 `d68d680`，未推送、未合并。
+- Verification: .NET Release publish 0/0；`release/test-installer.ps1` PASS，含 MSI 反编译审计；真实 `msiexec /i /qn` 分别用空和不存在的根目录，均在 LaunchConditions 失败，日志最终 1603，无目标文件写入。修复候选 EXE `Artifacts\VideoEnhancerInstaller-PR7-root-guard.exe` 11,690,596 bytes / SHA-256 `67830A26BE425F47BEBAAB14832A1F38C5F261DC70555C1D12FF3584AC232EDA`。`git diff --check` 通过，修复分支工作树干净。
+- Remaining: 旧误装仍位于 `C:\Program Files\FFmpegFreeUI\` 且 HKLM 记录存在；未卸载。修复包仍 1.3.5，需正常卸载旧误装后在隔离环境测有效根目录、UAC 安装/升级/卸载及 Burn/MSI UI；issue #6 仍 open。主分支仅 HandShake 记录未提交。
+
+### 2026-09-24 13:29 - Codex
+
+- Request/decision: 用户明确便携安装器只负责首次选 3FUI 目录，后续更新必须依托已安装的 VideoEnhancer；删除安装器不应影响更新；aria2-next 分发不能卡住本体更新。
+- Orientation/Git: 同工具续作，沿用已读取的 AGENTS.md、docs/codex/INDEX.md、STATUS.md 与 HandShake；前序已 `git pull --ff-only`。在 PR #7 独立 worktree 的 `fix/pr7-portable-installer` 分支实施；main 工作树未改业务代码。
+- Changes: 新增便携 WinForms 安装器，只接受包含 FFmpegFreeUI.exe 的根目录，复制 Plugin 布局、故障回滚、不写注册表；CLI 内嵌插件 DLL 并恢复 --apply-update 自更新及布局事务；插件下载已校验运行 EXE，等待宿主退出后更新并重启；发布脚本将运行 EXE 作为 stable.json 更新资产，另发首次安装器；更新 README/发布流程及测试；移除不再使用的 WiX 工程。aria2-next 保留为独立首次安装组件，本体更新不触碰。
+- Commands/verification: dotnet publish VideoEnhancer.slnx -c Release -p:HostBin=... 成功；python -m unittest discover -s cli/tests -p test_*.py -q 33/33；release/test-installer.ps1 四场景通过；release/test-updater.ps1 自更新、哈希、独立组件保留、迁移故障回滚通过；release/test-release-gates.ps1 5/5；发布脚本 PowerShell 解析通过；git diff --check 通过。
+- Remaining/risk: 版本仍为已发布 1.3.5，仅候选，不可同版本覆盖发布；未在真实 3FUI 窗口及需要 UAC 的受保护目录目视/实装。旧版 MSI 误装登记仍在本机，应由用户经 Windows 正常卸载，不要手删 MSI 文件。工作树未提交、未推送；切换设备前建议提交。
+
+### 2026-09-24 14:22 - Codex
+
+- Correction: 用户指出新造 WinForms 安装器太大且不好用，要求改造 PR #7 原方案。核查发现 PR #7 当前 Burn/MSI 与“不注册 Windows 应用”的目标冲突；PR #7 在迁移 WiX 前已有轻量自解包容器。
+- Implementation: 删除新 `installer/Portable` 工程，恢复 PR #7 早期 `cli/InstallerBundle.cs` 格式；`cli/InstallerManager.cs` 在现有运行 EXE 内实现双击文件选择 FFmpegFreeUI.exe、显示完整目标 Plugin 路径并确认、事务复制与失败回滚。解决方案发布直接由运行 EXE 附加载荷生成首次安装器，后续插件自更新仍使用纯运行 EXE。无 HKLM / Windows 应用注册。
+- Verification: Release publish 成功；新安装器 19,688,089 bytes / SHA-256 8B23BD93973B1A550379AB29BF0EB4F6831FAE7C7CBD68BC371359CE96DF5DA6（前版 WinForms 65,832,375 bytes）；双击文件选择窗口截图目视通过；release/test-installer.ps1、release/test-updater.ps1、Python 33/33 通过。
+- Remaining/Git: 确认框和真实写入仍需用户在真实 3FUI/UAC 场景验收；版本仍为 1.3.5 本地候选，独立分支尚未提交、推送、合并或发布。旧 MSI 误装未擅自卸载。
+
+### 2026-09-24 14:42 - Codex
+
+- Request: 用户发现双击轻量安装器闪黑色命令行框再出现文件选择。
+- Cause/fix: PR #7 自解包安装器直接以 CLI 控制台 PE 为前缀。构建安装器时只将外层 PE 子系统从 CUI(3) 改为 GUI(2)，容器清单记录并校验修改后的前缀；释放运行 EXE 后恢复 CUI(3)，保持 CLI 标准输出。GUI 构建后故障回滚一度留空事务目录，增加 Windows 短暂占用时的清理重试。
+- Verification: Release publish 成功；PE 门禁 GUI=2、运行 CUI=3；双击系统选择窗口已截图目视；安装器门禁连续两次通过错误目录/有效目录/哈希/回滚/无残留，自更新/回滚通过；运行 EXE --version 为 1.3.5；git diff --check 通过。
+- Candidate/Git: Artifacts/VideoEnhancerInstaller.exe 19,688,567 bytes / SHA-256 3DC4761624BC7B007548FE676A6F91F3168BB3CCEC1C11F38B98F8091A026543。仍为本地 1.3.5 候选，未提交、未推送、未合并、未发布；真实 UAC 目录和确认框人工操作未验收。
+
+### 2026-09-24 15:13 - Codex
+
+- Request: 用户纠正前两轮安装器方案，明确要 PR #7 的完整窗口，但无需 MSI、项目 HKLM 登记和 Windows 已安装应用入口。
+- Changes: 恢复 installer/Bundle 的原主题、中文本地化、RTF 与 WiX 工程；Bundle 改用隐藏入口的 ExePackage 包装便携安装载荷，InstallFolder 初始为空并在窗口中显示目标目录；移除原 MSI 包工程，构建流程和安装验收脚本改为外层 Burn + 内部便携载荷；文档说明 Burn 隐藏缓存及插件独立更新。
+- Verification: dotnet publish VideoEnhancer.slnx -c Release 成功且 WiX 0 警告/0 错误；release/test-installer.ps1 通过 PR7 主题、无 MSI、目录、哈希和回滚；release/test-updater.ps1 自更新/回滚通过；Python 33/33；git diff --check 无错误。直接启动 Burn 的日志显示主题载入、InstallFolder=false，未执行真实安装。
+- Risk/Git: WiX Burn 为保留 WixStdBA 仍有隐藏注册和缓存，真实窗口视觉、受保护目录/UAC 和实际 3FUI 安装待人工验收。版本保持 1.3.5 本地候选；独立 worktree 与 main 的记录均未提交，建议切换前提交。旧 MSI 登记未擅自卸载。
+
+### 2026-09-24 15:22 - Codex
+
+- Request: 用户实机发现空目录勾选许可条款后仍可点击安装，要求修复。
+- Cause: WiX WixStdBA 的 InstallButton 启用状态由许可勾选逻辑强制控制，主题 EnableCondition 被覆盖；仅靠内部载荷拒绝空目录，窗口仍会进入安装流程。
+- Changes: 在 installer/Bundle/VideoEnhancerTheme.xml 中将真正的 InstallButton 改为仅 InstallFolder 非空时可见，空目录时同坐标显示没有安装动作的禁用占位按钮；同步更新 release/test-installer.ps1 与 Python 静态契约测试。没有更改便携载荷的空目录拒绝。
+- Verification: WiX Release build 0/0；Burn -quiet 空目录退出 1，日志显示 --install-folder ""、载荷失败和缓存清理；安装器错误/有效目录、哈希与回滚测试通过；Python 33/33；git diff --check 无错误。新候选 11,780,040 bytes / SHA-256 EA08A96C4EFC781E9EE34C18F26000F6C3AB2F18A160936A52BA036419D5F342。
+- Remaining/Git: 真实可见窗口须关闭旧进程后重开新候选，人工确认勾选条款后占位按钮仍不可安装、选择有效目录后可安装。真实 3FUI/UAC 仍待验收；本地 worktree 与 main 记录未提交、未发布，建议切换前提交。
+
+### 2026-09-24 15:41 - Codex
+
+- Request: 用户指出目录错误只显示系统“函数不正确”，要求给出能让用户修正操作的有效信息。
+- Cause: 便携载荷将具体错误写入 stderr，但 Burn 只收到 EXE 退出码 1，在失败页显示通用系统消息。
+- Changes: ExePackage 在 WixBundleUILevel=4 的交互模式条件加入 --show-errors；InstallerManager 对空目录、非 3FUI 根目录、无写入权限给出中文说明并在交互模式显示置顶错误弹窗；静默模式保留 stderr 与非零退出码。PR #7 失败页新增目录、权限和关闭宿主的建议；安装器脚本新增错误文案与静默模式门禁。
+- Verification: dotnet publish VideoEnhancer.slnx -c Release 成功；最终 WiX build 0/0；实际启动内部载荷并用 Win32 读取空目录错误弹窗文字，退出码 1；Burn -quiet 空目录退出 1，日志确认未传 --show-errors；release/test-installer.ps1 通过空目录、错误目录文案、有效目录哈希及回滚；Python 33/33；git diff --check 无错误。
+- Remaining/Git: 用户需关闭旧安装器后，在新 Burn 可见窗口人工确认错误弹窗层级和正确目录的正常安装；真实 3FUI/UAC 尚未验收。1.3.5 为本地未发布候选；独立 worktree 与 main 记录均未提交，切换前建议提交。
+
+### 2026-09-24 15:44 - Codex
+
+- Follow-up: 为避免用户在明确弹窗后仍看到“函数不正确”，移除主题 FailureMessageText 控件，失败页保留中文处理建议和日志链接；测试增加禁止原始系统错误控件的门禁。
+- Verification: WiX Release build 0 警告/0 错误；release/test-installer.ps1 通过空目录/错误目录提示、有效目录哈希及回滚；git diff --check 无错误。最终安装器 11,779,774 bytes / SHA-256 5D96341281250BB8CC398D4953B0454446986A88F877A2C2EEFB3C0B3DCC86D9。
+- Remaining/Git: 真实 PR #7 可见窗口的弹窗层级与 UAC/3FUI 实装待人工验收；独立 worktree 和 main 记录未提交，未发布，建议切换前提交。
+
+### 2026-09-24 15:50 - Codex
+
+- Request: 用户提供截图，明确指出错误弹窗与安装失败页重复，建议取消额外弹窗。
+- Changes: 移除 Bundle.wxs 的 --show-errors 条件命令行及 InstallerManager 的 FailInstall/错误 MessageBox；便携载荷错误仍写 stderr，Burn Failure 页保留目录、权限和关闭宿主的中文建议及日志链接；测试禁止弹窗参数回归。
+- Verification: dotnet publish VideoEnhancer.slnx -c Release 0/0；release/test-installer.ps1 空目录、错误目录文案、有效目录哈希及回滚通过；Python 33/33；git diff --check 无错误。最终安装器 11,779,980 bytes / SHA-256 CFD6C6ACAC019ED50A48CF5715F7DE23E2D94B7DABF587B0A2840876270C4838。
+- Remaining/Git: 用户可在可见 PR #7 窗口复验一次失败时只有安装失败页。真实 3FUI/UAC 安装仍未验收；本地候选 1.3.5 未提交、未发布，独立 worktree 与 main 记录均不干净，切换前建议提交。
+
+### 2026-09-24 18:34 - Codex
+
+- Request: 用户认可当前安装器版本，授权选择性合并 GitHub PR #7 并推送远端，以便其他作者接手。
+- Orientation/sync: 同工具续作；读取 AGENTS.md、docs/codex/INDEX.md、STATUS.md、HandShake skill；git fetch fork main 与 PR 头、git pull --ff-only fork main，远端 main 基线为 1c0b493，PR 头 9bdb378，PR open/mergeable，主工作树仅旧 HandShake 记录未提交。将主工作树独有的 12:26、12:36、12:52 审查记录补入隔离分支，避免交接历史丢失。
+- Selection/changes: 接受 PR 的统一版本元数据、第三方工具分离、PluginPanel 页面拆分和 WiX 中文窗口；覆盖原 MSI/HKLM/卸载型方案为首次安装便携复制，保留根目录门禁、失败页中文说明、无重复弹窗；插件自更新独立于安装器和 aria2-next。本次代码/说明提交 169abb9，父链保留 SteveYu000 的五个 PR 提交及 d68d680。
+- Commands/verification: dotnet publish VideoEnhancer.slnx -c Release -p:HostBin=... 0/0；release/test-installer.ps1、release/test-updater.ps1、release/test-backend-updater.ps1 6/6、release/test-release-gates.ps1 5/5、Python 33/33、git diff --check 均通过。git push fork HEAD:main 快进 1c0b493..169abb9；gh pr view 7 确认 MERGED，mergeCommit=9bdb378；远端 main=169abb9。
+- Remaining/risks: 无新版本或 Release；issue #6 仍 OPEN。未做真实 3FUI/UAC 安装、受保护目录、最后一次 Burn 视觉验收；Burn 隐藏注册/cache 仍存在；旧测试 MSI 误装未卸载。origin 上游未推送。隔离 worktree 将提交本次交接记录；本地主工作树仍有两份记录未提交、本地 main 落后远端。建议后续作者从 fork/main 最新提交接手，并在切换前确认 git status。
