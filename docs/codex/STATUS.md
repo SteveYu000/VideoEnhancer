@@ -1,9 +1,11 @@
 # Project Status
 
-Last updated: 2026-09-24 18:34
+Last updated: 2026-09-24 18:37
 Updated by: Codex
 
 ## Current Snapshot
+
+- Latest local sync (2026-09-24 18:37): fork/main 与本地主工作树 main 均已快进到交接提交 3da8ba4，PR #7 远端已 MERGED；隔离分支也在 3da8ba4。两处工作树同步后均干净。主工作树同步前独有的两份 HandShake 记录已经合并进远端交接历史，原样另存为具名 git stash（pre-PR7-merge HandShake records 2026-09-24），未丢失。后续作者从 main 即可接手；不必恢复该旧 stash，除非需要审计当时的记录。
 
 - Latest Git outcome (2026-09-24 18:34): 用户认可当前安装器候选并授权选择性合并 PR #7、推送方便其他作者接手。五个 SteveYu000 原提交连同本地目录门禁提交 d68d680 均保留历史；最终修正提交 169abb9 已快进推送到 fork/main，GitHub PR #7 已显示 MERGED，mergeCommit=9bdb378。origin=user-Wing 上游未推送，本次目标为 maxzrb/VideoEnhancer。当前版本仍 1.3.5，未创建新 Release 或标签。
 - Latest selection: 保留 PR 的统一版本元数据、PluginPanel 页面拆分、独立 aria2-next/SharpCompress 和 PR #7 的 WiX 中文窗口；最终安装链去掉 MSI、项目 HKLM 安装位置及卸载逻辑，窗口不出现在 Windows“已安装的应用”（Burn 仍留隐藏缓存）；安装器仅首次选择 3FUI 根目录，插件自身通过运行 EXE 事务更新 EXE/DLL，aria2-next 不参与本体更新。issue #6 仍 OPEN，未因本次合并关闭。
@@ -2325,3 +2327,9 @@ Append new entries below this line. Use `YYYY-MM-DD HH:MM` so same-day work rema
 - Selection/changes: 接受 PR 的统一版本元数据、第三方工具分离、PluginPanel 页面拆分和 WiX 中文窗口；覆盖原 MSI/HKLM/卸载型方案为首次安装便携复制，保留根目录门禁、失败页中文说明、无重复弹窗；插件自更新独立于安装器和 aria2-next。本次代码/说明提交 169abb9，父链保留 SteveYu000 的五个 PR 提交及 d68d680。
 - Commands/verification: dotnet publish VideoEnhancer.slnx -c Release -p:HostBin=... 0/0；release/test-installer.ps1、release/test-updater.ps1、release/test-backend-updater.ps1 6/6、release/test-release-gates.ps1 5/5、Python 33/33、git diff --check 均通过。git push fork HEAD:main 快进 1c0b493..169abb9；gh pr view 7 确认 MERGED，mergeCommit=9bdb378；远端 main=169abb9。
 - Remaining/risks: 无新版本或 Release；issue #6 仍 OPEN。未做真实 3FUI/UAC 安装、受保护目录、最后一次 Burn 视觉验收；Burn 隐藏注册/cache 仍存在；旧测试 MSI 误装未卸载。origin 上游未推送。隔离 worktree 将提交本次交接记录；本地主工作树仍有两份记录未提交、本地 main 落后远端。建议后续作者从 fork/main 最新提交接手，并在切换前确认 git status。
+
+### 2026-09-24 18:37 - Codex
+
+- Closeout sync: 代码提交 169abb9、交接提交 3da8ba4 已推至 maxzrb/VideoEnhancer:main；GitHub PR #7 状态 MERGED，SteveYu000 原提交保留。主工作树原先仅有两份 HandShake 记录未提交，其 12:26/12:36/12:52 独有内容已并入交接提交；同步前用具名 stash 保存原样，再 git pull --ff-only fork main，主工作树快进至 3da8ba4。隔离分支亦在 3da8ba4，两处工作树均曾验证干净。
+- Remaining: 真实 3FUI/UAC 与最终 Burn 视觉验收仍待执行，issue #6 保持 OPEN，版本仍为 1.3.5、无新 Release。origin=user-Wing 上游未推送。旧测试 MSI 误装未动，Burn 隐藏缓存仍属当前方案限制。具名 stash 保留用于审计，后续无需直接应用到已同步 main。
+- Git handoff: 本次状态收尾会再形成一个 docs 提交并推送 fork/main；接手者以远端 main 最新提交为准，切换设备前确认工作树干净。
