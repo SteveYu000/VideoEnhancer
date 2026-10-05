@@ -1,13 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-05 17:55
+Last updated: 2026-10-05 18:04
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
 
-- 2026-10-05 17:55：本轮许可/FFF/7za/分包改造与最终构建已完成；最新 publish 0 警告/0 错误，最新完整包 110 项复核通过。原创 C#/VB 为 MIT，RVE Python 为 AGPL-3.0-only，LakeUI 赞助许可用户已确认；独立源码包与二进制包分开，安装器不带源码归档。FFF 2026.8.19 已实际验证 API 11。分支 fix/dependency-licenses-native-archives、基于主线 f261e37/1.3.12，准备提交推送 PR 和处理 issue #6；未发行或部署。以下候选/暂停记录为历史。
+- 2026-10-05 18:04：本轮四项已完成，源码提交 649aeb9 已推送；[PR #10](https://github.com/maxzrb/VideoEnhancer/pull/10) 已创建（OPEN、非草稿、可合并），[issue #6](https://github.com/maxzrb/VideoEnhancer/issues/6) 已附核查证据并以 completed 关闭。MIT 原创 C#/VB、RVE Python AGPL-3.0-only、已确认 LakeUI 赞助授权及全部第三方许可分界已落实；FFF API 11 独立构建获取/分发，移除 SharpCompress并统一 7za，源码与二进制分包。最终 publish 0 警告/0 错误，40归档/110打包/8下载/6后端更新/5门禁及安装/更新/回滚通过。分支 fix/dependency-licenses-native-archives；收尾记录提交后同步并复核干净工作树，未合并 PR、改版本、发行或部署。以下记录均为历史。
 
 - 2026-10-05 15:08：本轮跨设备 Codex 续接，整改第三方许可、FFF.Native 独立分发及统一 7za 解压，完成后向 maxzrb/VideoEnhancer 提交 PR 并核查 issue #6。用户已确认取得 LakeUI 赞助许可证；VideoEnhancer 自有源码保留 MIT。当前主线 f261e37/1.3.12，以下旧暂停与候选快照均为历史，发行收尾已见最新日志。
 
@@ -88,7 +88,7 @@ Updated by: Codex
 ## Active TODO
 
 - [x] 本轮实施与定向回归：补全许可/源码、FFF DLL 构建获取及独立分发、移除 SharpCompress、统一 7za；真实 API 11、ZIP/安装载荷、aria2 下载回归通过。
-- [ ] 本轮收尾：最终打包复核、提交推送 PR，并按 issue #6 的实际验收证据处理关闭。
+- [x] 本轮收尾：最终打包检查通过，649aeb9 提交推送，PR #10 已创建；issue #6 已附实下载源码/许可及回归证据后关闭。后续由维护者审查合并；本轮不发布或部署。
 
 - [ ] 倍率术语复核：区分学习网络倍率与已编译图输出倍率；AVV3 NCNN2/3x实际为4x网络+图内缩小，之前“原生2/3x”表述不准确。现有图输出尺寸/缓存行为保持，尚未改产品元数据或界面。
 
@@ -209,6 +209,8 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-05 18:04：源码649aeb9已提交推送至 origin/fix/dependency-licenses-native-archives，目标 PR #10（maxzrb/main）OPEN/MERGEABLE、无托管检查；本地门禁已通过。issue #6 回读为 CLOSED/COMPLETED。记录提交前工作树干净，仅本次 STATUS/中文进度收尾待提交，随后推送复核本地与远端 HEAD 一致；无需在切换工具前再提交源码。
 
 - 2026-10-05 17:55：分支 fix/dependency-licenses-native-archives，初始 git pull --ff-only 已成功，base f261e37；origin=SteveYu000 fork、PR/issue目标=maxzrb。上游 main 再核查仍为 base，所有当前变更均属本轮；准备提交推送，无 main 合并/发行操作。
 
@@ -628,3 +630,13 @@ git diff --check
 - 修正 .NET 许可目录早期 MSBuild 属性为空导致的源码目录生成问题，改为绝对 cli/obj/third-party/dotnet/Release/win-x64；构建复核无 cli/third-party/dotnet。旧 InstallerNotice.rtf 移除 SharpCompress，明确 MIT 的 C#/VB 范围。README 产物列表加入独立源码 ZIP。
 - .gitattributes 对固定校验的 FFF 许可原文禁用换行转换，并把该文件纳入源码包，避免 Windows 新检出后 SHA256 不一致。未改变上游许可原文字节。
 - 状态与中文进度已更新，版本不变。下一步提交推送/PR/issue核查收尾；建议继续前考虑 Git 提交，本轮已获用户直接提交授权。
+
+
+### 2026-10-05 18:04 Codex：PR #10 与 issue #6 核查关闭收尾
+
+- Git：git diff --cached --check通过，源码提交649aeb98691472ea2404b7f27b82bde703951ce2已推送至 SteveYu000 fork 的 fix/dependency-licenses-native-archives。十份固定哈希上游许可经暂存和 core.autocrlf=true 实际检出后 SHA256 均一致；两份上游法律文本原有末尾空白依属性保留。源码 ZIP 更新至183项，与二进制分离。
+- PR：gh pr create --repo maxzrb/VideoEnhancer --base main --head SteveYu000:fix/dependency-licenses-native-archives --body-file 创建 https://github.com/maxzrb/VideoEnhancer/pull/10；回读 OPEN、非草稿、MERGEABLE、head=649aeb9，无托管CI检查。正文记录许可证边界、LakeUI已获赞助授权、独立DLL/API11、7za/RAR限制、源包分离、各项回归与私有认证/GPU验收边界。
+- issue #6：实核当前主线及已发布1.3.12 ZIP/aria2对应源码，采用方案B；既有发行已经包含GPL/作者/来源/精确哈希与完整third_party和构建脚本。评论 https://github.com/maxzrb/VideoEnhancer/issues/6#issuecomment-5992264852 明确现有许可问题已整改、本轮额外下载加固/分包仍待PR合并。gh issue close --reason completed成功，回读CLOSED/COMPLETED。
+- 验证范围：最终publish0警告0错误；40归档/110包检查/8下载/6后端事务/5发布门禁，安装/自更新回滚通过，真实公共ModelScope HTTPS哈希一致。私有下载为本机模拟协议验证；本设备未启动宿主或做GPU播放。不重复与此次收尾无关的模型矩阵。
+- 授权与后续：用户明确授权PR和已解决issue的关闭，均已执行；没有合并main、版本变化、发行上传或本机部署。WiX官方工具营收维护费条件仍按发布者实际情况核对，已进入公开声明/发行门禁，不推定其已获付费协议。项目既有其他TODO保持，不扩大本轮范围。
+- 记录：更新本文件当前快照/TODO/Git状态并在version/工作进度.md追加中文收尾；版本迭代记录不变。当前仅两份收尾记录待提交，随即提交推送后确认工作树干净。切换工具/设备前本轮无需追加源码提交，后续新修改仍按项目要求考虑git commit。
