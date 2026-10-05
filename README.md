@@ -33,11 +33,11 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 VideoEnhancer-<version>-win-x64.exe
 VideoEnhancerInstaller-<version>-win-x64.exe
 VideoEnhancer-<version>-manual-install.zip
-aria2-next-2.5.6-source.tar.gz
+VideoEnhancer-<version>-source.zip
 stable.json
 ```
 
-`VideoEnhancer-<version>-win-x64.exe` 是内嵌插件 DLL 的运行时更新包；`VideoEnhancerInstaller-<version>-win-x64.exe` 是首次安装器，内含插件 DLL、运行 EXE、独立的 `aria2-next` 及许可材料。模型、Python、FFmpeg 和其他大型资源需按需获取。
+`VideoEnhancer-<version>-win-x64.exe` 是内嵌插件 DLL 的运行时更新包；`VideoEnhancerInstaller-<version>-win-x64.exe` 是首次安装器，内含插件 DLL、运行 EXE、独立的 `aria2-next`、`7za`、FFF.Native DLL 及许可证材料。模型、Python、FFmpeg 和其他大型资源需按需获取。
 
 ## 系统要求
 
@@ -233,17 +233,18 @@ dotnet build .\VideoEnhancer.slnx -c Release
 dotnet publish .\VideoEnhancer.slnx -c Release
 ```
 
-解决方案发布会生成图形安装程序、运行 EXE 和手动安装 ZIP，并放在仓库根目录的 `Artifacts`：
+解决方案发布会生成图形安装程序、运行 EXE、手动安装 ZIP 和独立源码包，并放在仓库根目录的 `Artifacts`：
 
 ```text
 Artifacts\
   VideoEnhancerInstaller.exe
   videoenhancer.exe
   VideoEnhancer.zip
+  VideoEnhancer-Source.zip
 ```
 
 `VideoEnhancer.zip` 已包含手动安装所需的插件 DLL、纯运行版 CLI EXE、独立
-`aria2-next`、许可证、来源说明和安装说明。解决方案发布会从上游 v2.5.6
+`aria2-next`、`7za`、FFF.Native API 11 DLL、许可证和安装说明；对应源码在独立的 `VideoEnhancer-Source.zip` 中。解决方案发布会从上游 v2.8.3
 Release 获取 `aria2-next`，SHA-256 不等于项目文件中锁定的值时立即失败；二进制
 不再提交到 Git，也不再作为 .NET 嵌入资源。
 如果只需要未改名的 CLI 单文件，可执行
@@ -288,16 +289,17 @@ dotnet build .\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj -c Release
 本项目在下列程序与组件之上构建，感谢各自作者与社区：
 
 - **3FUI（FFmpegFreeUI）**：视频处理宿主与插件框架。
-- **LakeUI**：3FUI 插件使用的原生界面控件库。
+- [LakeUI](https://github.com/Lake1059/LakeUI)：3FUI 插件使用的界面控件库，本项目按已取得的赞助许可证使用，DLL 由宿主提供。
 - [FFmpeg](https://ffmpeg.org/)：解码、编码、滤镜与封装核心。
 - [Zennmn/RTXHDR-RTXVSR](https://github.com/Zennmn/RTXHDR-RTXVSR)（MIT）：RTX Video sidecar 的基础实现；本项目在其上定制了编码参数透传、容器直连与任务暂停/恢复。
 - [NVIDIA RTX Video SDK](https://developer.nvidia.com/rtx-video-sdk)：RTX VSR 与 RTX Video HDR 的专有运行组件。
 - [NCNN](https://github.com/Tencent/ncnn)、[PyTorch](https://pytorch.org/)、[TensorRT](https://developer.nvidia.com/tensorrt)、[ONNX Runtime](https://onnxruntime.ai/)：推理运行时。
 - [REAL-Video-Enhancer](https://github.com/TNTwise/REAL-Video-Enhancer) 与 [RVE 模型仓库](https://github.com/TNTwise/real-video-enhancer-models)：后端架构参考与模型镜像来源。
-- [mkvtoolnix](https://mkvtoolnix.download/)：随包提供的字幕提取与封装工具。
+- [mkvtoolnix](https://mkvtoolnix.download/)（GPL-2.0-or-later）：按需获取的字幕提取与封装工具，独立组件分发需保留实际版本许可与源码。
 - [ModelScope](https://www.modelscope.cn/)：模型与发布镜像托管。
 - [aria2-next](https://github.com/AnInsomniacy/aria2-next)（GPL-2.0-or-later）：以独立进程提供分段和断点续传下载，安装在 `bin\aria2-next`；正式 Release 同时提供固定版本的对应源码归档。
-- [SharpCompress](https://github.com/adamhathcock/sharpcompress)（MIT）：提供托管的 ZIP、7z、RAR、TAR、GZip、XZ 和 Zstandard 等格式读取，并负责生成发布流程使用的 7z 归档，取代原先分发和外部调用的 `7za.exe`。
+- [7-Zip](https://github.com/ip7z/7zip)（LGPL-2.1-or-later / BSD）：以独立 `7za.exe` 统一完成归档预检、解压及 7z 创建；支持 7z、ZIP、TAR、GZip、XZ、BZip2、Zstd，不支持 RAR。
+- [FFF_Project](https://github.com/Lake1059/FFF_Project)（MIT）：FFF.Native API 11 预览内核及独立动态依赖，构建时从锁定版本的官方发布容器中提取并验证，不在源码中内嵌 DLL。
 
 下表覆盖当前模型镜像中可被程序选择的全部模型家族。带“待核实”的条目表示目前只能追溯到 RVE 的公开模型仓库或社区发布记录，尚未找到可确认的原作者正式发布页；这不是对模型所有权或再分发授权的主张。若作者、链接或授权信息有误，欢迎提交 Issue，本项目会及时更正或下架。
 
@@ -331,11 +333,17 @@ dotnet build .\VideoEnhancerPlugin\VideoEnhancerPlugin.vbproj -c Release
 
 ## 许可证和第三方资源
 
-VideoEnhancer 项目源码采用 [MIT 许可证](LICENSE)，保留原作者及各贡献者的版权。可用 `videoenhancer.exe --license` 查看运行 EXE 内嵌的许可证全文；首次安装器和手动安装 ZIP 也会安装 `Plugin\videoenhancer\LICENSE.txt`。
+VideoEnhancer 原创 C#/VB 前端采用 [MIT 许可证](LICENSE)，Python RVE 集成脚本采用 AGPL-3.0-only；详见 [许可证适用范围](LICENSE-SCOPE.md)。保留原作者及各贡献者的版权。可用 `videoenhancer.exe --license` 查看运行 EXE 内嵌的许可证全文；首次安装器和手动安装 ZIP 也会安装 `Plugin\videoenhancer\LICENSE.txt`。
 
-3FUI 宿主、aria2-next、SharpCompress、RVE 后端、预训练权重、FFmpeg 和 Python 依赖分别使用各自的许可证。模型权重的许可条件请查看对应项目说明。
+3FUI 宿主、LakeUI、FFF.Native 及其动态依赖、aria2-next、7-Zip、RVE 后端、预训练权重、FFmpeg 和 Python 依赖分别使用各自的许可证。模型权重的许可条件请查看对应项目说明。
 
-安装后的 `THIRD-PARTY-NOTICES.txt` 汇总本体直接分发的第三方组件。`aria2-next` 的 GPLv2 全文、作者与贡献者声明、二进制 SHA-256、上游标签/提交和对应源码地址位于 `licenses\aria2-next`；SharpCompress 的 MIT 许可证位于 `licenses\SharpCompress`。也可运行 `videoenhancer.exe --third-party-notices` 查看内嵌托管组件的声明。正式发布脚本会校验并同时上传 `aria2-next-2.5.6-source.tar.gz`。
+安装后的 `THIRD-PARTY-NOTICES.txt` 汇总直接分发与外部使用的组件；各许可材料在 `licenses` 下。aria2-next 的 GPL、作者、精确标签/提交、二进制 SHA256 与源码说明位于 `licenses\aria2-next`；正式发布的独立源码包包含 `third-party/aria2-next/aria2-next-2.8.3-source.tar.gz`。7-Zip 与 FFF/FriBidi/vcpkg 的对应源码连同项目源码收录在独立的 `VideoEnhancer-<version>-source.zip`；FFF.Native 的 MIT 和全部动态依赖许可位于 `licenses\fff-native`。可运行 `videoenhancer.exe --third-party-notices` 查看声明。
+
+LakeUI 使用已取得的上游赞助许可证，见 `licenses\LakeUI\SOURCE.txt`，该授权不随 MIT 源码自动转授给其他发布者。RVE 的 AGPL 全文和集成源码说明位于 `licenses\RVE`；可选后端与权重仍须按实际版本保留许可和对应源码，不将整个 Python 环境标为 MIT。
+
+逐项来源、许可选择与测试范围见[第三方许可审查](docs/third-party-license-audit.md)。.NET 运行库的完整许可/依赖声明由构建自动附带，WiX 安装引擎保持 MS-RL，源码收录在独立源码包。
+
+FFF.Native 安装到 `bin\fff-native-11`，完整 ZIP/安装器携带十个独立 DLL；只更新运行 EXE 会保留已有组件。缺少预览 DLL 时须用完整 ZIP/安装器修复，插件不在运行时下载或释放 DLL。
 
 RTX 运行组件包（模型仓库 `Bin/rtx-video`）包含基于 MIT 许可 sidecar 的定制构建、LGPL 动态链接的 FFmpeg 共享库，以及 NVIDIA 专有的 `nvngx_*.dll` 运行库；后者按 NVIDIA RTX Video SDK 许可随显卡环境使用，公开再分发前请自行完成许可复核。
 

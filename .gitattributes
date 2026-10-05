@@ -1,0 +1,5 @@
+# 保留参与 SHA256 校验的上游许可原文字节，避免 Windows 检出转换换行。
+cli/third-party/fff-native/*.txt -text
+# 两份上游许可原文自带末尾空白，按原样保留，不纳入空白格式检查。
+cli/third-party/fff-native/bzip2.txt whitespace=-blank-at-eol,-blank-at-eof
+cli/third-party/fff-native/fribidi-LGPL.txt whitespace=-blank-at-eol,-blank-at-eof

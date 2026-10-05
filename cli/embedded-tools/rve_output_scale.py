@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 VideoEnhancer contributors
+# 本脚本与 RVE 结合运行；完整许可见 ../third-party/RVE/AGPL-3.0.txt。
 """在超分结果进入补帧或编码前落实目标尺寸。"""
 
 import os

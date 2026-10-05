@@ -1,5 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <Import Project="..\release\ThirdParty.props" />
+
   <PropertyGroup Label="Project">
     <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>Exe</OutputType>
@@ -44,6 +46,7 @@
     <PortablePayloadPath>$(ResolvedArtifactsDirectory).installer\VideoEnhancerPortablePayload.exe</PortablePayloadPath>
     <RuntimeArtifactPath>$(ResolvedArtifactsDirectory)videoenhancer.exe</RuntimeArtifactPath>
     <ManualPackagePath>$(ResolvedArtifactsDirectory)VideoEnhancer.zip</ManualPackagePath>
+    <SourcePackagePath>$(ResolvedArtifactsDirectory)VideoEnhancer-Source.zip</SourcePackagePath>
     <ThirdPartyNoticePath>$(MSBuildProjectDirectory)\THIRD-PARTY-NOTICES.txt</ThirdPartyNoticePath>
     <ProjectLicensePath>$(VideoEnhancerRepositoryRoot)LICENSE</ProjectLicensePath>
     <Aria2NextLicensePath>$(MSBuildProjectDirectory)\third-party\aria2-next\COPYING</Aria2NextLicensePath>
@@ -53,7 +56,7 @@
     <SevenZipCacheDirectory>$(MSBuildProjectDirectory)\obj\third-party\7zip\26.03</SevenZipCacheDirectory>
     <SevenZipExecutablePath>$(SevenZipCacheDirectory)\extra\x64\7za.exe</SevenZipExecutablePath>
     <SevenZipSourceInfoPath>$(MSBuildProjectDirectory)\third-party\7zip\SOURCE.txt</SevenZipSourceInfoPath>
-    <SharpCompressLicensePath>$(MSBuildProjectDirectory)\third-party\SharpCompress\LICENSE.txt</SharpCompressLicensePath>
+    <DotNetNoticeDirectory>$(MSBuildProjectDirectory)\obj\third-party\dotnet\$(Configuration)\$(RuntimeIdentifier)\</DotNetNoticeDirectory>
   </PropertyGroup>
 
   <PropertyGroup Label="Third-party components">
@@ -77,17 +80,11 @@
                       PrivateAssets="all" />
   </ItemGroup>
 
-  <ItemGroup Label="Package references">
-    <!-- 代替原先随程序分发的 7za.exe；许可证文本随安装包一同发布。 -->
-    <PackageReference Include="SharpCompress" Version="0.50.3" />
-  </ItemGroup>
-
   <ItemGroup Label="Portable 7-Zip resources">
-    <!-- 作为独立便携程序释放，单 EXE 更新也携带许可证及对应源码。 -->
+    <!-- 作为独立便携程序释放，单 EXE 携带许可证；对应源码单独发布。 -->
     <EmbeddedResource Include="$(SevenZipExecutablePath)" LogicalName="VideoEnhancer.Embedded.SevenZip.7za.exe" />
     <EmbeddedResource Include="$(SevenZipCacheDirectory)\extra\License.txt" LogicalName="VideoEnhancer.Embedded.SevenZip.License.txt" />
     <EmbeddedResource Include="$(SevenZipSourceInfoPath)" LogicalName="VideoEnhancer.Embedded.SevenZip.SOURCE.txt" />
-    <EmbeddedResource Include="$(SevenZipCacheDirectory)\7z2603-src.tar.xz" LogicalName="VideoEnhancer.Embedded.SevenZip.7z2603-src.tar.xz" />
   </ItemGroup>
 
   <ItemGroup>
@@ -103,8 +100,8 @@
                       LogicalName="VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt" />
     <EmbeddedResource Include="$(ProjectLicensePath)"
                       LogicalName="VideoEnhancer.Embedded.LICENSE.txt" />
-    <EmbeddedResource Include="$(SharpCompressLicensePath)"
-                      LogicalName="VideoEnhancer.Embedded.SharpCompress.LICENSE.txt" />
+    <EmbeddedResource Include="..\LICENSE-SCOPE.md" LogicalName="VideoEnhancer.Embedded.LICENSE-SCOPE.md" />
+    <EmbeddedResource Include="third-party\RVE\AGPL-3.0.txt" LogicalName="VideoEnhancer.Embedded.RVE.AGPL-3.0.txt" />
     <EmbeddedResource Include="embedded-tools\rve_output_scale.py" LogicalName="VideoEnhancer.Embedded.rve_output_scale.py" />
     <EmbeddedResource Include="embedded-tools\rve-flashvsr-backend.py" LogicalName="VideoEnhancer.Embedded.rve-flashvsr-backend.py" />
     <EmbeddedResource Include="embedded-tools\rve-basicvsrpp-backend.py" LogicalName="VideoEnhancer.Embedded.rve-basicvsrpp-backend.py" />
@@ -139,8 +136,24 @@
            Text="缺少 aria2-next 对应源码说明：$(Aria2NextSourcePath)" />
     <Error Condition="!Exists('$(Aria2NextDependencyLicensesPath)')"
            Text="缺少 aria2-next 依赖许可证：$(Aria2NextDependencyLicensesPath)" />
-    <Error Condition="!Exists('$(SharpCompressLicensePath)')"
-           Text="缺少 SharpCompress 许可证：$(SharpCompressLicensePath)" />
+  </Target>
+
+  <Target Name="StageDotNetNotices" BeforeTargets="AssignTargetPaths" DependsOnTargets="ResolveFrameworkReferences" Condition="'$(DesignTimeBuild)' != 'true'">
+    <ItemGroup>
+      <_CoreRuntimePack Include="@(ResolvedRuntimePack)" Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+    </ItemGroup>
+    <Error Condition="'@(_CoreRuntimePack)' == ''" Text="自包含运行 EXE 缺少 .NET runtime pack 许可来源。" />
+    <MakeDir Directories="$(DotNetNoticeDirectory)" />
+    <Copy SourceFiles="@(_CoreRuntimePack->'%(PackageDirectory)\LICENSE.TXT');@(_CoreRuntimePack->'%(PackageDirectory)\THIRD-PARTY-NOTICES.TXT')" DestinationFolder="$(DotNetNoticeDirectory)" />
+    <PropertyGroup>
+      <_CoreRuntimeVersion>@(_CoreRuntimePack->'%(NuGetPackageVersion)')</_CoreRuntimeVersion>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(DotNetNoticeDirectory)SOURCE.txt" Encoding="utf-8" Overwrite="true" Lines="Microsoft.NETCore.App.Runtime.win-x64 $(_CoreRuntimeVersion)；未经修改的 .NET 自包含运行库。%0A许可全文及依赖声明见同目录 LICENSE.TXT、THIRD-PARTY-NOTICES.TXT。%0A源码：https://github.com/dotnet/runtime/tree/v$(_CoreRuntimeVersion)%0A运行库及其依赖保持各自许可，不受 VideoEnhancer MIT 覆盖。" />
+    <ItemGroup>
+      <EmbeddedResource Include="$(DotNetNoticeDirectory)LICENSE.TXT" LogicalName="VideoEnhancer.Embedded.DotNet.LICENSE.TXT" />
+      <EmbeddedResource Include="$(DotNetNoticeDirectory)THIRD-PARTY-NOTICES.TXT" LogicalName="VideoEnhancer.Embedded.DotNet.THIRD-PARTY-NOTICES.TXT" />
+      <EmbeddedResource Include="$(DotNetNoticeDirectory)SOURCE.txt" LogicalName="VideoEnhancer.Embedded.DotNet.SOURCE.txt" />
+    </ItemGroup>
   </Target>
 
   <Target Name="AcquireSevenZip" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
@@ -193,7 +206,7 @@
   <Target Name="CreateSolutionArtifacts"
           AfterTargets="Publish"
           Condition="'$(BuildingSolutionFile)' == 'true'"
-          DependsOnTargets="AcquireAria2Next;AcquireSevenZip">
+          DependsOnTargets="AcquireAria2Next;AcquireSevenZip;AcquireFffNative">
     <PropertyGroup>
       <PublishedExecutable>$(PublishDir)$(AssemblyName).exe</PublishedExecutable>
       <ManualPackageStage>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)manual-install'))</ManualPackageStage>
@@ -208,18 +221,44 @@
     <MakeDir Directories="$(ResolvedArtifactsDirectory)" />
     <Copy SourceFiles="$(PublishedExecutable)"
           DestinationFiles="$(RuntimeArtifactPath)" />
-    <Copy SourceFiles="$(Aria2NextSourceArchivePath)" DestinationFolder="$(ResolvedArtifactsDirectory)" />
     <RemoveDir Directories="$(ManualPackageStage)" />
     <RemoveDir Directories="$(InstallerPayloadStage)" />
+    <ItemGroup>
+      <_IndependentComponent Include="$(FffNativeCacheDirectory)\runtime\*.dll">
+        <PackagePath>bin\fff-native-11\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(FffNativeCacheDirectory)\licenses\*">
+        <PackagePath>licenses\fff-native\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(MSBuildProjectDirectory)\third-party\LakeUI\**\*">
+        <PackagePath>licenses\LakeUI\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(MSBuildProjectDirectory)\third-party\RVE\**\*">
+        <PackagePath>licenses\RVE\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(MSBuildProjectDirectory)\third-party\wix\*">
+        <PackagePath>licenses\wix\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(DotNetNoticeDirectory)*">
+        <PackagePath>licenses\dotnet\</PackagePath>
+      </_IndependentComponent>
+      <_IndependentComponent Include="$(VideoEnhancerRepositoryRoot)LICENSE-SCOPE.md">
+        <PackagePath></PackagePath>
+      </_IndependentComponent>
+    </ItemGroup>
+    <Copy SourceFiles="@(_IndependentComponent)" DestinationFiles="@(_IndependentComponent->'$(ResolvedArtifactsDirectory)%(PackagePath)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(_IndependentComponent)" DestinationFiles="@(_IndependentComponent->'$(PublishDir)%(PackagePath)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(_IndependentComponent)" DestinationFiles="@(_IndependentComponent->'$(ManualPackageStage)\plugin\videoenhancer\%(PackagePath)%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(_IndependentComponent)" DestinationFiles="@(_IndependentComponent->'$(InstallerPayloadStage)\plugin\videoenhancer\%(PackagePath)%(RecursiveDir)%(Filename)%(Extension)')" />
     <Copy SourceFiles="$(SevenZipExecutablePath)" DestinationFiles="$(ResolvedArtifactsDirectory)bin\7zip\7za.exe" />
-    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath);$(SevenZipCacheDirectory)\7z2603-src.tar.xz" DestinationFolder="$(ResolvedArtifactsDirectory)licenses\7zip" />
+    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath)" DestinationFolder="$(ResolvedArtifactsDirectory)licenses\7zip" />
     <Copy SourceFiles="$(SevenZipExecutablePath)" DestinationFiles="$(PublishDir)bin\7zip\7za.exe" />
-    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath);$(SevenZipCacheDirectory)\7z2603-src.tar.xz" DestinationFolder="$(PublishDir)licenses\7zip" />
+    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath)" DestinationFolder="$(PublishDir)licenses\7zip" />
     <Copy SourceFiles="$(SevenZipExecutablePath)" DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\bin\7zip\7za.exe" />
-    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath);$(SevenZipCacheDirectory)\7z2603-src.tar.xz" DestinationFolder="$(ManualPackageStage)\plugin\videoenhancer\licenses\7zip" />
+    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath)" DestinationFolder="$(ManualPackageStage)\plugin\videoenhancer\licenses\7zip" />
     <Copy SourceFiles="$(SevenZipExecutablePath)" DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\bin\7zip\7za.exe" />
-    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath);$(SevenZipCacheDirectory)\7z2603-src.tar.xz" DestinationFolder="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\7zip" />
-    <MakeDir Directories="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress" />
+    <Copy SourceFiles="$(SevenZipCacheDirectory)\extra\License.txt;$(SevenZipSourceInfoPath)" DestinationFolder="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\7zip" />
+    <MakeDir Directories="$(ManualPackageStage)\plugin\videoenhancer\bin\aria2-next;$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next" />
     <Copy SourceFiles="$(PluginArtifactPath)"
           DestinationFiles="$(ManualPackageStage)\plugin\$(PluginArtifactFileName)" />
     <Copy SourceFiles="$(PublishedExecutable)"
@@ -238,15 +277,13 @@
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\SOURCE.txt" />
     <Copy SourceFiles="$(Aria2NextDependencyLicensesPath)"
           DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\aria2-next\DEPENDENCY-LICENSES.txt" />
-    <Copy SourceFiles="$(SharpCompressLicensePath)"
-          DestinationFiles="$(ManualPackageStage)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt" />
 
     <Copy SourceFiles="$(ManualInstallReadmePath)"
           DestinationFiles="$(ManualPackageStage)\手动安装说明.txt" />
     <ZipDirectory SourceDirectory="$(ManualPackageStage)"
                   DestinationFile="$(ManualPackagePath)"
                   Overwrite="true" />
-    <MakeDir Directories="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next;$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next;$(InstallerPayloadStage)\plugin\videoenhancer\licenses\SharpCompress" />
+    <MakeDir Directories="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next;$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next" />
     <Copy SourceFiles="$(Aria2NextExecutablePath)"
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\bin\aria2-next\aria2-next.exe" />
     <Copy SourceFiles="$(ThirdPartyNoticePath)"
@@ -261,8 +298,6 @@
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\SOURCE.txt" />
     <Copy SourceFiles="$(Aria2NextDependencyLicensesPath)"
           DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\aria2-next\DEPENDENCY-LICENSES.txt" />
-    <Copy SourceFiles="$(SharpCompressLicensePath)"
-          DestinationFiles="$(InstallerPayloadStage)\plugin\videoenhancer\licenses\SharpCompress\LICENSE.txt" />
     <MakeDir Directories="$(ResolvedArtifactsDirectory).installer" />
     <Delete Files="$(InstallerArtifactPath);$(PortablePayloadPath)" />
     <Exec Command="&quot;$(PublishedExecutable)&quot; --create-installer-bundle &quot;$(PublishedExecutable)&quot; &quot;$(PortablePayloadPath)&quot; &quot;$(InstallerPayloadStage)&quot;" />
@@ -273,12 +308,13 @@
     <RemoveDir Directories="$(ManualPackageStage)" />
     <RemoveDir Directories="$(InstallerPayloadStage)" />
     <Message Importance="high" Text="手动安装包：$(ManualPackagePath)" />
+    <Exec StdOutEncoding="utf-8" StdErrEncoding="utf-8" Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(VideoEnhancerRepositoryRoot)release\create-source-package.ps1&quot; -OutputPath &quot;$(SourcePackagePath)&quot; -Aria2Source &quot;$(Aria2NextSourceArchivePath)&quot; -SevenZipSource &quot;$(SevenZipCacheDirectory)\7z2603-src.tar.xz&quot; -FffNativeCache &quot;$(FffNativeCacheDirectory)&quot;" />
   </Target>
 
   <Target Name="CleanSolutionArtifacts"
           AfterTargets="Clean"
           Condition="'$(BuildingSolutionFile)' == 'true'">
-    <Delete Files="$(InstallerArtifactPath);$(PortablePayloadPath);$(ManualPackagePath);$(RuntimeArtifactPath)" />
+    <Delete Files="$(InstallerArtifactPath);$(PortablePayloadPath);$(ManualPackagePath);$(RuntimeArtifactPath);$(SourcePackagePath)" />
   </Target>
 
 </Project>

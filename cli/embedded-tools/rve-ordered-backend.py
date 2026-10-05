@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 VideoEnhancer contributors
+# 本脚本与 RVE 结合运行；完整许可见 ../third-party/RVE/AGPL-3.0.txt。
 """在同一 rve-backend 进程内执行两种顺序，并及时落实目标尺寸。"""
 
 import os

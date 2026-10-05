@@ -116,7 +116,7 @@
 
 ### 模型导入
 
-- 支持选择或拖入 PTH、PT、PKL、CKPT、safetensors、ONNX、NCNN param/bin 文件夹，以及 ZIP、7Z、RAR 等压缩包。
+- 支持选择或拖入 PTH、PT、PKL、CKPT、safetensors、ONNX、NCNN param/bin 文件夹，以及 ZIP、7Z、TAR 等压缩包。
 - 导入前在临时区预检架构、用途、倍率、通道、输入尺寸要求、精度和后端能力，并按 SHA-256 去重；失败文件不会进入正式模型列表。
 - 通过后事务安装到 `models\User\Upscale`、`Interpolation` 或 `Restoration`，并写入 `models\User\model-catalog.json`。普通 1x 修复模型暂不混入超分下拉栏。
 - 工作台只显示与当前后端匹配的用户模型；用户模型和内置模型使用同一套 LakeUI 二级架构菜单。
@@ -191,7 +191,7 @@ CLI 发布时会将其作为 `videoenhancer.3fui.dll` 放入
 安装路径相对仓库根目录解析，未指定时不复制到任何宿主目录。
 LakeUI 编译引用通过 NuGet 固定为 `5.110.0`，
 目标平台为 Windows 10 1809 或更新版本。运行时由宿主提供 LakeUI `5.110` 或更新的 5.x，
-插件包不附带 LakeUI。
+插件包不附带 LakeUI。本项目按已取得的上游赞助许可证使用，独立发布者须自行满足适用授权，详见根目录 LICENSE-SCOPE.md。
 
 ### 页面代码结构
 
@@ -273,3 +273,7 @@ LakeUI 编译引用通过 NuGet 固定为 `5.110.0`，
   CUDA 推理（PyTorch）按 rve-backend 传参（`-b pytorch --device cuda --pytorch_gpu_id 0`），
   需要 `models\RIFE` 下的 `.pth` 补帧模型；修复补帧强行停止时输出文件被销毁的问题
   （CLI 进程快照枚举改为 Unicode，停止时等待 ffmpeg 写进程 EOF 收尾，已处理部分正常写盘）。
+
+预览使用独立安装的 `bin/fff-native-11` DLL；构建前获取官方 2026.8.19/API 11 固定容器并逐项校验。完整 ZIP/安装器分发十个 DLL 及其许可证说明，插件源文件不携带 Base64 DLL。只更新运行 EXE 保留已有组件，缺失时请使用完整安装包修复。
+
+源码与二进制分开打包：VideoEnhancer-Source.zip 含项目源码及第三方对应源码，安装器与手动安装 ZIP 仅含运行文件、许可证和来源说明。

@@ -250,8 +250,7 @@ Namespace videoenhancer
             End Sub
 
             Friend Shared Function Load() As NativeApiTable
-                Dim nativePath = EmbeddedFffNativePayload.EnsureExtracted()
-                Dim handle = System.Runtime.InteropServices.NativeLibrary.Load(nativePath)
+                Dim handle = FffNativeRuntime.LoadLibrary()
                 Return New NativeApiTable(handle)
             End Function
 

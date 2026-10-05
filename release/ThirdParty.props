@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <!-- 固定 API 11 兼容版本；共享缓存仅包含构建时获取的独立运行组件。 -->
+    <FffNativeVersion>2026.8.19</FffNativeVersion>
+    <FffNativeCacheDirectory>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..\VideoEnhancerPlugin\obj\third-party\fff-native\$(FffNativeVersion)'))</FffNativeCacheDirectory>
+    <FffNativeAcquireScript>$(MSBuildThisFileDirectory)acquire-fff-native.ps1</FffNativeAcquireScript>
+  </PropertyGroup>
+  <Target Name="AcquireFffNative" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec StdOutEncoding="utf-8" StdErrEncoding="utf-8" Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(FffNativeAcquireScript)&quot; -CacheDirectory &quot;$(FffNativeCacheDirectory)&quot;" />
+  </Target>
+</Project>

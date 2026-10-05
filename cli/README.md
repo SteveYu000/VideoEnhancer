@@ -62,7 +62,7 @@ videoenhancer.exe -i <输入视频> -no-upscale -backend cuda -interp-model <CUD
 - `-no-upscale`：不放大（仅补帧模式，需配合 `-interp-model`）。
 - `--inspect-interp-model <权重>`：读取 `.pth/.pt/.pkl` 内部结构并输出架构及 CUDA/TensorRT 能力 JSON，不用文件扩展名或目录名猜测。
 - `--inspect-upscale-model <权重>`：安全读取 PTH/PT/CKPT/safetensors 或 ONNX，输出架构、用途、倍率、输入尺寸和后端能力。
-- `--import-model <文件、目录或压缩包>`：预检模型并计算 SHA-256；通过后事务安装到 `models\User`，同时生成用户能力清单。支持 PyTorch/safetensors、ONNX、NCNN param+bin 及 ZIP/7Z/RAR 等压缩包；失败模型不会进入工作台下拉栏。
+- `--import-model <文件、目录或压缩包>`：预检模型并计算 SHA-256；通过后事务安装到 `models\User`，同时生成用户能力清单。支持 PyTorch/safetensors、ONNX、NCNN param+bin 及 ZIP/7Z/TAR 等压缩包；失败模型不会进入工作台下拉栏。
 - `--list-model-catalog` / `--list-interp-model-catalog`：按当前后端输出结构化模型列表，包含稳定 ID、架构大类、倍率、来源和后端能力，供 LakeUI 二级模型菜单使用。
 - `--list-user-models --json`：输出用户模型的完整能力清单，供模型导入页列表使用。
 - `--update-user-model <ID>`：与 `--user-architecture`、`--user-purpose`、`--user-scale`、`--user-input-multiple`、`--user-backends` 配合修正自动识别结果；写入前会校验格式、任务和后端组合。
@@ -147,3 +147,7 @@ FFmpegFreeUI\Plugin\
     models\...
 ```
 
+
+归档预检、解压及 7z 创建统一调用独立 `bin/7zip/7za.exe`，支持 7z/ZIP/TAR/GZip/XZ/BZip2/Zstd，不支持 RAR。完整包独立安装 FFF.Native DLL 和许可证说明，运行 EXE 更新保留已有组件；项目 MIT、LakeUI 赞助授权与 Python RVE 集成 AGPL 范围见根目录 LICENSE-SCOPE.md。
+
+源码与二进制分开打包：VideoEnhancer-Source.zip 含项目源码及第三方对应源码，安装器与手动安装 ZIP 仅含运行文件、许可证和来源说明。

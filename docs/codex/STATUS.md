@@ -1,11 +1,15 @@
 # Project Status
 
-Last updated: 2026-10-05 00:12
+Last updated: 2026-10-05 17:55
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-05 17:55：本轮许可/FFF/7za/分包改造与最终构建已完成；最新 publish 0 警告/0 错误，最新完整包 110 项复核通过。原创 C#/VB 为 MIT，RVE Python 为 AGPL-3.0-only，LakeUI 赞助许可用户已确认；独立源码包与二进制包分开，安装器不带源码归档。FFF 2026.8.19 已实际验证 API 11。分支 fix/dependency-licenses-native-archives、基于主线 f261e37/1.3.12，准备提交推送 PR 和处理 issue #6；未发行或部署。以下候选/暂停记录为历史。
+
+- 2026-10-05 15:08：本轮跨设备 Codex 续接，整改第三方许可、FFF.Native 独立分发及统一 7za 解压，完成后向 maxzrb/VideoEnhancer 提交 PR 并核查 issue #6。用户已确认取得 LakeUI 赞助许可证；VideoEnhancer 自有源码保留 MIT。当前主线 f261e37/1.3.12，以下旧暂停与候选快照均为历史，发行收尾已见最新日志。
 
 - 2026-10-04 23:49：**老视频 RTX 再排查修复完成，仅本地候选。**真实奇数尺寸 MPEG-4 Visual 343×259 复现 D3D11 上传缓冲失败（报 Cannot allocate memory）；内部 NV12/P010 缓冲偶数化+边缘补齐，保持可见尺寸，完整 CLI 4x 输出1372×1036/4帧通过。补 RGB/PAL/灰度/打包YUV软解帧转换，原BGR24/gray的 format_unsupported 已消除。11老视频样本、五解码及五黑边回归、19C++单元通过；RV40仅四包视频前缀，不含完整RMVB/COOK验收。报告 docs/rtx-legacy-decode-audit.md，综合候选 patch 基于6afb9a8并包含黑边修复，不能与 visible-rect patch 叠加。候选SHA 690b0801859eb625fb32b7706d378046777c6fe5363433983eac522413396983，替代上条黑边候选SHA；用户原片/日志/RTX是否更新未知。继续暂停上传、推送和本机部署。
 
@@ -83,6 +87,9 @@ Updated by: Codex
 
 ## Active TODO
 
+- [x] 本轮实施与定向回归：补全许可/源码、FFF DLL 构建获取及独立分发、移除 SharpCompress、统一 7za；真实 API 11、ZIP/安装载荷、aria2 下载回归通过。
+- [ ] 本轮收尾：最终打包复核、提交推送 PR，并按 issue #6 的实际验收证据处理关闭。
+
 - [ ] 倍率术语复核：区分学习网络倍率与已编译图输出倍率；AVV3 NCNN2/3x实际为4x网络+图内缩小，之前“原生2/3x”表述不准确。现有图输出尺寸/缓存行为保持，尚未改产品元数据或界面。
 
 - [x] 用户确认RTX超分；已修复解码能力判断、硬解初始化/首帧失败回退、平面YUV转换及双显卡能力误判。RTX五输入及完整CLI FMP4通过；用户原片仍未取得，不扩大为所有老编码变体验收。
@@ -105,12 +112,18 @@ Updated by: Codex
 
 ## Recently Completed
 
+- 2026-10-05 17:55：第三方许可/固定对应源码与原创 MIT 范围、独立 FFF DLL、统一 7za、安全归档预检、独立源码 ZIP、安装器及 ZIP 一致性已完成。40 归档/110 打包/8 下载/6 后端事务/5 发行门禁与安装/自更新回滚通过。
+
 - 2026-09-30：正式发布 1.3.7，教程图片滚动缓存优化；GitHub/ModelScope 发布记录已提交并推送。
 - 2026-10-01：便携教程缓存、原生解压、取消和日志、WiX 安装残留收敛、解压百分比显示、持续补位与手动重试入队完成；本机已更新，用户反馈无明显问题。
 - 2026-10-01：当前操作记录压缩、完整原文归档、导航更新；归档入Git后的字节/SHA256再次核对一致。
 - 2026-10-01：正式发布1.3.8及1.3.9，均完成双源回读、故障回退和本机正式自更新；1.3.9包含模型能力/倍率/介绍与导入界面专项。
 
 ## Decisions
+
+- 2026-10-05 17:55：用户已确认 LakeUI 赞助授权；按用户要求源码与二进制分包，保留必要 Python 运行资源和许可声明，不把第三方源码归档放入运行 EXE/安装器。C#/VB 原创为 MIT，RVE Python 内容为 AGPL-3.0-only。
+- 2026-10-05 17:55：实际 FFF 8.20 DLL 为 API 12，纠正启动阶段按源码推定 API 11，锁定 8.19/c43614ca（真实 API 11）；独立 LGPL DLL 允许替换。7za Extra 不支持 RAR，支持列表与资源后缀同步。
+- 2026-10-05 17:55：WiX 6.0.2 保持，补 MS-RL、OSMFEULA、源提交与完整源码。不假定营收或维护费授权状态，发布者按实际营收核对。用户授权 PR/issue，不扩大为新发行或部署。
 
 - 2026-10-04 21:30：用户“部署到3fui我测试”明确授权本机覆盖部署，取代21:21未部署状态；不扩大为远端发布。先备份、检查进程退出，再部署并hash核对，保留配置/模型/独立下载组件。
 
@@ -132,6 +145,9 @@ Updated by: Codex
 
 ## Risks And Blockers
 
+- 2026-10-05 17:55：私有 ModelScope 使用生产客户端与本机模拟服务/虚构令牌验证认证、401、拒绝重定向、原子临时文件；真实公共 HTTPS 已通过。未登录实际私有数据集，未完成本设备宿主/GPU预览。WiX 官方工具营收维护费条件已列入声明和发布门禁，用户尚未说明授权状态。
+- 2026-10-05 17:55：旧安装需要完整 ZIP/安装器补齐独立 FFF DLL；单 EXE 更新仅保留既有独立组件。源码内嵌及体积的旧记录不再适用新布局；固定 SHA256 的 FFF 许可原文以 .gitattributes 保留字节。
+
 - 1.3.8双源发布、实际下载和故障回退已验证；原始IO/end失败根因仍未确证，后续复发读取插件日志。
 - 用户最初的 99% 五分钟后 IO/end 类失败未复现；原实现同包最终成功，不能把根因写成已确证。再次发生时读取插件日志。
 - 原生工具/源码内嵌增加运行 EXE 约 2 MB；优化结果是解压耗时与运行开销降低，不是文件体积下降。
@@ -139,6 +155,10 @@ Updated by: Codex
 - 旧清理拒绝和 GitHub CDN 验证限制见 Active TODO；不将历史注册残留推测当实测事实。
 
 ## Environment Notes
+
+- 2026-10-05 17:55：当前 Steve/Windows11、SDK10.0.401/runtime10.0.12；官方便携 Python3.12.10 在忽略目录 Artifacts/python-tests。生成 .NET 许可在 cli/obj，清除本轮误写源码目录的三个生成文件。没有沿用旧机器宿主/GPU路径。
+
+- 2026-10-05 15:08当前设备为 Steve/Windows 11，工作区 E:/DesktopPlus/Works/Code/VideoEnhancer，.NET SDK 10.0.401、pwsh 7、Node、GitHub CLI 可用，Python 启动器未找到安装解释器。不得沿用原 maxzr 设备的安装/GPU路径。GitHub 凭据有效（sandbox 内误报，授权网络下复核成功）。
 
 - 2026-10-04 21:30当前安装为1.3.10模型/RTX修复本地试用：CLI 25d20aba6475092b57fa267fbeab7aac873429f5f8ba63d54a390aecdb76b296，插件DLL 7398496759b5d9fa7eadff2b4fa4f5edec63281cce706c6f6a8afffc63eb5392，RTX b64761cd06f58517755964f5b6f797152c4abab14b31329057558028e0bcb844。备份 C:\Codex Program\3fui plugin\Artifacts\.refactor-tmp\backup-before-model-rtx-fix-20261004-212715；证据Artifacts/model-fix-build/local-deployment.json。下方正式版本hash为部署前历史。
 
@@ -161,6 +181,13 @@ Updated by: Codex
 
 ## Verification And Commands
 
+本轮最终验证：
+
+- dotnet publish VideoEnhancer.slnx -c Release --no-restore：0 警告/0 错误；release/test-third-party-package.ps1 最新 110 项通过（实际 FFF API 11、安装与 ZIP 全部 core 文件哈希、许可和源码分离）。
+- release/test-native-archives.ps1 40 项、test-download-integration.ps1 8 项、test-backend-updater.ps1 6 项、test-release-gates.ps1 5 项，以及 test-installer.ps1/test-updater.ps1 安装、更新和回滚通过。真实 ModelScope 公共 HTTPS 内容哈希一致。
+- 已发布 1.3.12 的 aria2 对应源码 SHA256=420E31256B5E29DE6AB9B295423ED29431494527B4FDC9AFB3946DFF4A73EAF7，实检完整 third_party 与构建脚本；旧发布资产不修改。验收范围详见 docs/third-party-license-audit.md。
+
+
 截至本轮已完成的证据（不是每次文档整理都重跑）：
 
 - 原版/新版同 3.07 GB 包解压：245.66s / 65.41s；29,709 文件集合、大小、SHA256 全部相同；原生完整性检查通过。
@@ -182,6 +209,10 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-05 17:55：分支 fix/dependency-licenses-native-archives，初始 git pull --ff-only 已成功，base f261e37；origin=SteveYu000 fork、PR/issue目标=maxzrb。上游 main 再核查仍为 base，所有当前变更均属本轮；准备提交推送，无 main 合并/发行操作。
+
+- 2026-10-05 15:08：git pull --ff-only 已同步，开始时 main=f261e37 且干净；本机 origin=SteveYu000/VideoEnhancer（fork，拥有推送权限），目标 PR/issue=maxzrb/VideoEnhancer（只有读取权限）。本轮分支 fix/dependency-licenses-native-archives。普通 sandbox 不能写 FETCH_HEAD，按授权升级执行后成功。
 
 - 2026-10-04 21:21：git pull --ff-only已最新，main=0664186跟踪origin/main；本轮源码/测试/两份审计报告/RTX补丁/记录未提交，工作树非干净，无push。Artifacts内构建/模型/测试夹具不纳入Git，切换工具或设备前建议考虑提交。
 
@@ -570,3 +601,30 @@ git diff --check
 - 安装后RTX完整CLI MPEG4 343×259做4x输出1372×1036/4帧成功（installed-odd-4x.log/json）；首个探针误写样本文件名，纠正为mpeg4-odd.avi后通过，无产品额外修改。
 - 证据：Artifacts/release-1.3.12/asset-hashes.json、verify-remote.log/remote-verification.json/remote-rtx.json、fallback-probe.log、local-update.log/local-rtx-update.log/model-list.json；新补丁保留可审查来源。反馈原片/日志仍未知，不宣称所有老视频均保证可用。
 - Git：发布源码和标签已同步，主线及RTX工作树在收尾记录前干净；本条记录提交推送后复核。建议切换设备/工具前维持当前已提交状态。
+
+### 2026-10-05 15:08 Codex：许可证与原生组件整改启动
+
+- 启动读取 AGENTS.md、docs/codex/INDEX.md、STATUS.md；跨设备续接。Git 同步及权限已核查，保留 main，为用户指定四项建立功能分支，无已有用户改动。
+- 发现 README 仍称 SharpCompress/aria2 2.5.6；实际 aria2 2.8.3 已独立安装并已有 GPL/源码资产。FFF Native API 11 当前 DLL 以 Base64 内嵌且缺依赖完整声明。官方最新 API 16 不兼容，选择固定 2026.8.20/API 11，构建读取发布容器而不执行播放器。
+- 用户明确确认 LakeUI 赞助许可证已取得；采用该授权，不篡改上游 GPL 文本，不在仓库存私密编号。RVE 上游为 AGPL-3.0，Python 集成与可选运行库须单列许可，不能一概按项目 MIT。
+- 下一步：独立 DLL/许可/源码获取与打包、7za 预检/解压/创建、定向回归、PR。当前未提交，建议阶段完成后考虑 git commit。
+
+
+### 2026-10-05 17:51 Codex：许可/独立原生组件/源码分包实施与回归
+
+- 延续启动已读取的 AGENTS、INDEX、STATUS；初始 git pull --ff-only 成功且工作树干净，创建功能分支。现复核 Git 状态及上游 main=f261e37。用户 LakeUI 赞助授权和源码/二进制分包要求已落实，无需再次确认。
+- 代码：删除 EmbeddedFffNativePayload.vb、ManagedArchiveExtractor.cs 和 SharpCompress 依赖/许可；增加 FffNativeRuntime.vb、共享 ThirdParty.props 与 acquire-fff-native.ps1，构建只解析官方容器白名单 DLL 并校验哈希，实际 API 11 固定 FFF 2026.8.19（8.20 实际为 API 12）。DLL 位于 bin/fff-native-11，保留 LGPL 用户替换能力。
+- NativeSevenZipExtractor.cs 统一清单/解压/7z 创建，覆盖压缩 TAR、Unicode、多线程进度、取消、CRC失败；写盘前拒绝越界/Windows特殊路径/符号硬链接/重解析点/加密/冲突。支持列表与帮助统一，不再宣称支持 RAR。
+- 分发与许可：csproj、create-source-package.ps1、build-modelscope-release.ps1 生成/版本化独立源码 ZIP，运行 EXE/二进制 ZIP/安装器不带源码归档；保留必要 Python 运行资源、许可和源码说明。补 FFF 所有动态依赖许可、FriBidi/vcpkg 原始源码与补丁、LakeUI 赞助来源、RVE AGPL-3.0-only、WiX MS-RL/OSMFEULA及完整对应源码、实际 .NET pack 许可。修改 LICENSE-SCOPE、README/手动说明/发布流程/第三方审计，旧安装 RTF 声明也移除 SharpCompress。
+- 下载：测试发现 aria2-next 默认 SQLite 状态在当前环境写入受限、HTTP下载成功后 BT 公网监听拖住退出。使用独立插件 cache state-dir、关闭用户全局配置；仅 HTTP/HTTPS 分支绑定 loopback并关闭 DHT/LPD/端口映射，不改官方 GPL 二进制。真实公共 ModelScope HTTPS 成功且哈希一致。
+- 验证：归档 40、打包 110、下载 8、后端事务 6、发布门禁 5 项通过；安装、真实内层载荷、自更新/回滚通过；上一轮 publish 0 警告/0 错误。私有下载仅模拟服务协议验收，宿主/GPU播放未测。已发布 1.3.12 aria2 源码资产实检包含 third_party 与上游构建脚本，可据方案 B 核查 issue #6。
+- 环境与修正：UTF-8 原编码/BOM 保留；.NET10.0.401/runtime10.0.12，测试解释器仅 Artifacts/python-tests。.NET 许可生成目录改入 cli/obj，清除本轮误生成的 cli/third-party/dotnet 三文件。所有缓存/夹具/发布候选保持忽略，不保存私密凭据。
+- 下一步：最终 publish 与包检查，提交推送并创建 PR，评论核查结果和按证据关闭 issue #6，再提交收尾记录。未改版本、发布或部署；建议阶段完成后考虑 git commit，本轮已由用户授权直接提交。
+
+
+### 2026-10-05 17:55 Codex：最终包检查与提交准备
+
+- 最新全 solution publish 成功（0 警告/0 错误），独立源码包生成；最新 test-third-party-package.ps1 110 项全部通过，真实 FFF API 11、内层安装与手动 ZIP 每个 core 文件哈希一致。
+- 修正 .NET 许可目录早期 MSBuild 属性为空导致的源码目录生成问题，改为绝对 cli/obj/third-party/dotnet/Release/win-x64；构建复核无 cli/third-party/dotnet。旧 InstallerNotice.rtf 移除 SharpCompress，明确 MIT 的 C#/VB 范围。README 产物列表加入独立源码 ZIP。
+- .gitattributes 对固定校验的 FFF 许可原文禁用换行转换，并把该文件纳入源码包，避免 Windows 新检出后 SHA256 不一致。未改变上游许可原文字节。
+- 状态与中文进度已更新，版本不变。下一步提交推送/PR/issue核查收尾；建议继续前考虑 Git 提交，本轮已获用户直接提交授权。
