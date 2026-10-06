@@ -1,11 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-06 13:49
+Last updated: 2026-10-06 13:51
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 13:51：**本轮修复已提交上游[PR11](https://github.com/maxzrb/VideoEnhancer/pull/11)，未合并/发布。**源码提交4583bbd6d278b8605c214cb9ea3dcdb211d7e465，源user-Wing/VideoEnhancer-fork:fix/trt-native-lakeui-20261006，目标maxzrb/VideoEnhancer:main；普通OPEN PR（非草稿），回读mergeStateStatus=CLEAN，尚无CI检查，不能写成CI通过。21项源码/测试/文档仅包含本轮修复，版本1.3.12保持，无视频/权重/Engine/安装二进制；PR已附当前聊天。构建和定向回归均通过，性能边界已列入说明；收尾记录随PR分支同步，不直接修改origin/main或fork/main。
 
 - 2026-10-06 13:49：用户已授权将本轮AVV3/LakeUI/FPS修复及测速记录提交maxzrb上游PR，覆盖前述仅本地不推送的限制，但未授权合并/发布/改版本。当前fix/trt-native-lakeui-20261006基于origin/main f261e37，上游已最新；目标maxzrb/VideoEnhancer:main，源user-Wing/VideoEnhancer-fork同名分支，尚无对应PR。提交前复验build0警告0错误、38项Python、18项倍率UI、FPS/ETA、LakeUI5.110/5.112实际预览回调、宿主契约均通过。全部dirty文件均为本轮已记录的源码/测试/文档，准备显式暂存、提交和推送；视频/Engine/安装包/本机缓存不纳入，版本1.3.12保持。
 
@@ -628,3 +630,10 @@ git diff --check
 - 同工具续做，读取AGENTS/INDEX/STATUS与README；根目录无project/changelog。git pull --ff-only已最新，确认origin=maxzrb、fork=user-Wing/VideoEnhancer-fork，登录user-Wing，fork父仓库maxzrb；当前fix/trt-native-lakeui-20261006跟踪origin/main f261e37，所有本轮未提交修改已逐文件审查。上游开放PR10属于他人第三方许可改动，不修改；当前分支无同名PR，计划新建main目标PR，历史PR8不作为本轮更新目标。
 - 提交前重新build Release通过（0警告0错误），38项Python含CUDA图内缩放、18项倍率UI、FPS起点/暂停/ETA、LakeUI5.110/5.112实际插件回调、宿主运行契约全部通过；git diff --check通过。没有重新运行长片编码或安装/发布，引用此前真实Engine/部署和MyGO三分钟记录，不扩大为全片性能保证。
 - 准备将AVV3转换器内嵌/显示、Image/Source预览兼容、FPS统计与测试/测速记录显式暂存。版本仍1.3.12，不包含视频、权重、Engine、缓存或二进制。PR说明采用直接中文条目和验证边界；写作风格技能未提供可用检索工具，依据用户当前表达撰写，不声称检索了历史写作样本。待完成提交/推送/创建后追加实际链接与同步检查。
+
+### 2026-10-06 13:51 Codex：上游PR11提交与交付核对
+
+- 显式暂存并审查21项源码/测试/文档，git diff --cached --check通过；无exe/dll/engine/mkv/pth/zip/7z纳入。源码提交4583bbd（fix: bundle TRT output scaling and support LakeUI preview APIs），非强制推送至fork/fix/trt-native-lakeui-20261006并设置该远端跟踪，不修改上游main或fork/main。
+- gh pr create指定repo=maxzrb/VideoEnhancer、base=main、head=user-Wing:fix/trt-native-lakeui-20261006成功，PR https://github.com/maxzrb/VideoEnhancer/pull/11；普通开放PR，已调用attach_artifact附当前聊天。回读head SHA等于4583bbd6d278b8605c214cb9ea3dcdb211d7e465，目标/源正确，21文件与提交一致，mergeStateStatus=CLEAN。gh pr checks报告没有检查，不能冒称CI通过；未执行合并、标签、Release或安装部署。
+- PR说明按中文直接条目列出低倍率图内输出、LakeUI兼容、FPS修正及38项Python/18项UI/双LakeUI回调/宿主验证，并明确官方4x权重不变、GPU缩放不是独立2x/3x网络、短测不保证整片性能/画质。本轮采用写作风格技能依据当前用户表达组织说明，没有可用的检索工具或历史样本检索声明。
+- 源码首次提交推送后git status为空；本条及中文进度作为收尾文档提交再次同步到同一PR分支，最终回读远端HEAD和干净状态。无需额外提交本轮已同步文件；版本仍1.3.12，后续合并/发布需要用户另行授权。
