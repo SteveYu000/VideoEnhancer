@@ -1,11 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-06 20:30
+Last updated: 2026-10-06 20:36
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 20:36：**1.3.13已正式发行并完成验收**：[GitHub Release](https://github.com/maxzrb/VideoEnhancer/releases/tag/v1.3.13)五项正式资产，main/发行标签源码b97622a。四宫格三文件及按钮/窗体/回调/释放/专属DPI残留安全剥离，当前实时预览双LakeUI回调通过。完整对应源码合为一个独立ZIP仅GitHub；ModelScope仅本版三个运行附件与stable/说明，Models备用EXE同步，API列表确认无源码附件。10项远端实下载大小/SHA通过。完整安装载荷已安全部署本机，45文件与ZIP一致、FFF10DLL齐全，配置/用户模型/aria2/7zip/RTX保持，未启动宿主。后端2026.09.30.1无变化，不重发Python/模型/RTX。必要本地门禁通过，6GB/1080p/4x保存OOM及同条件历史速度差异仍保留。本条收尾记录待普通提交推送，最后核对干净工作树与远端SHA。
 
 - 2026-10-06 20:30：1.3.13最终构建与必要门禁通过，四宫格专属代码已剥离；修正安装/Burn检查的旧Artifacts路径误读。后端UNCHANGED，准备冻结并上传五项GitHub资产/运行镜像，源码ZIP仅GitHub。提交3747d0a已保存，检查脚本和本条待保存，正式发布仍待完成。
 
@@ -117,9 +119,11 @@ Updated by: Codex
 
 ## Active TODO
 
+- [x] 正式发行1.3.13并剥离四宫格专属代码；全部必要门禁、十项远端下载hash、单GitHub源码与本机完整升级验收通过。
+
 - [x] PR #10/#11 审核及定向隔离验证完成，见 docs/pr10-pr11-review.md；此前图内缩放已生效，PR11补脚本分发及统计。已按用户授权完整合并，两份进度记录冲突均保留双方历史解决。
-- [ ] 6GB/1080p/4x Engine保存校验OOM仍未解决；原9→3.9反馈缺同条件旧版A/B。用户停止测速的指令保持，本轮只做审核检查，后续大尺寸/长测速待明确指示。
-- [x] 实时预览LakeUI兼容已合并PR11；组合版实际回调在5.110/5.112通过，未修复对照复现反馈异常。完整宿主绘制仍待实际使用验收；四宫格入口未恢复。
+- [ ] 6GB/1080p/4x Engine保存校验OOM仍未解决；原9→3.9反馈缺同条件旧版A/B。用户停止测速的指令保持，本轮发行不追加长测速，后续大尺寸/长测速待明确指示。
+- [x] 实时预览LakeUI兼容已合并PR11；组合版实际回调在5.110/5.112通过，未修复对照复现反馈异常。完整宿主绘制仍待实际使用验收；1.3.13已剥离四宫格专属代码。
 
 - [x] 本轮实施与定向回归：补全许可/源码、FFF DLL 构建获取及独立分发、移除 SharpCompress、统一 7za；真实 API 11、ZIP/安装载荷、aria2 下载回归通过。
 - [x] 本轮收尾：最终打包检查通过，649aeb9 提交推送，PR #10 已创建；issue #6 已附实下载源码/许可及回归证据后关闭。后续由维护者审查合并；本轮不发布或部署。
@@ -150,6 +154,8 @@ Updated by: Codex
 旧预览目录、已发布 1.1.0、已合并 PR 和已被新后端取代的验证任务已退出当前 TODO，原始上下文保留在归档；不得按旧记录恢复到预览主线或旧后端。
 
 ## Recently Completed
+
+- 2026-10-06 20:36：1.3.13正式发行、四宫格清理、单GitHub源码附件、运行镜像及本机完整升级全部完成，详见最新会话。
 
 - 2026-10-05 17:55：第三方许可/固定对应源码与原创 MIT 范围、独立 FFF DLL、统一 7za、安全归档预检、独立源码 ZIP、安装器及 ZIP 一致性已完成。40 归档/110 打包/8 下载/6 后端事务/5 发行门禁与安装/自更新回滚通过。
 
@@ -199,6 +205,8 @@ Updated by: Codex
 
 ## Environment Notes
 
+- 2026-10-06 20:36当前maxzr设备/工作区C:/Codex Program/3fui plugin；正式安装C:/Program portable/3FUI/3FUI已为1.3.13，完整载荷补齐FFF独立DLL且保护项hash保持。备份C:\Codex Program\3fui plugin\Artifacts\.refactor-tmp\backup-before-release-1.3.13-20261006-203252；所有发布检查临时目录设在项目Artifacts/release-1.3.13/temp。本条优先于以下历史设备/安装记录。
+
 - 2026-10-05 17:55：当前 Steve/Windows11、SDK10.0.401/runtime10.0.12；官方便携 Python3.12.10 在忽略目录 Artifacts/python-tests。生成 .NET 许可在 cli/obj，清除本轮误写源码目录的三个生成文件。没有沿用旧机器宿主/GPU路径。
 
 - 2026-10-05 15:08当前设备为 Steve/Windows 11，工作区 E:/DesktopPlus/Works/Code/VideoEnhancer，.NET SDK 10.0.401、pwsh 7、Node、GitHub CLI 可用，Python 启动器未找到安装解释器。不得沿用原 maxzr 设备的安装/GPU路径。GitHub 凭据有效（sandbox 内误报，授权网络下复核成功）。
@@ -223,6 +231,8 @@ Updated by: Codex
 - 历史 GPU 矩阵存在真实 RTX 3060 测试证据；换机器或验证 GPU 专项时重查硬件、驱动与运行库。认证状态也需现查，Token 不进仓库。
 
 ## Verification And Commands
+
+- 2026-10-06 20:36：1.3.13必要本地门禁、110包检查、10远端实下载与本机45文件hash通过；Artifacts/release-1.3.13/checks-summary.txt、frozen-package.log、remote-verification.json、local-deployment.json。首次build日志中的安装hash拒绝为旧目录误读，已修正并由installer.log/updater.log/burn-installer.log验证通过。
 
 本轮最终验证：
 
@@ -252,6 +262,8 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-06 20:36：main与origin/main已推送发行源码b97622a；v1.3.13注释标签解引用同一SHA，GitHub Release五资产正式公开。仅本次文档收尾待普通提交推送，完成后核对git status及远端SHA；不用改发行标签或重发冻结资产。
 
 - 2026-10-06 19:34：两PR远端均MERGED，origin/main已包含两个合并提交；本条收尾记录将提交并普通推送，完成后核对工作树与远端SHA。普通Git操作，无force；原审核记录已提交81be99d，两个PR精确head作为合并父提交保留。验证worktree无跟踪文件变化。
 
@@ -804,3 +816,13 @@ git diff --check
 - Release构建0警告0错误，Python顺序回归9项通过；后端逐文件审计UNCHANGED，保持2026.09.30.1，无后端/模型/RTX包重发。新189项独立源码包、110项运行/源码/隔离安装/API11检查通过。
 - 首次installer/Burn检查命中既有脚本硬编码Artifacts目录导致误读旧载荷/旧运行EXE，不是新包安装损坏；为两脚本添加ArtifactsRoot参数并由发布脚本传入。改后installer/updater/回滚/Burn/5项release门禁、DownloadQueue/ComponentInstallStatus/DownloadQueueUi、host-runtime/scroll、主面板DPI和LakeUI5.110/5.112实际预览回调全部通过；日志Artifacts/release-1.3.13。
 - 四宫格专属三文件与主面板残留已删除并成功构建，现存正常预览不变。代码准备提交、单独刷新源码ZIP（脚本修正不改变运行二进制），冻结五资产后推送v1.3.13并发布GitHub和ModelScope；源码仅GitHub，镜像暂存目录仅六个本版运行/说明文件。尚未上传，原性能与4x OOM限制保留。
+
+
+### 2026-10-06 20:36 Codex：1.3.13正式发行、源码单GitHub与本机验收
+
+- 发行源提交3747d0a（四宫格剥离/版本/源码约定）与b97622a（定制目录检查修正/验证记录）；git push --atomic origin main v1.3.13成功，标签解引用b97622a7421daddd9b4834f415c48817358bfa40，未改旧标签。gh release create --repo maxzrb/VideoEnhancer --verify-tag --notes-file创建正式非草稿非预发行Release，五项附件和逐行正文回读一致。
+- 发布后ModelScope白名单目录上传六文件、删除0；仅1.3.13运行EXE/安装器/手动ZIP及stable/README/notes，另同步Models Plugin/videoenhancer.exe。源码ZIP仅GitHub，不删除旧版既有源码归档，ModelScope API本版目录恰为三个运行文件。源码189项、62859474bytes、SHA256 9e519fe45529245b583a986bf00ad2dcf6b5cafc9a0205626c5b824d21109502；源码包中无被删除的四宫格三文件，包含最新修正发布/安装/Burn检查脚本。运行ZIP18003356bytes，运行EXE12760744bytes，不包含源码归档。冻结清单Artifacts/release-1.3.13/asset-hashes.json。
+- verify-remote.py实下载GitHub五项、ModelScope四项和Models备用EXE，共10项大小/SHA一致；GitHubdigest/正文格式、ModelScope源码缺席、README约定与后端channel保持2026.09.30.1/2条历史补丁通过。证据remote-verification.json/modelscope-version-tree.json/remote-backend-channel.json及日志均在Artifacts/release-1.3.13，未提交产物/凭据。
+- 本地部署前确认宿主/处理任务退出，备份C:\Codex Program\3fui plugin\Artifacts\.refactor-tmp\backup-before-release-1.3.13-20261006-203252，通过内部完整安装载荷静默安装并跳过旧版清理。45文件与手动ZIP逐项匹配，FFF API11十DLL固定hash匹配，--version为1.3.13；配置/用户模型清单/aria2/7zip/RTX六项原hash保持，没有启动宿主或重发RTX。EXE d4e7d7764966d311c2e3d89e470a62f1e03c076e1d829431d940386c512f3767，DLL 3ad7ddc26a1bf86b3aed28ec21eeedaf51537c0dcfecd66847d89561a2007985；local-deployment.json保存备份和保护项前后hash。
+- 验证：Release build 0警告0错误、Python顺序9项、110项打包/隔离安装/API11、安装/更新/回滚/Burn、发布门禁、队列/组件状态/队列UI、宿主/滚动/主面板DPI及LakeUI5.110/5.112真实预览回调均通过。安装/Burn旧硬编码路径问题已修复并定向重跑；没有重复长GPU测速、没有承诺全部9FPS或修复既有低显存4x OOM，宿主可视交互仍待实际使用反馈。
+- 更新STATUS当前快照/TODO/环境/验证/Git及本条、追加中文进度、更新1.3.13版本发行与冻结资产记录。发行前git status干净、origin/main和tag均b97622a；本条为后续记录提交，普通推送后再次核对本地/远端SHA和干净状态，无需用户额外保存本轮文件。
