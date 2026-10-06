@@ -1,11 +1,17 @@
 # Project Status
 
-Last updated: 2026-10-05 00:12
+Last updated: 2026-10-06 18:00
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 18:00：PR #10/#11 审核完成，建议接纳，未合并。固定头 ea3776f / 6f0756b，共同基线 main f261e37；报告 docs/pr10-pr11-review.md。PR11 在 LakeUI5.110/5.112 实际回调均通过，未修复插件在5.112复现同一 set_Image 异常；此前AVV3图内缩放已生效，本PR主要补内嵌转换脚本与FPS统计，不能据作者异机/改SVT参数结果宣称原9→3.9反馈全部解决。6GB/1080p/4x保存校验OOM仍未处理，未重跑大尺寸/长测速。PR10完整publish、40归档与110打包检查通过；取消RAR支持。PR11两构建、CPU/CUDA2项、FPS与倍率UI18项通过。两PR产品代码自动合并，STATUS/中文进度冲突需保留双方；无实际组合运行。主工作区保留原记录改动，仅新增审核报告并更新两份记录，非干净，无提交/推送/部署/发布。
+
+- 2026-10-06 11:14：用户明确“不必测了，等pr”，已终止当前冷却复测进程树，不再追加测试，等待贡献者 UI/AVV3 PR。1.3.12发布/本机/隔离EXE SHA一致；1080p/FP16/60帧空输出已有2x 3.984FPS、3x 3.643FPS，4x诊断3.574FPS（原版保存校验在6GB显存OOM，仅测试改CPU数值比较后构建）。4x回传后缩小的路径对照2x 3.536FPS、3x 3.544FPS；仅路径模拟，不是旧发行版同机A/B。GPU明确SW Power Cap/SW Thermal Slowdown Active，当前55W/默认80W、纯Engine测时577–900MHz，不能把9→3.9全部归因代码或宣称已确认完整性能回退。此前修复已生效，但小尺寸验收未证明恢复9FPS。产品源码/版本/安装/发布均不改，完整证据Artifacts/avv3-speed-audit。
+
+- 2026-10-05 15:15：用户反馈 RTX 报 `The first backend release writes MP4 output.：rawvideo`，已通过源码历史定位为旧组件请求校验：ea16ce4 删除 MP4-only 限制，c83df0f 加入原始帧管道；当前2db5b02不含该错误，CLI明确传rawvideo/framePipePath。判断为新版CLI调用旧RTX组件；用户实际EXE/hash未取得，尚待核对更新及旧路径残留。优先加载bin/rtx-video/vsr_backend.exe，其次runtime/vsr_backend.exe，前者旧副本可能遮蔽后者。仅诊断与记录，无代码修改、部署或发布。
 
 - 2026-10-04 23:49：**老视频 RTX 再排查修复完成，仅本地候选。**真实奇数尺寸 MPEG-4 Visual 343×259 复现 D3D11 上传缓冲失败（报 Cannot allocate memory）；内部 NV12/P010 缓冲偶数化+边缘补齐，保持可见尺寸，完整 CLI 4x 输出1372×1036/4帧通过。补 RGB/PAL/灰度/打包YUV软解帧转换，原BGR24/gray的 format_unsupported 已消除。11老视频样本、五解码及五黑边回归、19C++单元通过；RV40仅四包视频前缀，不含完整RMVB/COOK验收。报告 docs/rtx-legacy-decode-audit.md，综合候选 patch 基于6afb9a8并包含黑边修复，不能与 visible-rect patch 叠加。候选SHA 690b0801859eb625fb32b7706d378046777c6fe5363433983eac522413396983，替代上条黑边候选SHA；用户原片/日志/RTX是否更新未知。继续暂停上传、推送和本机部署。
 
@@ -82,6 +88,10 @@ Updated by: Codex
 - 保留现有 WiX Burn 6.0.2 窗口；链仅含 Permanent EXE，Cache=remove，默认 Burn 日志关闭，/log 诊断保留。实测正常成功/正常失败后无本次载荷缓存、Bundle 缓存、临时卸载和依赖登记。不是 MSI；旧缓存及异常强杀/断电、Windows 自身记录不保证清零。
 
 ## Active TODO
+
+- [x] PR #10/#11 审核及定向隔离验证完成，见 docs/pr10-pr11-review.md；此前图内缩放已生效，PR11补脚本分发及统计。尚未合并，合并时需解决两份进度记录冲突。
+- [ ] 6GB/1080p/4x Engine保存校验OOM仍未解决；原9→3.9反馈缺同条件旧版A/B。用户停止测速的指令保持，本轮只做审核检查，后续大尺寸/长测速待明确指示。
+- [ ] 实时预览 LakeUI兼容修复待合并PR11；实际回调已在5.110/5.112通过，并以未修复插件复现反馈异常。完整宿主绘制未验收；四宫格入口仍未恢复。
 
 - [ ] 倍率术语复核：区分学习网络倍率与已编译图输出倍率；AVV3 NCNN2/3x实际为4x网络+图内缩小，之前“原生2/3x”表述不准确。现有图输出尺寸/缓存行为保持，尚未改产品元数据或界面。
 
@@ -182,6 +192,10 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-06 18:00：git pull --ff-only已最新，main=f261e37与origin/main同步；fetch PR10/11至独立review refs，项目Artifacts内创建两个detached worktree，均无跟踪文件修改。主工作区仅STATUS/中文进度与新增审核报告，非干净；无合并/提交/推送/正式安装/发布。
+
+- 2026-10-06 11:14：main=f261e37与origin/main同步，启动git pull --ff-only已最新；保留启动时两份记录未提交改动，本轮仅更新STATUS/中文进度。产品源码未改，测速/诊断构建在忽略目录Artifacts，未提交/推送/部署/发布。
 
 - 2026-10-04 21:21：git pull --ff-only已最新，main=0664186跟踪origin/main；本轮源码/测试/两份审计报告/RTX补丁/记录未提交，工作树非干净，无push。Artifacts内构建/模型/测试夹具不纳入Git，切换工具或设备前建议考虑提交。
 
@@ -570,3 +584,34 @@ git diff --check
 - 安装后RTX完整CLI MPEG4 343×259做4x输出1372×1036/4帧成功（installed-odd-4x.log/json）；首个探针误写样本文件名，纠正为mpeg4-odd.avi后通过，无产品额外修改。
 - 证据：Artifacts/release-1.3.12/asset-hashes.json、verify-remote.log/remote-verification.json/remote-rtx.json、fallback-probe.log、local-update.log/local-rtx-update.log/model-list.json；新补丁保留可审查来源。反馈原片/日志仍未知，不宣称所有老视频均保证可用。
 - Git：发布源码和标签已同步，主线及RTX工作树在收尾记录前干净；本条记录提交推送后复核。建议切换设备/工具前维持当前已提交状态。
+
+### 2026-10-05 15:15 Codex：RTX rawvideo/MP4-only 错误来源核查
+
+- 新会话按HandShake读取AGENTS、INDEX、STATUS与技能；git pull --ff-only已最新，main f261e37，启动工作树干净。
+- 用户提供错误完整文本，检索当前CLI/独立RTX源码和git log -S/git show：旧job_types.h在output.container非mp4时返回unsupported_container及该英文原文；ea16ce4已删除，c83df0f加入framePipePath，已发布RTX源码2db5b02含管道支持。CLI Program.cs主动传rawvideo和命名管道，由宿主FFmpeg最终编码。该错误发生于任务创建校验，不能归因输入MPEG-4解码或VSR驱动。
+- 结论：错误证据指向旧组件与新CLI不匹配；用户实际加载路径/EXE hash未取得，不宣称已在用户设备确认或修复。建议插件1.3.12+下载页刷新并更新RTX组件；若仍失败核对FindBackend两候选，顶层旧EXE优先于runtime内EXE，不能只凭日期包名确认更新。
+- 验证：核对既有Artifacts/release-1.3.12/installed-odd-4x.log，正式安装CLI+RTX此前已完成4帧rawvideo管道→宿主FFmpeg输出。未重复GPU测试，未修改产品代码/版本/安装/远端。命令含rg/git log/git show及UTF-8读取；git diff --check核对记录。
+- 更新STATUS当前快照及中文工作进度。待用户更新反馈，必要时取实际加载路径/hash。收尾仅两记录未提交，工作树非干净，建议考虑Git提交后继续或切换工具。
+
+
+### 2026-10-06 11:14 Codex：AVV3本地测速，按用户要求停止等PR
+
+- 启动读取AGENTS/INDEX/STATUS/HandShake，git pull --ff-only最新；main f261e37，保留原两份未提交记录。先查UI异常：NuGet及本机LakeUI5.110仍有PixelPictureBox.Image，上游5.112改Source，与用户MissingMethodException吻合，但未取得用户实际DLL；用户说明贡献者将交PR，停止自主UI修复。四宫格入口早已移除，只留不可达旧代码，不恢复功能。
+- 用户授权先验证本地AVV3速度，未提交的PR尚不可对比，gh pr list当前为空。隔离复制冻结1.3.12 EXE和已安装backend、PTH；仅Python解释器/FFmpeg只读链接，共享解释器禁止生成pyc。发布/本机/隔离EXE SHA均13777336c711577faab02268ae762debecb5a421be8185872f9fbb74477d1600，PTH SHA b8a8376811077954d82ca3fcf476f1ac3da3e8a68a4f4d71363008000a18b75d。安装目录不修改。
+- 测试条件：RTX3060 Laptop 6GB；1920x1080 testsrc2/H264、60帧、FP16、无分块/补帧，FFmpeg wrapped_avframe/null空输出。计时只算RVE渲染段，排除导入、Engine构建和任务启动，不含实际压制编码。2x 15.06s/3.984FPS；3x 16.47s/3.643FPS；4x诊断16.79s/3.574FPS。全部有效有进度frame=60/progress=end。2x首次预热12.39s/4.843FPS保留，未作为稳态结果。首次加入带空格的progress路径被现有参数拆分导致失败，改项目相对文件名后通过，不修改产品。
+- 4x原版流程构建完成后，torch_tensorrt.save→torch.jit.trace重复输出校验将4x大帧转FP64，torch.testing.assert_close再申请760MiB导致CUDA OOM；不能认作4x普通成功。仅诊断benchmark_convert4.py把大输出同容差数值比较移CPU（保留设备一致性检查），两次比较通过后保存Engine，用于后续推理测量。未覆盖安装/已发布转换脚本，不将诊断当产品修复。
+- 路径对照：同1.3.12推理4x/7680x4320帧回传，再FFmpeg Lanczos缩2x为16.97s/3.536FPS，缩3x为16.93s/3.544FPS。不是旧发行版整体复现，也未验证用户原9FPS参数/设备。约13%的2x数值差只作本轮观测，受功耗温控影响，不能当恒频性能承诺。
+- 纯Engine预热5/测20次：2x平均269.364ms/3.712FPS，3x276.999ms/3.610FPS，4x274.301ms/3.646FPS，实际输出均FP16且尺寸正确。单独RGB量化/回传约14.14/24.65/49.60ms。同步GPU采样81–82℃、577–900MHz；nvidia-smi -q显示SW Power Cap及SW Thermal Slowdown Active，Current Power Limit55W/Default80W，Target Temperature75℃。因此不能将当前全部低速归因代码或以本轮断言此前修复无效；之前正确低倍率路径已确认，但先前96x64/4帧验证没有证明恢复9FPS。
+- 用户“不必测了，等pr”到达时冷却2x复测进行中，taskkill /PID 26096 /T /F只终止本轮已核对root及4个子进程；该轮无有效结果，不计入数据。不再追加GPU/构建测试。命令及证据：Artifacts/avv3-speed-audit的prepare.py/run.py、identity.json/results.json、各CLI/progress日志、4-build-cpu-check.log、engine-results.json、gpu-limits-after.log；所有产物位于项目内忽略目录。
+- 当前结论：等待PR审核，不推断“集成效率回来了”具体实现或真实性；产品源码/版本/安装/发布不改，版本迭代记录不改。STATUS与中文进度收尾，工作树仅两份记录未提交、非干净，建议后续继续或切换工具前考虑Git提交。
+
+
+### 2026-10-06 18:00 Codex：审核 PR #10/#11
+
+- 同工具延续会话，按HandShake读取AGENTS/INDEX/STATUS及技能，git pull --ff-only与status完成，保留启动时两份记录改动。审核固定maxzrb/VideoEnhancer #10 ea3776f7898677ac61b1ba3b1f7aba71cc972eb9、#11 6f0756bbcf188f7804e11f46fb0b7d662be43178，共同基线f261e375；gh查询显式--repo，两个PR OPEN、无远端自动检查。先前默认gh选中upstream的PR查询不能作为本fork是否有PR的证据。
+- 执行git fetch origin refs/pull/10/head:refs/remotes/origin/pr-10-review及11对应ref，在项目Artifacts/pr10-review-current、pr11-review-current建立detached worktree，产品审查不改主分支。
+- PR10：dotnet build cli/VideoEnhancer.csproj -c Release通过0警告0错误；dotnet publish VideoEnhancer.slnx -c Release -p:PluginInstallDir=成功生成EXE/ZIP/安装器/183项源码包。test-native-archives.ps1 40项、test-third-party-package.ps1 110项通过，包含归档预检、错误/取消、模拟内部安装、逐项哈希、FFF API11与导出检查。独立FFF不内嵌LakeUI，移除SharpCompress，RAR不再支持且文档已写。只确认许可材料的技术打包，不对未公开商业授权作独立法律判断。
+- PR11：CLI与插件Release构建0警告0错误；PixelPreview Probe按LakeUIVersion=5.110.0及5.112.0运行实际OnPreviewFrameReady，assign/replace/clear/ownership均通过。PR10未修复回调在5.112通过同一Probe复现MissingMethodException:set_Image，退出-532462766属于预期对照。FpsTracker Probe通过initial-frame-offset/pause-time/eta。便携Python -B运行test_tensorrt_output_scale.py，CPU/CUDA两项通过，非测速；ModelMetadataUi Probe18项通过，未启动宿主/显示窗口。
+- 结论：没有发现阻止合并的新缺陷。此前AVV3目标倍率调度及安装转换脚本已有图内缩放，PR11补充随CLI内嵌同步，未替换官方4x权重；2/3x仍4x网络后GPU双三次缩小。FPS修正不提高实际吞吐。作者约9FPS数据包含异机及SVT CDEF自动策略/预设变化，其原始日志不在本仓库，不能宣称全部性能回退已解决或证明此前修复失败。此前6GB/1080p/4x torch_tensorrt.save校验OOM逻辑仍存在，作为既有未解决问题；没有大尺寸构建/长时间测速。四宫格只修遗留调用，入口未恢复。
+- git merge-tree --write-tree显示产品代码可自动合并，仅docs/codex/STATUS.md与version/工作进度.md冲突；合并须保留两边历史及本地审核记录。本轮没有实际合并或组合版本运行。两个review worktree各自git diff --check通过；PR10的.gitattributes保留上游许可原文空白，不改其哈希。
+- 收尾新增docs/pr10-pr11-review.md，更新STATUS snapshot/TODO/Git Sync及此会话记录，并追加中文进度。不改版本迭代记录。所有下载/构建/模拟安装在项目Artifacts隔离目录；本机正式安装、版本、远端不变。主工作区三个文档变化，非干净，无提交/推送/部署/发布，建议继续合并或切换工具前考虑Git提交。
