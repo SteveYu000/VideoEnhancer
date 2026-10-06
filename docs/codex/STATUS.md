@@ -1,11 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-06 19:32
+Last updated: 2026-10-06 19:34
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 19:34：用户授权安全合并PR10/11，已完整合入main：PR11 eb51739，PR10 c3f667d，合并前审核恢复点81be99d/codex/pre-pr10-pr11-20261006。产品代码无冲突，两份记录冲突已保留双方会话且逐块校验。组合版在Artifacts/pr10-pr11-merged完成publish、110项打包/真实项目内安装及FFF API11、LakeUI5.110/5.112实际回调、FPS和倍率UI18项检查；转换器内嵌资源/源码ZIP SHA一致。源码ZIP约60MiB独立，运行ZIP约17MiB，包内无源码归档。根据用户“无必要就不发”核对LGPL2.1第4条、MS-RL3(A)与GPL2第3条：相关第三方完整对应源码须可获取，ZIP形式非强制；当前仓库自动源码不含完整FriBidi/构建补丁/WiX源码，因此保留PR10独立source.zip作为后续发行的履约方案，旧1.3.12不补发、不上传Release、不改版本、不部署。两PR远端均MERGED，origin/main已包含两个合并提交；本条收尾记录将提交并普通推送，完成后核对工作树与远端SHA。原速度反馈同条件A/B及6GB/1080p/4x保存OOM仍未解决，不恢复长测速。
 
 - 2026-10-06 19:32：用户授权安全合并PR10/11，已完整合入main：PR11 eb51739，PR10 c3f667d，合并前审核恢复点81be99d/codex/pre-pr10-pr11-20261006。产品代码无冲突，两份记录冲突已保留双方会话且逐块校验。组合版在Artifacts/pr10-pr11-merged完成publish、110项打包/真实项目内安装及FFF API11、LakeUI5.110/5.112实际回调、FPS和倍率UI18项检查；转换器内嵌资源/源码ZIP SHA一致。源码ZIP约60MiB独立，运行ZIP约17MiB，包内无源码归档。根据用户“无必要就不发”核对LGPL2.1第4条、MS-RL3(A)与GPL2第3条：相关第三方完整对应源码须可获取，ZIP形式非强制；当前仓库自动源码不含完整FriBidi/构建补丁/WiX源码，因此保留PR10独立source.zip作为后续发行的履约方案，旧1.3.12不补发、不上传Release、不改版本、不部署。本地合并完成，准备普通推送origin/main，远端PR状态待核对。原速度反馈同条件A/B及6GB/1080p/4x保存OOM仍未解决，不恢复长测速。
 
@@ -242,6 +244,8 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-06 19:34：两PR远端均MERGED，origin/main已包含两个合并提交；本条收尾记录将提交并普通推送，完成后核对工作树与远端SHA。普通Git操作，无force；原审核记录已提交81be99d，两个PR精确head作为合并父提交保留。验证worktree无跟踪文件变化。
 
 - 2026-10-06 19:32：本地合并完成，准备普通推送origin/main，远端PR状态待核对。普通Git操作，无force；原审核记录已提交81be99d，两个PR精确head作为合并父提交保留。验证worktree无跟踪文件变化。
 
@@ -764,3 +768,10 @@ git diff --check
 - 组合验证：git worktree add --detach Artifacts/pr10-pr11-merged c3f667d；缓存从项目内既有审核目录复用，只覆盖隔离新建目录；dotnet publish solution -c Release -p:PluginInstallDir=且FffNativeCacheDirectory指定项目内已校验缓存。成功生成四类产物，源码ZIP192项约62882085字节，运行ZIP18040761字节；独立源码不进入运行包。test-third-party-package.ps1 110项、PixelPreview Probe5.110/5.112实际插件回调、FpsTracker Probe及ModelMetadataUi18项通过，转换器内嵌资源与独立源码ZIP均匹配源文件SHA。没有重复40项归档/长GPU测速、没有启动或覆盖本机宿主/正式安装。
 - 用户追加“根据许可证要求有必要增发源码包吗，没有必要就不发”。在线核对OSI许可原文：LGPL2.1第4条要求分发库二进制时提供对应完整源码/同处等效下载；MS-RL第3(A)要求相关文件源码；GPL2第3条规定完整对应源码供给方式。7-Zip官方FAQ对未修改组件有明确来源链接说明，不能泛称所有组件都强制ZIP；MIT原创主体也无强制源码ZIP义务。具体履约方案选择为保留现有独立源码资产，因自动GitHub项目源码不含FriBidi完整源码、vcpkg构建补丁及WiX对应源码。该选择是当前分发方案的完整源码供给方式，ZIP格式不是唯一法律要求；若未来取消，须先提供等效完整渠道。参考：https://opensource.org/license/lgpl-2-1、https://opensource.org/license/ms-rl、https://opensource.org/license/gpl-2.0、https://www.7-zip.org/faq.html。GNU网页部分超时，使用OSI原文及上游官方FAQ核对。
 - 本地合并完成，准备普通推送origin/main，远端PR状态待核对。本次不修改/补发已发布v1.3.12附件、不上传新Release、不改版本或版本迭代记录、不部署，不宣称原9→3.9问题及4x OOM全部解决。审核报告追加组合验证与源码方案核对，STATUS及中文进度同步，完成步骤后考虑Git提交；本轮将保存并推送记录，最终核对干净工作树。
+
+
+### 2026-10-06 19:34 Codex：PR10/11远端合并确认与收尾
+
+- git push origin main成功，f261e37→cfbb2c5，未强制推送。gh api回读PR10与PR11均closed/merged=true，合并SHA分别c3f667dc51d9186b4f300e8bbc75467083030fc4、eb51739af9e32752190b0d2e27d48b2d0716a486。git ls-remote与本地HEAD均cfbb2c51f0619702b6316889440c0d316720943a，主工作树及组合验证worktree无未提交文件，冲突标记检查为空。
+- 完整会话历史再次核对通过。用户追加的源码问题已按前条核对：有第三方对应源码供给义务，ZIP非唯一格式；当前保留后续独立source.zip流程，没有补发旧版或上传Release。组合验证结果见前条及审核报告，版本与正式安装未改，速度与低显存4x问题仍保留。
+- 更新当前快照与此收尾记录、追加中文进度，随后提交并普通推送；最终核对远端HEAD与工作树。合并、验证记录都已保存，无需用户再次提交本轮内容；继续或切换工具前可确认Git状态。
