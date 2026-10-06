@@ -1,0 +1,111 @@
+{
+  "version": "2026.8.19",
+  "apiVersion": 11,
+  "commit": "c43614ca5c77f40cb3cb2b2254a54bd4fea2e614",
+  "vcpkgBaseline": "e03dc9b29710050cd1018bc5674688108658d327",
+  "container": {
+    "url": "https://github.com/Lake1059/FFF_Project/releases/download/2026.8.19/FFF.Player.exe",
+    "sha256": "d948c48fc31c28fa17e485d4565f1a1f283037a11f2925476dacad59a4219906"
+  },
+  "files": [
+    {
+      "name": "FFF.Native.dll",
+      "sha256": "3d78ebff7407adaa4a947d1310f87b29dddedc662d4e6373def095f7397db494"
+    },
+    {
+      "name": "ass-9.dll",
+      "sha256": "331ff8e3b281b7f5186d2dfb559720259983a0261a931992e6ec638b44577ded"
+    },
+    {
+      "name": "brotlicommon.dll",
+      "sha256": "d7f1fd53eb4eafa6ea962dcc185a9aa0a60e53d9e94e730ca2914ad572c1017e"
+    },
+    {
+      "name": "brotlidec.dll",
+      "sha256": "f4cec9595b6d3b41272b4317c3793ac9584e2238af3553fe6c9d38954d690b39"
+    },
+    {
+      "name": "fribidi-0.dll",
+      "sha256": "b74b3e2d699fbce95bfaf247b6f276d0d4e15ae3e91d719795fe8a472c7dd2ee"
+    },
+    {
+      "name": "harfbuzz.dll",
+      "sha256": "77e5d84ad35fe652a1cf63fa693d69393b556a9885b3575bff47e16406d57f29"
+    },
+    {
+      "name": "bz2.dll",
+      "sha256": "cb794407aa590244fd92ac4df526dab47676fc28a2024ea45bde9beb91b502fb"
+    },
+    {
+      "name": "freetype.dll",
+      "sha256": "a6ea7c9718aae5632dc9a6a34942a01c6285147b5d64bae2c85dd1bfb1fcc297"
+    },
+    {
+      "name": "libpng16.dll",
+      "sha256": "3293f8100a96c39c9502787eee45e4f6a2e2f696ece0d77d79d10ab4b9cc0f19"
+    },
+    {
+      "name": "z.dll",
+      "sha256": "01a4321ae97d8143b1b4e42cb6c6830e349f9434166e2304efcf9ca14f4ba64a"
+    }
+  ],
+  "sources": [
+    {
+      "sha256": "8C9EEBBF4F0A7E9D4E7CEC6D43822F422178E4A28D6AA54CDD55F05C66DDDB71",
+      "name": "FFF_Project-c43614ca-source.tar.gz",
+      "url": "https://codeload.github.com/Lake1059/FFF_Project/tar.gz/c43614ca5c77f40cb3cb2b2254a54bd4fea2e614"
+    },
+    {
+      "sha256": "5A1D187A33DAA58FCEE2AD77F0EB9D136DD6FA4096239199BA31E850D397E8A8",
+      "name": "fribidi-1.0.16-source.tar.gz",
+      "url": "https://codeload.github.com/fribidi/fribidi/tar.gz/refs/tags/v1.0.16"
+    },
+    {
+      "sha256": "079A72DD0E560030DC579A754A187086A537D061E84EB74710882D852ADD26AE",
+      "name": "vcpkg-e03dc9b-source.tar.gz",
+      "url": "https://codeload.github.com/microsoft/vcpkg/tar.gz/e03dc9b29710050cd1018bc5674688108658d327"
+    }
+  ],
+  "notices": [
+    {
+      "name": "brotli-MIT.txt",
+      "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+    },
+    {
+      "name": "bzip2.txt",
+      "sha256": "c6dbbf828498be844a89eaa3b84adbab3199e342eb5cb2ed2f0d4ba7ec0f38a3"
+    },
+    {
+      "name": "FFF_Project-MIT.txt",
+      "sha256": "002c2696d92b5c8cf956c11072baa58eaf9f6ade995c031ea635c6a1ee342ad1"
+    },
+    {
+      "name": "freetype-FTL.txt",
+      "sha256": "5a5ee54c5001bbad1cdc1a57cc3dd4c42199b2da09d39c7ee41fab002d02967f"
+    },
+    {
+      "name": "freetype-LICENSE.txt",
+      "sha256": "bd36c8b474855fa294c2ec5c184544478ef3720aad37d65a6296a4f264fd2d3b"
+    },
+    {
+      "name": "fribidi-LGPL.txt",
+      "sha256": "32434afcc8666ba060e111d715bfdb6c2d5dd8a35fa4d3ab8ad67d8f850d2f2b"
+    },
+    {
+      "name": "harfbuzz-MIT.txt",
+      "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
+    },
+    {
+      "name": "libass-ISC.txt",
+      "sha256": "f7e30699d02798351e7f839e3d3bfeb29ce65e44efa7735c225464c4fd7dfe9c"
+    },
+    {
+      "name": "libpng.txt",
+      "sha256": "bdb0a645ea18c60507d0368379b1ac5474b92255fcc2d115e07486a7672ba526"
+    },
+    {
+      "name": "zlib.txt",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2"
+    }
+  ]
+}

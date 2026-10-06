@@ -101,7 +101,7 @@ internal static class CliHelp
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_DATASET 可覆盖仓库 ID；私有仓库需设置");
         writer.WriteLine("        VIDEOENHANCER_MODELSCOPE_TOKEN 或 MODELSCOPE_API_TOKEN（不会写入配置文件）");
         writer.WriteLine("  --clean-download-archives  清理 models、python 与 RTX runtime 专用目录中的下载压缩包");
-        writer.WriteLine("  --download-model <路径>  用独立安装的 aria2-next 下载镜像文件；压缩包自动用 SharpCompress 解压");
+        writer.WriteLine("  --download-model <路径>  用独立安装的 aria2-next 下载镜像文件；压缩包自动用独立 7za 解压");
         writer.WriteLine("  --delete-download-model <路径>  删除本地单文件模型；RTX runtime 路径执行专用卸载，其他组件与压缩包拒绝删除");
         writer.WriteLine("  --backend-status [--json]  检查后端版本、可用增量补丁和预计下载大小");
         writer.WriteLine("  --update-backend  按最小补丁链事务更新后端；失败或中断时自动回滚");
@@ -109,7 +109,7 @@ internal static class CliHelp
         writer.WriteLine("  --apply-backend-patch <文件>  离线应用后端增量补丁");
         writer.WriteLine("  --backend-channel <URL或文件>  指定更新通道；也可设置 VIDEOENHANCER_BACKEND_CHANNEL");
         writer.WriteLine("  --download-url <链接> --download-output <文件>  使用独立安装的 aria2-next 下载任意直链");
-        writer.WriteLine("  --extract-archive <文件> [--extract-output <目录>]  使用 SharpCompress 托管解压");
+        writer.WriteLine("  --extract-archive <文件> [--extract-output <目录>]  使用独立 7za 解压（7z/ZIP/TAR/GZip/XZ/BZip2/Zstd）");
         writer.WriteLine("  --third-party-notices  显示第三方组件和许可证信息");
         writer.WriteLine("  --license  显示 VideoEnhancer 项目 MIT 许可证");
         writer.WriteLine("  --image-input <文件>  添加一个图片输入（可重复）");

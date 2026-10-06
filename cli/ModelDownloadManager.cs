@@ -347,11 +347,15 @@ internal sealed class ModelDownloadManager
         var extension = Path.GetExtension(path);
         return extension.Equals(".7z", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".zip", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".rar", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tar", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".bz2", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tgz", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".txz", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tbz2", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tzst", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".gz", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".xz", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".zst", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".tar", StringComparison.OrdinalIgnoreCase);
+            || extension.Equals(".zst", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsRtxVideoRuntimeArchivePath(string path)

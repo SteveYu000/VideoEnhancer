@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (c) 2026 VideoEnhancer contributors
+# 本脚本与 RVE 结合运行；完整许可见 ../third-party/RVE/AGPL-3.0.txt。
 """Dedicated temporal FlashVSR runner used by rve-backend.
 
 FlashVSR consumes a sequence of frames (at least 21 after padding), so it cannot

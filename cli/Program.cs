@@ -38,7 +38,6 @@ internal static class Program
     }
     private const string EmbeddedThirdPartyNoticesResource = "VideoEnhancer.Embedded.THIRD-PARTY-NOTICES.txt";
     private const string EmbeddedProjectLicenseResource = "VideoEnhancer.Embedded.LICENSE.txt";
-    private const string EmbeddedSharpCompressLicenseResource = "VideoEnhancer.Embedded.SharpCompress.LICENSE.txt";
     private static int _jobOutputScale;
     private const string EmbeddedOutputScaleResource = "VideoEnhancer.Embedded.rve_output_scale.py";
     private const string EmbeddedFlashVsrResource = "VideoEnhancer.Embedded.rve-flashvsr-backend.py";
@@ -1379,7 +1378,7 @@ internal static class Program
     private static int CreateSevenZip(string[] args)
     {
         if (args.Length != 3) return Fail("--create-7z 需要 <源目录> <输出.7z>");
-        ManagedArchiveExtractor.CreateSevenZip(args[1], args[2]);
+        NativeSevenZipExtractor.CreateSevenZip(args[1], args[2]);
         Console.WriteLine("ARCHIVE_CREATE_COMPLETE|" + Path.GetFullPath(args[2]));
         return 0;
     }
@@ -1389,7 +1388,11 @@ internal static class Program
         foreach (var resourceName in new[]
         {
             EmbeddedThirdPartyNoticesResource,
-            EmbeddedSharpCompressLicenseResource
+            "VideoEnhancer.Embedded.LICENSE-SCOPE.md",
+            "VideoEnhancer.Embedded.RVE.AGPL-3.0.txt",
+            "VideoEnhancer.Embedded.DotNet.LICENSE.TXT",
+            "VideoEnhancer.Embedded.DotNet.THIRD-PARTY-NOTICES.TXT",
+            "VideoEnhancer.Embedded.DotNet.SOURCE.txt"
         })
         {
             using var source = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName)
@@ -2167,8 +2170,18 @@ internal static class Program
             };
             PortablePaths.ConfigureChildProcess(start);
             DownloadCancellation.Check();
+            if (Uri.TryCreate(url, UriKind.Absolute, out var downloadUri) &&
+                downloadUri.Scheme is "http" or "https")
+            {
+                // HTTP 资源不需要 P2P；避免 libtorrent 的公网监听拖住进程退出。
+                foreach (var argument in new[] { "--bt-interface=127.0.0.1", "--enable-dht=false",
+                             "--bt-enable-lpd=false", "--bt-port-mapping=false" })
+                    start.ArgumentList.Add(argument);
+            }
             foreach (var argument in new[]
             {
+                // 新版 aria2 用数据库持久化续传状态，必须保持在插件便携目录内。
+                "--no-conf=true", "--state-dir=" + Path.Combine(PortablePaths.CacheRoot, "aria2-next"),
                 "--allow-overwrite=true", "--auto-file-renaming=false", "--continue=true",
                 "--file-allocation=none", "--max-connection-per-server=8", "--split=8",
                 "--min-split-size=1M", "--summary-interval=1", "--enable-color=false",
@@ -2220,7 +2233,7 @@ internal static class Program
         {
             if (!File.Exists(archive)) return Fail("压缩文件不存在：" + archive, 1);
             if (printComplete) Console.WriteLine("EXTRACT_START|" + outputDirectory);
-            ManagedArchiveExtractor.Extract(archive, outputDirectory,
+            NativeSevenZipExtractor.Extract(archive, outputDirectory,
                 printComplete ? percent => Console.WriteLine("EXTRACT_PROGRESS|" + percent) : null);
             if (printComplete) Console.WriteLine("EXTRACT_COMPLETE|" + outputDirectory);
             return 0;
@@ -3264,7 +3277,7 @@ internal static class Program
     }
 
     private static bool IsModelArchive(string path) =>
-        new[] { ".zip", ".7z", ".rar", ".tar", ".gz", ".xz", ".zst" }
+        new[] { ".zip", ".7z", ".tar", ".gz", ".xz", ".bz2", ".zst", ".tgz", ".txz", ".tbz2", ".tzst" }
             .Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
     private static void WriteInspectionJson(ModelImportInspection item)

@@ -1,0 +1,15 @@
+REAL-Video-Enhancer 与 Python 集成脚本
+===================================
+
+项目：https://github.com/TNTwise/REAL-Video-Enhancer
+上游许可：GNU Affero General Public License version 3；全文见 AGPL-3.0.txt。
+VideoEnhancer 的 cli/embedded-tools/ Python 集成脚本与 cli/Program.cs 中用于
+修补 RVE 模块的 Python 代码片段选择 AGPL-3.0-only，
+用于在独立 Python 进程内调用/扩展 RVE；这些脚本完整源码随本仓库及 CLI 资源提供。
+修改日期与来源提交可通过本仓库 Git 历史核对，不能将这部分集成代码标为 MIT。
+
+VideoEnhancer C#/VB 前端通过独立进程和命令行与后端通信。RVE 后端、Python、
+PyTorch、TensorRT、NCNN、ONNX Runtime、FlashVSR、BasicVSR++ 和模型权重
+不由本体 ZIP/安装器分发，不能因为 VideoEnhancer 主体 MIT 而改变其许可。
+独立后端归档的维护者须随各实际版本提供许可和对应源码，不得只提供主页链接。
+模型权重的授权以每个原作者发布记录为准；尚不能确认的权重见 README 的来源表。

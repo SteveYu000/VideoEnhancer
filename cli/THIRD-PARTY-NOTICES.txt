@@ -1,8 +1,9 @@
 VideoEnhancer 第三方组件声明
 ===========================
 
-发行包包含以下第三方组件。VideoEnhancer 项目源码采用 MIT 许可证，
-第三方组件按各自许可证分发。
+VideoEnhancer 原创 C#/VB 前端采用 MIT，Python RVE 集成脚本采用 AGPL-3.0-only。
+完整适用范围见 LICENSE-SCOPE.md。第三方组件保持各自许可证；MIT 不限制
+用户依法复制、修改、替换或再分发 GPL/LGPL 组件。
 
 aria2-next 2.8.3
 ----------------
@@ -19,19 +20,56 @@ aria2-next 2.8.3
 EXE 通过独立进程调用该组件。同版完整源码归档作为独立构建产物随发行包发布，
 包含 third_party 依赖源码和上游构建配置。
 
-SharpCompress 0.50.3
---------------------
-
-用途：在 videoenhancer.exe 内提供托管压缩包读取、解压和 7z 创建能力。
-项目：https://github.com/adamhathcock/sharpcompress
-许可证：MIT License。
-完整许可证：licenses/SharpCompress/LICENSE.txt
-
 7-Zip Extra 26.03
 ----------------
 
-用途：bin/7zip/7za.exe 原生 7z 解压，支持压缩包允许的多线程解码。
-运行 EXE 携带该独立工具、许可证与源码，首次解压时按需释放至便携目录。
+用途：bin/7zip/7za.exe 统一解压 7z/ZIP/TAR/GZip/XZ/BZip2/Zstd，并创建 7z。
+运行 EXE 携带该独立工具与许可证，首次解压时按需释放至便携目录。
 项目：https://github.com/ip7z/7zip
 许可证：GNU LGPL 2.1 or later，部分代码使用 BSD 许可证。
-完整声明与对应源码：licenses/7zip/License.txt、SOURCE.txt、7z2603-src.tar.xz。
+完整声明与源码说明：licenses/7zip/License.txt、SOURCE.txt。
+对应源码：独立 VideoEnhancer-<version>-source.zip 内 third-party/7zip/。
+
+FFF.Native API 11（FFF_Project 2026.8.19）及动态依赖
+-------------------------------------------------
+
+用途：预览与四宫格的 D3D11 原生播放内核，安装在 bin/fff-native-11。
+项目：https://github.com/Lake1059/FFF_Project
+FFF.Native：MIT；libass：ISC；Brotli：MIT；bzip2：bzip2-1.0.6；
+FreeType：FTL；FriBidi：LGPL-2.1-or-later；HarfBuzz：MIT-Modern-Variant；
+libpng：libpng-2.0；zlib：Zlib。
+各库许可证、版本/哈希与来源：licenses/fff-native/，对应源码在独立源码包 third-party/fff-native/。
+Portions of this software are copyright © 2026 The FreeType Project
+(www.freetype.org). All rights reserved.
+使用独立 DLL，用户可以修改/替换 LGPL 库以及为调试修改进行逆向工程。
+不提取或分发官方播放器的 LakeUI/FFmpeg；FFmpeg 共享库由用户独立取得。
+
+LakeUI 5.110.0（宿主提供）
+-------------------------
+
+项目：https://github.com/Lake1059/LakeUI
+VideoEnhancer 使用已取得的上游赞助许可证（维护者 2026-10-05 确认）。
+许可范围与独立发布者授权说明：licenses/LakeUI/SOURCE.txt。
+该授权不改变 LakeUI 的公开 GPL-3.0 许可，不自动转授其他项目。
+插件包不包含 LakeUI.dll，运行时由 3FUI 提供。
+
+REAL-Video-Enhancer / Python 集成
+--------------------------------
+
+项目：https://github.com/TNTwise/REAL-Video-Enhancer
+上游许可：AGPL-3.0；本项目 Python RVE 集成脚本：AGPL-3.0-only。
+源码位于本仓库 cli/embedded-tools/ 和 cli/Program.cs 中的 RVE Python 修补片段；
+这些 Python 内容按 AGPL-3.0-only 提供。全文及源码说明：licenses/RVE/。
+独立 Python 后端、推理运行库及模型按需另行下载，不由本体安装器/ZIP 提供。
+FFmpeg、RTX/NVIDIA SDK 和各权重许可需按独立组件实际分发版本履行；
+本声明不将模型权重或可选运行库重新许可为 MIT。
+
+.NET 自包含运行库 / WiX 首次安装器
+---------------------------------
+
+.NET 项目：https://github.com/dotnet/runtime（MIT 及其第三方依赖许可）。
+构建从实际 runtime pack 复制完整 LICENSE.TXT、THIRD-PARTY-NOTICES.TXT，
+许可证和所选版本/源码说明位于 licenses/dotnet/，运行 EXE 同时内嵌许可正文。
+WiX 6.0.2：https://github.com/wixtoolset/wix（MS-RL）；安装器引擎及标准界面
+保持上游许可。完整许可和官方工具维护费协议在 licenses/wix/，引擎对应源码
+在独立源码包 third-party/wix/。VideoEnhancer 原创安装逻辑和载荷继续 MIT。

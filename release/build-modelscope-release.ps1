@@ -100,11 +100,11 @@ foreach ($requiredValue in ([ordered]@{
     }
 }
 
-# 正式发布先构建一次托管归档工具，后端门禁不再依赖系统安装的 7-Zip。
+# 正式发布先构建一次原生 7za 归档入口，后端门禁不再依赖系统安装的 7-Zip。
 if (-not $ValidateOnly -and [string]::IsNullOrWhiteSpace($ArchiveTool)) {
     $buildArguments = @('build', $solution, '-c', 'Release')
     & dotnet @buildArguments
-    if ($LASTEXITCODE -ne 0) { throw '托管归档工具构建失败' }
+    if ($LASTEXITCODE -ne 0) { throw '原生 7za 归档入口构建失败' }
     $ArchiveTool = Join-Path $root 'cli\bin\Release\net10.0-windows\win-x64\videoenhancer.exe'
 }
 
@@ -132,8 +132,6 @@ if ($ValidateOnly) {
 
 $sourceVersion = Get-ProjectVersion $pluginProject
 $cliSourceVersion = Get-ProjectVersion $cliProject
-$aria2NextVersion = Get-ProjectProperty $cliProject 'Aria2NextVersion'
-$aria2NextSourceSha256 = Get-ProjectProperty $cliProject 'Aria2NextSourceSha256'
 if (-not $Version) { $Version = $sourceVersion }
 
 if ($sourceVersion -ne $Version) {
@@ -162,21 +160,13 @@ $versionRoot = Join-Path $distRoot (Join-Path 'releases' $Version)
 if (Test-Path -LiteralPath $versionRoot) { Remove-Item -LiteralPath $versionRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $versionRoot | Out-Null
 
-# GPL 二进制与精确对应源码归档必须出现在同一次正式发布中，并由固定哈希门禁。
-$aria2NextSourceName = "aria2-next-$aria2NextVersion-source.tar.gz"
-$aria2NextSourcePath = Join-Path $versionRoot $aria2NextSourceName
-$aria2NextSourceUrl = "https://github.com/AnInsomniacy/aria2-next/archive/refs/tags/v$aria2NextVersion.tar.gz"
-# 复用构建已验证的源码归档，随后仍按发布锁定值重新核对哈希。
-$builtAria2NextSource = Join-Path $artifactsRoot $aria2NextSourceName
-if (Test-Path -LiteralPath $builtAria2NextSource -PathType Leaf) {
-    Copy-Item -LiteralPath $builtAria2NextSource -Destination $aria2NextSourcePath -Force
-} else {
-    Invoke-WebRequest -UseBasicParsing -Uri $aria2NextSourceUrl -OutFile $aria2NextSourcePath
-}
-$actualAria2NextSourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $aria2NextSourcePath).Hash
-if ($actualAria2NextSourceHash -ne $aria2NextSourceSha256) {
-    throw "aria2-next 对应源码校验失败：期望 $aria2NextSourceSha256，实际 $actualAria2NextSourceHash"
-}
+# 源码作为单独资产；发布前重新核对二进制与对应源码包的逐项哈希。
+$sourcePackageName = "VideoEnhancer-$Version-source.zip"
+$sourcePackagePath = Join-Path $versionRoot $sourcePackageName
+$builtSourcePackage = Join-Path $ArtifactsRoot 'VideoEnhancer-Source.zip'
+if (-not (Test-Path -LiteralPath $builtSourcePackage -PathType Leaf)) { throw "缺少独立源码包：$builtSourcePackage" }
+& (Join-Path $PSScriptRoot 'test-third-party-package.ps1') -Package (Join-Path $ArtifactsRoot 'VideoEnhancer.zip') -SourcePackage $builtSourcePackage -ArtifactsRoot $ArtifactsRoot
+Copy-Item -LiteralPath $builtSourcePackage -Destination $sourcePackagePath -Force
 
 $exeSource = Join-Path $artifactsRoot 'videoenhancer.exe'
 if (-not (Test-Path -LiteralPath $exeSource)) { throw "缺少发布文件：$exeSource" }
@@ -220,7 +210,7 @@ $releaseNotesPath = Join-Path $distRoot 'release-notes.txt'
 Write-Host "OK: $packagePath"
 Write-Host "OK: $installerPath"
 Write-Host "OK: $manualPath"
-Write-Host "OK: $aria2NextSourcePath"
+Write-Host "OK: $sourcePackagePath"
 Write-Host "OK: $stablePath"
 
 # 首次安装程序与运行时更新包分别验证。
@@ -304,7 +294,7 @@ if ($PublishGithub) {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
         throw '未找到 gh CLI；请安装 GitHub CLI 并 gh auth login 后重试'
     }
-    $code = Invoke-Native { gh release create "v$Version" $packagePath $installerPath $manualPath $aria2NextSourcePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
+    $code = Invoke-Native { gh release create "v$Version" $packagePath $installerPath $manualPath $sourcePackagePath $stablePath --repo $GithubRepo --title "VideoEnhancer $Version" --notes-file $releaseNotesPath }
     if ($code -ne 0) { throw "gh release create v$Version 失败（$GithubRepo）" }
     Write-Host "OK: GitHub Release v$Version 已创建（$GithubRepo）"
 }
@@ -324,7 +314,7 @@ if ($PublishModelScope) {
 if (-not $PublishGithub -and -not $PublishModelScope) {
     Write-Host "ModelScope 上传目录：$distRoot"
     Write-Host '手动发布命令：'
-    Write-Host "  gh release create v$Version `"$packagePath`" `"$installerPath`" `"$manualPath`" `"$aria2NextSourcePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
+    Write-Host "  gh release create v$Version `"$packagePath`" `"$installerPath`" `"$manualPath`" `"$sourcePackagePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
     Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$distRoot`" --repo_type dataset"
     Write-Host "  modelscope upload $ModelScopeModelsDataset `"$packagePath`" Plugin/videoenhancer.exe --repo_type dataset --no-cache"
 }
