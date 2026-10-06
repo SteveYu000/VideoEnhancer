@@ -1,11 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-06 19:48
+Last updated: 2026-10-06 20:30
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 20:30：1.3.13最终构建与必要门禁通过，四宫格专属代码已剥离；修正安装/Burn检查的旧Artifacts路径误读。后端UNCHANGED，准备冻结并上传五项GitHub资产/运行镜像，源码ZIP仅GitHub。提交3747d0a已保存，检查脚本和本条待保存，正式发布仍待完成。
 
 - 2026-10-06 20:20：继续发行1.3.13，新增四宫格残留安全剥离范围；完成引用检查并删除专属三文件/入口残留/DPI测试，实时预览兼容层保留，构建与发行门禁待执行。
 
@@ -795,3 +797,10 @@ git diff --check
 - 用户追加授权安全剥离四宫格残留。同工具续做，读取AGENTS/INDEX/STATUS和HandShake，git pull --ff-only最新，保留前轮18项发行准备改动。修复cli/README混合换行被规范化产生的无关差异。
 - 引用核对确认QuadGridForm/QuadGridControls/GridCompositionBuilder仅为已取消功能使用；删除三文件、主面板未接入按钮/窗口字段/点击回调/释放代码和专属DPI检查，保留主面板DPI与实时预览PixelPreviewImage兼容层、独立FFF运行分发。发布说明及当前文档同步，旧历史保留。
 - 尚未发布；接下来运行必要构建、预览双版本与DPI及既有发行门禁，保存提交后发布固定产物与单GitHub源码附件。
+
+
+### 2026-10-06 20:30 Codex：1.3.13发行门禁通过并准备冻结
+
+- Release构建0警告0错误，Python顺序回归9项通过；后端逐文件审计UNCHANGED，保持2026.09.30.1，无后端/模型/RTX包重发。新189项独立源码包、110项运行/源码/隔离安装/API11检查通过。
+- 首次installer/Burn检查命中既有脚本硬编码Artifacts目录导致误读旧载荷/旧运行EXE，不是新包安装损坏；为两脚本添加ArtifactsRoot参数并由发布脚本传入。改后installer/updater/回滚/Burn/5项release门禁、DownloadQueue/ComponentInstallStatus/DownloadQueueUi、host-runtime/scroll、主面板DPI和LakeUI5.110/5.112实际预览回调全部通过；日志Artifacts/release-1.3.13。
+- 四宫格专属三文件与主面板残留已删除并成功构建，现存正常预览不变。代码准备提交、单独刷新源码ZIP（脚本修正不改变运行二进制），冻结五资产后推送v1.3.13并发布GitHub和ModelScope；源码仅GitHub，镜像暂存目录仅六个本版运行/说明文件。尚未上传，原性能与4x OOM限制保留。

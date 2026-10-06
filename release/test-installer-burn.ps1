@@ -1,8 +1,11 @@
-param([string]$Installer = '')
+param([string]$Installer = '', [string]$ArtifactsRoot = $env:VIDEOENHANCER_ARTIFACTS_DIR)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Installer) { $Installer = Join-Path $root 'Artifacts/VideoEnhancerInstaller.exe' }
+if (-not $ArtifactsRoot) { $ArtifactsRoot = Join-Path $root 'Artifacts' }
+if (-not [IO.Path]::IsPathRooted($ArtifactsRoot)) { $ArtifactsRoot = Join-Path $root $ArtifactsRoot }
+$ArtifactsRoot = [IO.Path]::GetFullPath($ArtifactsRoot)
+if (-not $Installer) { $Installer = Join-Path $ArtifactsRoot 'VideoEnhancerInstaller.exe' }
 $Installer = [IO.Path]::GetFullPath($Installer)
 $probeRoot = Join-Path $root ('Artifacts/.refactor-tmp/burn-green-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $probeRoot | Out-Null
@@ -59,7 +62,7 @@ Assert-NoBurnResidue
 if ((Invoke-Burn $hostRoot (Join-Path $probeRoot 'success.log')) -ne 0) { throw '外层 WiX 安装失败' }
 $dll = Join-Path $hostRoot 'Plugin/videoenhancer.3fui.dll'
 $exe = Join-Path $hostRoot 'Plugin/videoenhancer/videoenhancer.exe'
-if ((Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'Artifacts/videoenhancer.exe')).Hash) { throw '外层安装后的运行文件哈希不一致' }
+    if ((Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath (Join-Path $ArtifactsRoot 'videoenhancer.exe')).Hash) { throw '外层安装后的运行文件哈希不一致' }
 $dllHash = (Get-FileHash -LiteralPath $dll).Hash
 $exeHash = (Get-FileHash -LiteralPath $exe).Hash
 if ((Invoke-Burn (Join-Path $probeRoot 'invalid') (Join-Path $probeRoot 'invalid.log')) -eq 0) { throw '外层 WiX 未拒绝无效目录' }

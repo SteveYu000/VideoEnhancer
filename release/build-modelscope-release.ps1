@@ -230,7 +230,7 @@ Write-Host "OK: $sourcePackagePath"
 Write-Host "OK: $stablePath"
 
 # 首次安装程序与运行时更新包分别验证。
-& (Join-Path $PSScriptRoot 'test-installer.ps1') -Installer $installerPath
+& (Join-Path $PSScriptRoot 'test-installer.ps1') -Installer $installerPath -ArtifactsRoot $ArtifactsRoot
 & (Join-Path $PSScriptRoot 'test-updater.ps1') -Version $Version -Package $packagePath
 
 # 原生命令在 EAP=Stop 下写 stderr 会被当成终止错误，发布前临时放宽。

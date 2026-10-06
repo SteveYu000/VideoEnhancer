@@ -1,11 +1,14 @@
-param([string]$Installer = '')
+param([string]$Installer = '', [string]$ArtifactsRoot = $env:VIDEOENHANCER_ARTIFACTS_DIR)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
-if (-not $Installer) { $Installer = Join-Path $root 'Artifacts\VideoEnhancerInstaller.exe' }
+if (-not $ArtifactsRoot) { $ArtifactsRoot = Join-Path $root 'Artifacts' }
+if (-not [IO.Path]::IsPathRooted($ArtifactsRoot)) { $ArtifactsRoot = Join-Path $root $ArtifactsRoot }
+$ArtifactsRoot = [IO.Path]::GetFullPath($ArtifactsRoot)
+if (-not $Installer) { $Installer = Join-Path $ArtifactsRoot 'VideoEnhancerInstaller.exe' }
 $Installer = [IO.Path]::GetFullPath($Installer)
 if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw "缺少便携安装器：$Installer" }
-$portablePayload = Join-Path $root 'Artifacts\.installer\VideoEnhancerPortablePayload.exe'
+$portablePayload = Join-Path $ArtifactsRoot '.installer\VideoEnhancerPortablePayload.exe'
 if (-not (Test-Path -LiteralPath $portablePayload -PathType Leaf)) { throw "缺少内部便携载荷：$portablePayload" }
 
 function Get-PeSubsystem([string]$path) {
@@ -18,7 +21,7 @@ function Get-PeSubsystem([string]$path) {
 
 if ((Get-PeSubsystem $Installer) -ne 2) { throw '安装器不是 GUI 子系统，会闪出黑色控制台窗口' }
 if ((Get-PeSubsystem $portablePayload) -ne 2) { throw '内部便携载荷不是 GUI 子系统' }
-if ((Get-PeSubsystem (Join-Path $root 'Artifacts\videoenhancer.exe')) -ne 3) {
+if ((Get-PeSubsystem (Join-Path $ArtifactsRoot 'videoenhancer.exe')) -ne 3) {
     throw '运行 EXE 丢失控制台子系统'
 }
 $source = Get-Content -Raw -Encoding UTF8 (Join-Path $root 'cli\InstallerManager.cs')
@@ -72,7 +75,7 @@ try {
     $dll = Join-Path $hostRoot 'Plugin\videoenhancer.3fui.dll'
     $exe = Join-Path $hostRoot 'Plugin\videoenhancer\videoenhancer.exe'
     if ((Get-FileHash -LiteralPath $dll).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'VideoEnhancerPlugin\obj\plugin-artifact\videoenhancer.3fui.dll')).Hash) { throw '插件 DLL 哈希不一致' }
-    if ((Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'Artifacts\videoenhancer.exe')).Hash) { throw '运行 EXE 哈希不一致' }
+    if ((Get-FileHash -LiteralPath $exe).Hash -ne (Get-FileHash -LiteralPath (Join-Path $ArtifactsRoot 'videoenhancer.exe')).Hash) { throw '运行 EXE 哈希不一致' }
     $installedLicense = Join-Path $hostRoot 'Plugin\videoenhancer\LICENSE.txt'
     if (-not (Test-Path -LiteralPath $installedLicense -PathType Leaf) -or
         (Get-FileHash -LiteralPath $installedLicense).Hash -ne (Get-FileHash -LiteralPath (Join-Path $root 'LICENSE')).Hash) {
