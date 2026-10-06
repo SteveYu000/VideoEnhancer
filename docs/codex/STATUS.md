@@ -1,11 +1,13 @@
 # Project Status
 
-Last updated: 2026-10-06 18:00
+Last updated: 2026-10-06 19:32
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 19:32：用户授权安全合并PR10/11，已完整合入main：PR11 eb51739，PR10 c3f667d，合并前审核恢复点81be99d/codex/pre-pr10-pr11-20261006。产品代码无冲突，两份记录冲突已保留双方会话且逐块校验。组合版在Artifacts/pr10-pr11-merged完成publish、110项打包/真实项目内安装及FFF API11、LakeUI5.110/5.112实际回调、FPS和倍率UI18项检查；转换器内嵌资源/源码ZIP SHA一致。源码ZIP约60MiB独立，运行ZIP约17MiB，包内无源码归档。根据用户“无必要就不发”核对LGPL2.1第4条、MS-RL3(A)与GPL2第3条：相关第三方完整对应源码须可获取，ZIP形式非强制；当前仓库自动源码不含完整FriBidi/构建补丁/WiX源码，因此保留PR10独立source.zip作为后续发行的履约方案，旧1.3.12不补发、不上传Release、不改版本、不部署。本地合并完成，准备普通推送origin/main，远端PR状态待核对。原速度反馈同条件A/B及6GB/1080p/4x保存OOM仍未解决，不恢复长测速。
 
 - 2026-10-06 18:00：PR #10/#11 审核完成，建议接纳，未合并。固定头 ea3776f / 6f0756b，共同基线 main f261e37；报告 docs/pr10-pr11-review.md。PR11 在 LakeUI5.110/5.112 实际回调均通过，未修复插件在5.112复现同一 set_Image 异常；此前AVV3图内缩放已生效，本PR主要补内嵌转换脚本与FPS统计，不能据作者异机/改SVT参数结果宣称原9→3.9反馈全部解决。6GB/1080p/4x保存校验OOM仍未处理，未重跑大尺寸/长测速。PR10完整publish、40归档与110打包检查通过；取消RAR支持。PR11两构建、CPU/CUDA2项、FPS与倍率UI18项通过。两PR产品代码自动合并，STATUS/中文进度冲突需保留双方；无实际组合运行。主工作区保留原记录改动，仅新增审核报告并更新两份记录，非干净，无提交/推送/部署/发布。
 
@@ -107,9 +109,9 @@ Updated by: Codex
 
 ## Active TODO
 
-- [x] PR #10/#11 审核及定向隔离验证完成，见 docs/pr10-pr11-review.md；此前图内缩放已生效，PR11补脚本分发及统计。尚未合并，合并时需解决两份进度记录冲突。
+- [x] PR #10/#11 审核及定向隔离验证完成，见 docs/pr10-pr11-review.md；此前图内缩放已生效，PR11补脚本分发及统计。已按用户授权完整合并，两份进度记录冲突均保留双方历史解决。
 - [ ] 6GB/1080p/4x Engine保存校验OOM仍未解决；原9→3.9反馈缺同条件旧版A/B。用户停止测速的指令保持，本轮只做审核检查，后续大尺寸/长测速待明确指示。
-- [ ] 实时预览 LakeUI兼容修复待合并PR11；实际回调已在5.110/5.112通过，并以未修复插件复现反馈异常。完整宿主绘制未验收；四宫格入口仍未恢复。
+- [x] 实时预览LakeUI兼容已合并PR11；组合版实际回调在5.110/5.112通过，未修复对照复现反馈异常。完整宿主绘制仍待实际使用验收；四宫格入口未恢复。
 
 - [x] 本轮实施与定向回归：补全许可/源码、FFF DLL 构建获取及独立分发、移除 SharpCompress、统一 7za；真实 API 11、ZIP/安装载荷、aria2 下载回归通过。
 - [x] 本轮收尾：最终打包检查通过，649aeb9 提交推送，PR #10 已创建；issue #6 已附实下载源码/许可及回归证据后关闭。后续由维护者审查合并；本轮不发布或部署。
@@ -149,6 +151,8 @@ Updated by: Codex
 - 2026-10-01：正式发布1.3.8及1.3.9，均完成双源回读、故障回退和本机正式自更新；1.3.9包含模型能力/倍率/介绍与导入界面专项。
 
 ## Decisions
+
+- 后续正式发行保留独立 VideoEnhancer-<version>-source.zip，供受GPL/LGPL/MS-RL约束的随包组件对应源码与构建材料获取；ZIP本身不是许可强制格式，若改用其他等效完整源码渠道，必须同步所有来源说明和发布检查。普通用户无需下载，运行EXE/ZIP/安装器不含第三方源码归档。本轮不补发旧发行、不上传附件，不改正式版本。
 
 - 2026-10-05 17:55：用户已确认 LakeUI 赞助授权；按用户要求源码与二进制分包，保留必要 Python 运行资源和许可声明，不把第三方源码归档放入运行 EXE/安装器。C#/VB 原创为 MIT，RVE Python 内容为 AGPL-3.0-only。
 - 2026-10-05 17:55：实际 FFF 8.20 DLL 为 API 12，纠正启动阶段按源码推定 API 11，锁定 8.19/c43614ca（真实 API 11）；独立 LGPL DLL 允许替换。7za Extra 不支持 RAR，支持列表与资源后缀同步。
@@ -238,6 +242,8 @@ git diff --check
 文档整理仅验证归档字节/SHA256、UTF-8、链接和记录结构，不重跑程序测试。程序验收与发行详见 `release/发布流程.md`。
 
 ## Git Sync
+
+- 2026-10-06 19:32：本地合并完成，准备普通推送origin/main，远端PR状态待核对。普通Git操作，无force；原审核记录已提交81be99d，两个PR精确head作为合并父提交保留。验证worktree无跟踪文件变化。
 
 - 2026-10-06 18:00：git pull --ff-only已最新，main=f261e37与origin/main同步；fetch PR10/11至独立review refs，项目Artifacts内创建两个detached worktree，均无跟踪文件修改。主工作区仅STATUS/中文进度与新增审核报告，非干净；无合并/提交/推送/正式安装/发布。
 
@@ -749,3 +755,12 @@ git diff --check
 - 结论：没有发现阻止合并的新缺陷。此前AVV3目标倍率调度及安装转换脚本已有图内缩放，PR11补充随CLI内嵌同步，未替换官方4x权重；2/3x仍4x网络后GPU双三次缩小。FPS修正不提高实际吞吐。作者约9FPS数据包含异机及SVT CDEF自动策略/预设变化，其原始日志不在本仓库，不能宣称全部性能回退已解决或证明此前修复失败。此前6GB/1080p/4x torch_tensorrt.save校验OOM逻辑仍存在，作为既有未解决问题；没有大尺寸构建/长时间测速。四宫格只修遗留调用，入口未恢复。
 - git merge-tree --write-tree显示产品代码可自动合并，仅docs/codex/STATUS.md与version/工作进度.md冲突；合并须保留两边历史及本地审核记录。本轮没有实际合并或组合版本运行。两个review worktree各自git diff --check通过；PR10的.gitattributes保留上游许可原文空白，不改其哈希。
 - 收尾新增docs/pr10-pr11-review.md，更新STATUS snapshot/TODO/Git Sync及此会话记录，并追加中文进度。不改版本迭代记录。所有下载/构建/模拟安装在项目Artifacts隔离目录；本机正式安装、版本、远端不变。主工作区三个文档变化，非干净，无提交/推送/部署/发布，建议继续合并或切换工具前考虑Git提交。
+
+
+### 2026-10-06 19:32 Codex：PR10/11安全合并与独立源码供给（prepared）
+
+- 同工具续做，读取AGENTS/INDEX/STATUS与HandShake；git pull --ff-only已最新，main f261e37，保留三份本地审核文档。用户明确授权合并，不再询问方案；先显式提交审核记录81be99d，再建立codex/pre-pr10-pr11-20261006恢复分支，fetch核对PR10 ea3776f、PR11 6f0756b没有变化。
+- 顺序git merge --no-ff --no-commit PR11与PR10；产品代码自动合并，STATUS/中文进度冲突用UTF-8保留双方段落、按冲突区域内新增会话时间合并，原冲突字节备份Artifacts/pr-record-conflicts-pr11/pr10。完整历史逐块对比81be99d及两PR通过；合并提交eb51739和c3f667d，两个head均通过merge-base --is-ancestor核对，未重写贡献者历史、未删除分支。
+- 组合验证：git worktree add --detach Artifacts/pr10-pr11-merged c3f667d；缓存从项目内既有审核目录复用，只覆盖隔离新建目录；dotnet publish solution -c Release -p:PluginInstallDir=且FffNativeCacheDirectory指定项目内已校验缓存。成功生成四类产物，源码ZIP192项约62882085字节，运行ZIP18040761字节；独立源码不进入运行包。test-third-party-package.ps1 110项、PixelPreview Probe5.110/5.112实际插件回调、FpsTracker Probe及ModelMetadataUi18项通过，转换器内嵌资源与独立源码ZIP均匹配源文件SHA。没有重复40项归档/长GPU测速、没有启动或覆盖本机宿主/正式安装。
+- 用户追加“根据许可证要求有必要增发源码包吗，没有必要就不发”。在线核对OSI许可原文：LGPL2.1第4条要求分发库二进制时提供对应完整源码/同处等效下载；MS-RL第3(A)要求相关文件源码；GPL2第3条规定完整对应源码供给方式。7-Zip官方FAQ对未修改组件有明确来源链接说明，不能泛称所有组件都强制ZIP；MIT原创主体也无强制源码ZIP义务。具体履约方案选择为保留现有独立源码资产，因自动GitHub项目源码不含FriBidi完整源码、vcpkg构建补丁及WiX对应源码。该选择是当前分发方案的完整源码供给方式，ZIP格式不是唯一法律要求；若未来取消，须先提供等效完整渠道。参考：https://opensource.org/license/lgpl-2-1、https://opensource.org/license/ms-rl、https://opensource.org/license/gpl-2.0、https://www.7-zip.org/faq.html。GNU网页部分超时，使用OSI原文及上游官方FAQ核对。
+- 本地合并完成，准备普通推送origin/main，远端PR状态待核对。本次不修改/补发已发布v1.3.12附件、不上传新Release、不改版本或版本迭代记录、不部署，不宣称原9→3.9问题及4x OOM全部解决。审核报告追加组合验证与源码方案核对，STATUS及中文进度同步，完成步骤后考虑Git提交；本轮将保存并推送记录，最终核对干净工作树。
