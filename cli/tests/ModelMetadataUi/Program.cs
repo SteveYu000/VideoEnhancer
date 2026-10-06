@@ -119,6 +119,19 @@ partial class Program
               "重设输出倍率立即同步工作台和图片提示");
         Call(panel, "SetCatalogSelection", model, true, true);
         Check((int)Get(config, "OutputScale") == 2, "选择补帧模型保留超分输出倍率");
+        Set(config, "Backend", "tensorrt");
+        Call(panel, "UpdateAdvancedControlState");
+        foreach (var scale in new[] { 2, 3 })
+        {
+            Set(videoCombo, "SelectedIndex", scale);
+            expectedHint = $"原生 4x；GPU 引擎内输出 {scale}x";
+            Check((string)Get(Field(panel, "_outputScaleHint"), "Text") == expectedHint &&
+                  (string)Get(Field(panel, "_imageOutputScaleHint"), "Text") == expectedHint,
+                  $"TensorRT {scale}x图内输出提示同步两页");
+        }
+        Set(videoCombo, "SelectedIndex", 6);
+        Check(((string)Get(Field(panel, "_outputScaleHint"), "Text")).Contains("原生推理后缩放至 6x"),
+              "TensorRT超过4x仍提示原生推理后缩放");
         Set(config, "Backend", "rtxvsr");
         Call(panel, "UpdateAdvancedControlState");
         Check(!(bool)Get(videoCombo, "Enabled") && !(bool)Get(imageCombo, "Enabled"), "RTX使用专用输出规格");

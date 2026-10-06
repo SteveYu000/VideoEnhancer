@@ -727,7 +727,7 @@ Namespace videoenhancer
             _compositeFrame = Nothing
             If oldComposite IsNot Nothing Then Try : oldComposite.Dispose() : Catch : End Try
             UpdateLayoutCombo()
-            _preview.Image = Nothing
+            PixelPreviewImage.SetImage(_preview, Nothing)
             _previewEmptyLabel.Visible = True
             _previewEmptyLabel.BringToFront()
             ProbeDurationAsync(idx, path)
@@ -1283,8 +1283,8 @@ Namespace videoenhancer
             End If
             Dim old = _compositeFrame
             _compositeFrame = image
+            PixelPreviewImage.SetImage(_preview, image)
             If old IsNot Nothing Then Try : old.Dispose() : Catch : End Try
-            _preview.Image = image
             _previewEmptyLabel.Visible = False
             UpdatePreviewSurfaces()
             _preview.Invalidate()
@@ -1763,7 +1763,7 @@ Namespace videoenhancer
             End SyncLock
             If _compositeFrame IsNot Nothing Then Try : _compositeFrame.Dispose() : Catch : End Try
             _compositeFrame = Nothing
-            _preview.Image = Nothing
+            PixelPreviewImage.SetImage(_preview, Nothing)
             For Each slot As VideoSlotCard In _slotLabels
                 If slot IsNot Nothing Then slot.SetPreviewImage(Nothing)
             Next

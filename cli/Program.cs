@@ -47,6 +47,7 @@ internal static class Program
     private const string EmbeddedInterpolationInspectorResource = "VideoEnhancer.Embedded.inspect_interpolation_models.py";
     private const string EmbeddedUpscaleInspectorResource = "VideoEnhancer.Embedded.inspect_upscale_models.py";
     private const string EmbeddedRifeTensorRTPrepareResource = "VideoEnhancer.Embedded.prepare_rife_tensorrt.py";
+    private const string EmbeddedTensorRTConverterResource = "VideoEnhancer.Embedded.convert_tensorrt.py";
     private const string EmbeddedImageBackendResource = "VideoEnhancer.Embedded.rve-image-backend.py";
     private const string EmbeddedSegmentedBackendResource = "VideoEnhancer.Embedded.rve-segmented-backend.py";
     private const int InterpolationCapabilityCacheVersion = 1;
@@ -723,7 +724,7 @@ internal static class Program
 
     /// <summary>
     /// FPS 精确重算：rve-backend 自报的 FPS 是整数值且把暂停时间计入（暂停后恢复平均值偏低）。
-    /// 这里用"已渲染帧数 / 有效耗时（总耗时 − 暂停耗时）"重算，输出保留两位小数；
+    /// 这里用"首条进度后的新增帧数 / 有效耗时（总耗时 − 暂停耗时）"重算，输出保留两位小数；
     /// 同时按相同速率重算 ETA。暂停状态通过 -pause-shm 共享内存字节（1=暂停）采样。
     /// </summary>
     private sealed class FpsTracker
@@ -739,6 +740,7 @@ internal static class Program
         private readonly string? _pauseShm;
         private readonly object _sync = new();
         private DateTime _firstLine;
+        private long _firstFrame;
         private bool _hasFirstLine;
         private DateTime _lastPauseSample = DateTime.UtcNow;
         private TimeSpan _paused = TimeSpan.Zero;
@@ -799,6 +801,7 @@ internal static class Program
             if (!_hasFirstLine)
             {
                 _firstLine = now;
+                _firstFrame = frame;
                 _hasFirstLine = true;
             }
             TimeSpan active;
@@ -806,17 +809,18 @@ internal static class Program
             {
                 active = now - _firstLine - _paused;
             }
-            if (active <= TimeSpan.Zero)
+            var measuredFrames = frame - _firstFrame;
+            if (active <= TimeSpan.Zero || measuredFrames <= 0)
             {
                 return line;
             }
 
-            var fps = frame / active.TotalSeconds;
+            var fps = measuredFrames / active.TotalSeconds;
             var fpsText = fps.ToString("F2", CultureInfo.InvariantCulture);
             var etaText = m.Groups[2].Value;
             if (_hasTotal && _totalFrames > frame)
             {
-                var secondsPerFrame = active.TotalSeconds / frame;
+                var secondsPerFrame = active.TotalSeconds / measuredFrames;
                 var remainingSeconds = (long)Math.Ceiling((_totalFrames - frame) * secondsPerFrame);
                 etaText = FormatEta(remainingSeconds);
             }
@@ -1757,6 +1761,7 @@ internal static class Program
             InstallEmbeddedBackendScript(EmbeddedInterpolationInspectorResource, InterpolationInspectorScript);
             InstallEmbeddedBackendScript(EmbeddedUpscaleInspectorResource, UpscaleInspectorScript);
             InstallEmbeddedBackendScript(EmbeddedRifeTensorRTPrepareResource, RifeTensorRTPrepareScript);
+            InstallEmbeddedBackendScript(EmbeddedTensorRTConverterResource, TensorRTConverterScript);
             InstallEmbeddedBackendScript(EmbeddedImageBackendResource, ImageBackendScript);
             InstallEmbeddedBackendScript(EmbeddedOutputScaleResource, Path.Combine(backendDirectory, "rve_output_scale.py"));
             InstallEmbeddedBackendScript(EmbeddedFlashVsrResource, Path.Combine(backendDirectory, "rve-flashvsr-backend.py"));
@@ -6090,7 +6095,9 @@ internal static class Program
             entries.Add(new ModelListCatalogEntry
             {
                 Id = id,
-                DisplayName = ModelBaseName(path),
+                DisplayName = !interpolation && backend == "tensorrt"
+                    && ModelBaseName(path).Equals("realesr-animevideov3", StringComparison.OrdinalIgnoreCase)
+                    ? "realesr-animevideov3 2/3/4x" : ModelBaseName(path),
                 Architecture = architecture,
                 ArchitectureGroup = interpolation ? architecture : ModelArchitectureGroups.Get(architecture),
                 InferenceScales = builtIn?.InferenceScales ?? (backends.Contains("flashvsr") ? [2, 4] : []),
