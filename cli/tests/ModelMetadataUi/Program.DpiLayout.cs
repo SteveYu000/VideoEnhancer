@@ -170,55 +170,7 @@ partial class Program
                 $"模型列表窗口拉伸不会重复缩放固定列: {name}");
         }
 
-        using var quad = (Form)Activator.CreateInstance(plugin.GetType("videoenhancer.QuadGridForm")!, config)!;
-        Check(quad.AutoScaleMode == AutoScaleMode.Dpi, "四宫格窗口启用 DPI 自动缩放");
-        _ = quad.Handle;
-        var nativeScale = quad.DeviceDpi / 96f;
-        var nativeSlot = (Control)((Array)Field(quad, "_slotLabels")).GetValue(0)!;
-        Check(Math.Abs(LayoutScale(nativeSlot).Width - nativeScale) < 0.01f &&
-              ((Control)Field(quad, "_btnClose")).Width == Pixels(45, nativeScale),
-            $"本机 {quad.DeviceDpi} DPI 四宫格窗口和标题栏按相同基准初始化");
         Check(!plugin.GetManifestResourceNames().Contains("videoenhancer-layout.json"), "插件不再依赖布局 JSON 资源");
-        var bounds = (IDictionary)Field(quad, "_layoutBounds");
-        var startingDpi = quad.DeviceDpi;
-        foreach (var dpi in new[] { 96, 120, 144, 192, 120, 96 })
-        {
-            // 客户区使用对应 DPI 的尺寸，验证窗口拉伸后的坐标重算和反复缩放。
-            var targetScale = dpi / 96f;
-            var slot = (Control)((Array)Field(quad, "_slotLabels")).GetValue(0)!;
-            var ratio = targetScale / LayoutScale(slot).Width;
-            quad.Scale(new SizeF(ratio, ratio));
-            quad.ClientSize = new Size(Pixels(1200, targetScale), Pixels(720, targetScale));
-            ArrangeTree(quad);
-            var consistentBounds = true;
-            foreach (DictionaryEntry entry in bounds)
-            {
-                var control = (Control)entry.Key;
-                var logical = (Rectangle)entry.Value!;
-                var expected = new Rectangle(Pixels(logical.X, targetScale), Pixels(logical.Y, targetScale),
-                    Pixels(logical.Width, targetScale), Pixels(logical.Height, targetScale));
-                consistentBounds &= control.Bounds == expected;
-            }
-            Check(consistentBounds, $"{dpi} DPI 四宫格所有控件边界一致");
-            foreach (var pair in new[] { ("_encoderHost", "_cmbEncoder"), ("_scaleHost", "_cmbScale"),
-                         ("_sizeHost", "_cmbSize"), ("_layoutHost", "_cmbLayout"),
-                         ("_qualityHost", "_numQuality"), ("_lineHost", "_numLine") })
-            {
-                var container = (Control)Field(quad, pair.Item1);
-                var child = (Control)Field(quad, pair.Item2);
-                Check(container.ClientRectangle.Contains(child.Bounds) && child.Height >= Pixels(28, targetScale),
-                    $"{dpi} DPI 四宫格编辑器高度完整 {pair.Item2}: {child.Bounds} / {container.ClientRectangle}");
-            }
-            var badge = (Control)Field(slot, "_badge");
-            Check(badge.Height >= Pixels(24, targetScale), $"{dpi} DPI 视频编号不会缩回固定像素尺寸");
-            quad.ClientSize = new Size(Pixels(1300, targetScale), Pixels(780, targetScale));
-            ArrangeTree(quad);
-            quad.ClientSize = new Size(Pixels(1200, targetScale), Pixels(720, targetScale));
-            ArrangeTree(quad);
-            Check(slot.Bounds == new Rectangle(Pixels(20, targetScale), Pixels(58, targetScale),
-                Pixels(205, targetScale), Pixels(95, targetScale)), $"{dpi} DPI 窗口拉伸往返无累积偏移");
-        }
-        quad.Close();
-        Console.WriteLine($"DPI_LAYOUT_TESTS_PASS|native-startup-{startingDpi}|96|120|144|192|round-trip");
+        Console.WriteLine($"DPI_LAYOUT_TESTS_PASS|native-startup-{panel.DeviceDpi}|96|120|144|192|round-trip");
     }
 }

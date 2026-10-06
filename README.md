@@ -27,7 +27,7 @@ VideoEnhancer 是一个面向 Windows 的视频增强工具，作为 3FUI 插件
 - 本体镜像：[VideoEnhancer-Releases](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases)
 - 模型镜像：[VideoEnhancer-Models](https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Models)
 
-每个 Release 分别发布运行时更新包、首次安装器、手动安装 ZIP、更新清单及第三方组件对应源码：
+每个 GitHub Release 发布运行时更新包、首次安装器、手动安装 ZIP、更新清单和一个合并项目及第三方完整对应源码的独立 ZIP；源码 ZIP 仅上传 GitHub Release，ModelScope 只镜像运行文件和更新清单：
 
 ```text
 VideoEnhancer-<version>-win-x64.exe

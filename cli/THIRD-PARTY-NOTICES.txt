@@ -33,7 +33,7 @@ EXE 通过独立进程调用该组件。同版完整源码归档作为独立构�
 FFF.Native API 11（FFF_Project 2026.8.19）及动态依赖
 -------------------------------------------------
 
-用途：预览与四宫格的 D3D11 原生播放内核，安装在 bin/fff-native-11。
+用途：预览的 D3D11 原生播放内核，安装在 bin/fff-native-11。
 项目：https://github.com/Lake1059/FFF_Project
 FFF.Native：MIT；libass：ISC；Brotli：MIT；bzip2：bzip2-1.0.6；
 FreeType：FTL；FriBidi：LGPL-2.1-or-later；HarfBuzz：MIT-Modern-Variant；
@@ -73,3 +73,7 @@ FFmpeg、RTX/NVIDIA SDK 和各权重许可需按独立组件实际分发版本�
 WiX 6.0.2：https://github.com/wixtoolset/wix（MS-RL）；安装器引擎及标准界面
 保持上游许可。完整许可和官方工具维护费协议在 licenses/wix/，引擎对应源码
 在独立源码包 third-party/wix/。VideoEnhancer 原创安装逻辑和载荷继续 MIT。
+
+对应源码获取：项目和随包第三方完整对应源码合并为一个独立 VideoEnhancer-<version>-source.zip，仅发布在同版本 GitHub Release。
+https://github.com/maxzrb/VideoEnhancer/releases
+ModelScope 只分发运行文件和更新清单，不镜像源码附件。

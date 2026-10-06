@@ -33,6 +33,5 @@ FriBidi 使用独立动态 DLL，用户可修改/替换该库；本项目不禁�
 修改而进行的逆向工程。源码及上游许可不受 VideoEnhancer MIT 限制。
 FFmpeg 共享库由用户另行取得；需使用其实际构建所适用的 LGPL/GPL 许可。
 
-源码包与二进制在同一次 Release 发布并镜像；安装器/二进制 ZIP 不包含源码归档。
+完整对应源码合并为一个独立 ZIP，仅在同版本 GitHub Release 发布；安装器/二进制 ZIP 不包含源码归档。
 长期获取：https://github.com/maxzrb/VideoEnhancer/releases
-镜像：https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases

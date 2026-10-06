@@ -156,13 +156,18 @@ if (("$cliVersion").Trim() -ne $Version) {
 }
 
 $distRoot = Join-Path $PSScriptRoot 'dist\modelscope'
-$versionRoot = Join-Path $distRoot (Join-Path 'releases' $Version)
+$versionRoot = [IO.Path]::GetFullPath((Join-Path $distRoot (Join-Path 'releases' $Version)))
+if (-not $versionRoot.StartsWith([IO.Path]::GetFullPath($distRoot).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw '版本输出目录必须位于本体分发目录内'
+}
 if (Test-Path -LiteralPath $versionRoot) { Remove-Item -LiteralPath $versionRoot -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $versionRoot | Out-Null
 
-# 源码作为单独资产；发布前重新核对二进制与对应源码包的逐项哈希。
+# 项目和第三方对应源码合为一个 ZIP，仅暂存到 GitHub 资产目录。
 $sourcePackageName = "VideoEnhancer-$Version-source.zip"
-$sourcePackagePath = Join-Path $versionRoot $sourcePackageName
+$githubSourceRoot = Join-Path $PSScriptRoot (Join-Path 'dist\github\releases' $Version)
+New-Item -ItemType Directory -Force -Path $githubSourceRoot | Out-Null
+$sourcePackagePath = Join-Path $githubSourceRoot $sourcePackageName
 $builtSourcePackage = Join-Path $ArtifactsRoot 'VideoEnhancer-Source.zip'
 if (-not (Test-Path -LiteralPath $builtSourcePackage -PathType Leaf)) { throw "缺少独立源码包：$builtSourcePackage" }
 & (Join-Path $PSScriptRoot 'test-third-party-package.ps1') -Package (Join-Path $ArtifactsRoot 'VideoEnhancer.zip') -SourcePackage $builtSourcePackage -ArtifactsRoot $ArtifactsRoot
@@ -206,6 +211,17 @@ $stablePath = Join-Path $distRoot 'stable.json'
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'modelscope-README.md') -Destination (Join-Path $distRoot 'README.md') -Force
 $releaseNotesPath = Join-Path $distRoot 'release-notes.txt'
 [System.IO.File]::WriteAllLines($releaseNotesPath, $noteLines, $utf8NoBom)
+
+# ModelScope 只上传本次运行文件和清单，不携带历史文件或源码附件。
+$modelScopeUploadRoot = [IO.Path]::GetFullPath((Join-Path $ArtifactsRoot "modelscope-upload-$Version"))
+if (-not $modelScopeUploadRoot.StartsWith($ArtifactsRoot.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) {
+    throw '镜像上传目录必须位于构建产物目录内'
+}
+if (Test-Path -LiteralPath $modelScopeUploadRoot) { Remove-Item -LiteralPath $modelScopeUploadRoot -Recurse -Force }
+$mirrorVersionRoot = Join-Path $modelScopeUploadRoot (Join-Path 'releases' $Version)
+New-Item -ItemType Directory -Force -Path $mirrorVersionRoot | Out-Null
+Copy-Item -LiteralPath $packagePath, $installerPath, $manualPath -Destination $mirrorVersionRoot
+Copy-Item -LiteralPath $stablePath, $releaseNotesPath, (Join-Path $distRoot 'README.md') -Destination $modelScopeUploadRoot
 
 Write-Host "OK: $packagePath"
 Write-Host "OK: $installerPath"
@@ -303,7 +319,7 @@ if ($PublishModelScope) {
     if (-not (Get-Command modelscope -ErrorAction SilentlyContinue)) {
         throw '未找到 modelscope CLI；请先安装并 modelscope login 后重试'
     }
-    $code = Invoke-Native { modelscope upload $ModelScopeReleaseDataset $distRoot --repo_type dataset }
+    $code = Invoke-Native { modelscope upload $ModelScopeReleaseDataset $modelScopeUploadRoot --repo_type dataset --no-cache }
     if ($code -ne 0) { throw "modelscope upload 失败（$ModelScopeReleaseDataset）" }
     Write-Host "OK: ModelScope 已同步（$ModelScopeReleaseDataset）"
     $code = Invoke-Native { modelscope upload $ModelScopeModelsDataset $packagePath 'Plugin/videoenhancer.exe' --repo_type dataset --no-cache }
@@ -312,9 +328,9 @@ if ($PublishModelScope) {
 }
 
 if (-not $PublishGithub -and -not $PublishModelScope) {
-    Write-Host "ModelScope 上传目录：$distRoot"
+    Write-Host "ModelScope 上传目录（仅运行文件）：$modelScopeUploadRoot"
     Write-Host '手动发布命令：'
     Write-Host "  gh release create v$Version `"$packagePath`" `"$installerPath`" `"$manualPath`" `"$sourcePackagePath`" `"$stablePath`" --repo $GithubRepo --title `"VideoEnhancer $Version`" --notes-file `"$releaseNotesPath`""
-    Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$distRoot`" --repo_type dataset"
+    Write-Host "  modelscope upload $ModelScopeReleaseDataset `"$modelScopeUploadRoot`" --repo_type dataset --no-cache"
     Write-Host "  modelscope upload $ModelScopeModelsDataset `"$packagePath`" Plugin/videoenhancer.exe --repo_type dataset --no-cache"
 }

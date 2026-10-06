@@ -1026,13 +1026,6 @@ Namespace videoenhancer
                     _queueMenuTimer.Dispose()
                 Catch
                 End Try
-                If _quadForm IsNot Nothing Then
-                    Try
-                        _quadForm.Dispose()
-                    Catch
-                    End Try
-                    _quadForm = Nothing
-                End If
                 If _engine IsNot Nothing Then
                     Try
                         _engine.Dispose()

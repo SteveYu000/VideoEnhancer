@@ -8,4 +8,4 @@
 
 FFF.Native 为 MIT；其动态依赖（尤其 FriBidi 的 LGPL）保持各自许可，允许用户替换 DLL，不限制依法修改、调试或再分发这些组件。aria2-next 与 7za 均作为独立程序通过命令行调用，各自许可、版权和源码义务不受本项目 MIT 限制。详见 `cli/THIRD-PARTY-NOTICES.txt` 与 `cli/third-party/`。
 
-WiX 首次安装器引擎及其标准界面按 MS-RL 提供，对应源码位于独立源码包；自有安装载荷仍为 MIT。.NET 自包含运行库保持其 MIT 及第三方组件许可，构建自动附带实际 runtime pack 的许可与依赖声明。二进制 ZIP/安装器包含许可证和来源说明，源码归档仅在同版本独立源码包发布。
+WiX 首次安装器引擎及其标准界面按 MS-RL 提供，对应源码位于独立源码包；自有安装载荷仍为 MIT。.NET 自包含运行库保持其 MIT 及第三方组件许可，构建自动附带实际 runtime pack 的许可与依赖声明。二进制 ZIP/安装器包含许可证和来源说明，项目与第三方完整对应源码合并为一个同版本独立源码 ZIP，仅上传 GitHub Release；ModelScope 只镜像运行文件和更新清单。

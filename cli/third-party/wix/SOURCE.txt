@@ -11,9 +11,8 @@ WiX Toolset 6.0.2（首次安装器引擎与标准界面）
 third-party/wix/wix-6.0.2-source.tar.gz 内；URL/SHA256 见 runtime.json。
 官方构建步骤见归档 README.md、devbuild.cmd 和 src/burn；本项目的
 installer/Bundle 配置与 release 构建脚本在源码包 VideoEnhancer/ 目录内。
-源码包与二进制同一次发布并镜像：
+完整对应源码合并为一个独立 ZIP，仅在同版本 GitHub Release 发布：
 https://github.com/maxzrb/VideoEnhancer/releases
-https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases
 
 官方 NuGet 预编译构建工具还包含 OSMFEULA.txt 维护费协议；非营收使用免费豁免，
 产生营收的构建使用者须满足维护费/支持协议，或选择按 MS-RL 自行编译的工具。

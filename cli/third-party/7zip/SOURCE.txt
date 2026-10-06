@@ -8,6 +8,5 @@ SHA256：EDBEE35370E14030E4C785CF88200F42DC651C1EB4217C1E3963C38A12F099B0
 源码 SHA256：9CBDE5099C6DEB73691B0579063DA5827522CCBBCBA3F0020FD04E8C8C16C0D4
 组件在插件 bin/7zip 中运行，不调用 7-Zip 系统安装程序。
 
-源码包与二进制同时发布并镜像：
+完整对应源码合并为一个独立 ZIP，仅在同版本 GitHub Release 发布：
 https://github.com/maxzrb/VideoEnhancer/releases
-https://www.modelscope.cn/datasets/AerithDream/VideoEnhancer-Releases

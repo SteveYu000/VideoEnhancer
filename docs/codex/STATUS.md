@@ -1,11 +1,15 @@
 # Project Status
 
-Last updated: 2026-10-06 19:34
+Last updated: 2026-10-06 19:48
 Updated by: Codex
 
 本文件是唯一 AI 操作状态来源。历史原文已冻结归档至 [记录归档](../archive/records-2026-10-01/README.md)，仅查历史时读取；归档中的版本、远端、环境和 TODO 不代表当前状态。
 
 ## Current Snapshot
+
+- 2026-10-06 20:20：继续发行1.3.13，新增四宫格残留安全剥离范围；完成引用检查并删除专属三文件/入口残留/DPI测试，实时预览兼容层保留，构建与发行门禁待执行。
+
+- 2026-10-06 19:48：用户明确授权发布1.3.13，并指定项目/第三方对应源码合并为一个独立ZIP，仅上传GitHub Release，不上传ModelScope。Git启动已同步且干净，main15e4139，v1.3.13未存在。版本源同步1.3.13，发布脚本分离GitHub源码目录与ModelScope运行白名单暂存目录，来源说明/README/发布流程同步；旧版本记录移历史并补1.3.12历史，1.3.13当前为发布中。准备本体构建、既有门禁、后端逐文件审计与远端哈希核对；不追加长速度测试，保留6GB/1080p/4x保存问题。
 
 - 2026-10-06 19:34：用户授权安全合并PR10/11，已完整合入main：PR11 eb51739，PR10 c3f667d，合并前审核恢复点81be99d/codex/pre-pr10-pr11-20261006。产品代码无冲突，两份记录冲突已保留双方会话且逐块校验。组合版在Artifacts/pr10-pr11-merged完成publish、110项打包/真实项目内安装及FFF API11、LakeUI5.110/5.112实际回调、FPS和倍率UI18项检查；转换器内嵌资源/源码ZIP SHA一致。源码ZIP约60MiB独立，运行ZIP约17MiB，包内无源码归档。根据用户“无必要就不发”核对LGPL2.1第4条、MS-RL3(A)与GPL2第3条：相关第三方完整对应源码须可获取，ZIP形式非强制；当前仓库自动源码不含完整FriBidi/构建补丁/WiX源码，因此保留PR10独立source.zip作为后续发行的履约方案，旧1.3.12不补发、不上传Release、不改版本、不部署。两PR远端均MERGED，origin/main已包含两个合并提交；本条收尾记录将提交并普通推送，完成后核对工作树与远端SHA。原速度反馈同条件A/B及6GB/1080p/4x保存OOM仍未解决，不恢复长测速。
 
@@ -153,6 +157,8 @@ Updated by: Codex
 - 2026-10-01：正式发布1.3.8及1.3.9，均完成双源回读、故障回退和本机正式自更新；1.3.9包含模型能力/倍率/介绍与导入界面专项。
 
 ## Decisions
+
+- 2026-10-06用户覆盖此前双源源码镜像约定：完整对应源码统一合并为一个独立 VideoEnhancer-<version>-source.zip，仅上传GitHub Release；ModelScope只上传运行文件、清单和说明，来源说明指向GitHub同版源码附件。旧发行资产不删除。
 
 - 后续正式发行保留独立 VideoEnhancer-<version>-source.zip，供受GPL/LGPL/MS-RL约束的随包组件对应源码与构建材料获取；ZIP本身不是许可强制格式，若改用其他等效完整源码渠道，必须同步所有来源说明和发布检查。普通用户无需下载，运行EXE/ZIP/安装器不含第三方源码归档。本轮不补发旧发行、不上传附件，不改正式版本。
 
@@ -775,3 +781,17 @@ git diff --check
 - git push origin main成功，f261e37→cfbb2c5，未强制推送。gh api回读PR10与PR11均closed/merged=true，合并SHA分别c3f667dc51d9186b4f300e8bbc75467083030fc4、eb51739af9e32752190b0d2e27d48b2d0716a486。git ls-remote与本地HEAD均cfbb2c51f0619702b6316889440c0d316720943a，主工作树及组合验证worktree无未提交文件，冲突标记检查为空。
 - 完整会话历史再次核对通过。用户追加的源码问题已按前条核对：有第三方对应源码供给义务，ZIP非唯一格式；当前保留后续独立source.zip流程，没有补发旧版或上传Release。组合验证结果见前条及审核报告，版本与正式安装未改，速度与低显存4x问题仍保留。
 - 更新当前快照与此收尾记录、追加中文进度，随后提交并普通推送；最终核对远端HEAD与工作树。合并、验证记录都已保存，无需用户再次提交本轮内容；继续或切换工具前可确认Git状态。
+
+
+### 2026-10-06 19:48 Codex：准备1.3.13发行与GitHub独立源码附件
+
+- 用户明确授权1.3.13 Release，取代此前仅合并不发布范围；源码附件合为一个ZIP且仅上传GitHub。启动读取AGENTS/INDEX/STATUS、沿用HandShake与发布流程，git pull --ff-only最新、main15e4139/工作树干净，GitHub v1.3.13与本地tag不存在。执行环境仍Windows/PowerShell7/.NET10，gh与modelscope可用；未打印凭据值。
+- 同步两项目Version为1.3.13、更新分类Release Notes、修正版本记录（保存原1.3.11当前段至历史，补1.3.12发行历史）。发布脚本将source.zip暂存到dist/github/releases/<version>，ModelScope采用仅本版运行文件/清单/说明的暂存目录，防止源码或历史资产混入上传。README/许可范围/第三方SOURCE/发行说明同步单GitHub源码获取约定，保持UTF-8/BOM/换行。
+- 本轮将构建并完成项目发布门禁、后端真实目录逐文件审计、来源/包哈希与安装/更新验证，再提交推送版本源码与标签、上传双源运行资产及单GitHub源码附件，回读核验并收尾。模型/RTX/Python独立包不计划重发；不运行长期GPU测速，不承诺已完全解决此前9→3.9或4x OOM。
+
+
+### 2026-10-06 20:20 Codex：继续1.3.13并剥离四宫格残留
+
+- 用户追加授权安全剥离四宫格残留。同工具续做，读取AGENTS/INDEX/STATUS和HandShake，git pull --ff-only最新，保留前轮18项发行准备改动。修复cli/README混合换行被规范化产生的无关差异。
+- 引用核对确认QuadGridForm/QuadGridControls/GridCompositionBuilder仅为已取消功能使用；删除三文件、主面板未接入按钮/窗口字段/点击回调/释放代码和专属DPI检查，保留主面板DPI与实时预览PixelPreviewImage兼容层、独立FFF运行分发。发布说明及当前文档同步，旧历史保留。
+- 尚未发布；接下来运行必要构建、预览双版本与DPI及既有发行门禁，保存提交后发布固定产物与单GitHub源码附件。

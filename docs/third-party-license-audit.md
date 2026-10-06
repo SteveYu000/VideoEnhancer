@@ -21,7 +21,7 @@
 
 `dotnet publish VideoEnhancer.slnx -c Release` 生成运行 EXE、`VideoEnhancer.zip`、`VideoEnhancerInstaller.exe` 和独立 `VideoEnhancer-Source.zip`。安装包与二进制 ZIP 包含运行文件、许可证和来源说明；没有第三方源码归档。运行 EXE 中原先的 7-Zip 源码资源也已移除。Python 集成脚本文本属于运行所需资源，仍随 CLI 释放供 Python 执行，其可修改源码也在独立源码包中。
 
-独立源码包包含 `VideoEnhancer/` 下的可重建项目源码，以及 `third-party/aria2-next`、`7zip`、`fff-native`、`wix` 下固定 SHA256 的对应归档。其中包括 FriBidi 源码、vcpkg 基线与补丁。发布脚本把源码包命名为 `VideoEnhancer-<version>-source.zip`，与二进制在同一次 GitHub Release 和 ModelScope 镜像上传，不依赖第三方主页长期存活。已发布的 1.3.12 仍保留独立 aria2 对应源码资产，不覆盖旧发行。
+独立源码包包含 `VideoEnhancer/` 下的可重建项目源码，以及 `third-party/aria2-next`、`7zip`、`fff-native`、`wix` 下固定 SHA256 的对应归档。其中包括 FriBidi 源码、vcpkg 基线与补丁。发布脚本把源码包命名为 `VideoEnhancer-<version>-source.zip`，仅上传同版本 GitHub Release；ModelScope 只上传运行文件和更新清单，不依赖第三方主页长期存活。已发布的 1.3.12 仍保留独立 aria2 对应源码资产，不覆盖旧发行。
 
 ## 可选后端与模型
 
@@ -38,3 +38,7 @@
 下载回归同时修复两项实际发现：新版 aria2 续传 SQLite 状态转入插件缓存；HTTP/HTTPS 分支限制无关 BitTorrent 公网监听并关闭 DHT/发现/端口映射，避免监听阻塞拖住进程退出。不修改官方 GPL 二进制。
 
 验收脚本：`release/test-native-archives.ps1`（40 项，包括路径越界、链接、重解析点、加密、CRC 与取消），`test-third-party-package.ps1`（110 项含实际 API 11、安装一致性与源码分离），`test-download-integration.ps1`（8 项协议场景）。既有安装/自更新/回滚、后端更新 6 项和发布门禁 5 项通过。未完成宿主 GPU 播放与所有模型的实际运行测试，不将 DLL 加载验收扩大为完整预览验收。
+
+## 2026-10-06：1.3.13 源码附件发布约定
+
+项目与随包第三方完整对应源码合并为一个独立 VideoEnhancer-<version>-source.zip，仅上传同版本 GitHub Release。运行 EXE、安装器与手动 ZIP 不包含第三方源码归档；ModelScope 镜像通过来源说明指向 GitHub 同版源码附件，不上传源码附件。旧版既有源码资产保留。

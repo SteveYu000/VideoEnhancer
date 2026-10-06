@@ -151,3 +151,5 @@ FFmpegFreeUI\Plugin\
 归档预检、解压及 7z 创建统一调用独立 `bin/7zip/7za.exe`，支持 7z/ZIP/TAR/GZip/XZ/BZip2/Zstd，不支持 RAR。完整包独立安装 FFF.Native DLL 和许可证说明，运行 EXE 更新保留已有组件；项目 MIT、LakeUI 赞助授权与 Python RVE 集成 AGPL 范围见根目录 LICENSE-SCOPE.md。
 
 源码与二进制分开打包：VideoEnhancer-Source.zip 含项目源码及第三方对应源码，安装器与手动安装 ZIP 仅含运行文件、许可证和来源说明。
+
+独立源码附件统一为 VideoEnhancer-<version>-source.zip，仅上传 GitHub Release；ModelScope 不上传源码附件。

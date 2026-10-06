@@ -26,13 +26,11 @@ Namespace videoenhancer
         Private ReadOnly _lblPreviewStatus As New HtmlColorLabel()
         Private ReadOnly _lblPreviewNote As New HtmlColorLabel()
         Private ReadOnly _lblRate As New HtmlColorLabel()
-        Private ReadOnly _btnQuad As New ModernButton()
 
         ' 定期把「预览输出」右键菜单项挂到编码队列窗体（窗体实例重建后自动恢复）
         Private ReadOnly _queueMenuTimer As New Timer() With {.Interval = 2000}
         Private ReadOnly _taskIds As New List(Of String)()
         Private _pendingPreviewTaskId As String = ""
-        Private _quadForm As QuadGridForm
         Private _engine As PreviewEngine
         Private _lastPreviewImage As Image
         ' ────────────────────────── 实时预览页 ──────────────────────────
@@ -352,19 +350,6 @@ Namespace videoenhancer
             End If
         End Sub
 
-        Private Sub OnQuadClick(sender As Object, e As EventArgs)
-            If _quadForm Is Nothing OrElse _quadForm.IsDisposed Then
-                _quadForm = New QuadGridForm(_config)
-            End If
-            Try
-                If Not _quadForm.Visible Then
-                    _quadForm.Show(Me)
-                Else
-                    _quadForm.Activate()
-                End If
-            Catch
-            End Try
-        End Sub
     End Class
 
 End Namespace
