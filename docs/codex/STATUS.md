@@ -9,7 +9,21 @@ Updated by: Codex
 
 - 2026-10-06 18:00：PR #10/#11 审核完成，建议接纳，未合并。固定头 ea3776f / 6f0756b，共同基线 main f261e37；报告 docs/pr10-pr11-review.md。PR11 在 LakeUI5.110/5.112 实际回调均通过，未修复插件在5.112复现同一 set_Image 异常；此前AVV3图内缩放已生效，本PR主要补内嵌转换脚本与FPS统计，不能据作者异机/改SVT参数结果宣称原9→3.9反馈全部解决。6GB/1080p/4x保存校验OOM仍未处理，未重跑大尺寸/长测速。PR10完整publish、40归档与110打包检查通过；取消RAR支持。PR11两构建、CPU/CUDA2项、FPS与倍率UI18项通过。两PR产品代码自动合并，STATUS/中文进度冲突需保留双方；无实际组合运行。主工作区保留原记录改动，仅新增审核报告并更新两份记录，非干净，无提交/推送/部署/发布。
 
+- 2026-10-06 13:51：**本轮修复已提交上游[PR11](https://github.com/maxzrb/VideoEnhancer/pull/11)，未合并/发布。**源码提交4583bbd6d278b8605c214cb9ea3dcdb211d7e465，源user-Wing/VideoEnhancer-fork:fix/trt-native-lakeui-20261006，目标maxzrb/VideoEnhancer:main；普通OPEN PR（非草稿），回读mergeStateStatus=CLEAN，尚无CI检查，不能写成CI通过。21项源码/测试/文档仅包含本轮修复，版本1.3.12保持，无视频/权重/Engine/安装二进制；PR已附当前聊天。构建和定向回归均通过，性能边界已列入说明；收尾记录随PR分支同步，不直接修改origin/main或fork/main。
+
+- 2026-10-06 13:49：用户已授权将本轮AVV3/LakeUI/FPS修复及测速记录提交maxzrb上游PR，覆盖前述仅本地不推送的限制，但未授权合并/发布/改版本。当前fix/trt-native-lakeui-20261006基于origin/main f261e37，上游已最新；目标maxzrb/VideoEnhancer:main，源user-Wing/VideoEnhancer-fork同名分支，尚无对应PR。提交前复验build0警告0错误、38项Python、18项倍率UI、FPS/ETA、LakeUI5.110/5.112实际预览回调、宿主契约均通过。全部dirty文件均为本轮已记录的源码/测试/文档，准备显式暂存、提交和推送；视频/Engine/安装包/本机缓存不纳入，版本1.3.12保持。
+
+- 2026-10-06 13:44：**MyGO / AVV3 TensorRT 2x / 用户新SVT参数实际约三分钟测试通过，未持续掉到4fps。**输入01.mkv为1080p/23.976，复用1080p/scale2缓存、FP16无分块，p6/CRF12/yuv444p10le、禁音频；新串tune0/CDEF-1/scm3/QM2及4/variance1/filmgrain5非adaptive/AC1/lp4完整保持。编码启动后181.69秒正常停止，分段超分7.821→8.196→8.694fps，编码7.330→8.499→8.882fps；积压约140帧后缩至约100帧、编码工作集约9–10GB、GPU大多高负载，无采样热降频标记。输出1575视频包/65.691秒，AV1/3840×2160/yuv444p10le，仅视频；编码末frame1575/progress=end、首帧解码通过，不宣称全片逐帧解码。证据.work/verification/20261006-mygo-avv3-svt，[报告](../trt-preview-performance-20261006.md)已追加。只改诊断脚本/文档，不改预设/产品/版本/安装，1.3.12保持；仍未提交/推送，整集持续性及旧版历史差异待验证。
+
 - 2026-10-06 11:14：用户明确“不必测了，等pr”，已终止当前冷却复测进程树，不再追加测试，等待贡献者 UI/AVV3 PR。1.3.12发布/本机/隔离EXE SHA一致；1080p/FP16/60帧空输出已有2x 3.984FPS、3x 3.643FPS，4x诊断3.574FPS（原版保存校验在6GB显存OOM，仅测试改CPU数值比较后构建）。4x回传后缩小的路径对照2x 3.536FPS、3x 3.544FPS；仅路径模拟，不是旧发行版同机A/B。GPU明确SW Power Cap/SW Thermal Slowdown Active，当前55W/默认80W、纯Engine测时577–900MHz，不能把9→3.9全部归因代码或宣称已确认完整性能回退。此前修复已生效，但小尺寸验收未证明恢复9FPS。产品源码/版本/安装/发布均不改，完整证据Artifacts/avv3-speed-audit。
+
+- 2026-10-06 10:07：**SVT参数逐项短测确认主要降速项为显式 enable-cdef=1。**直接压用户Rebellion2160p原片前240帧，不超分、不跑完整片，p6/CRF12/yuv444p10le固定。完整串4.726fps，快速组合11.808fps；完整串只去掉CDEF为10.002fps，只改为用户追加要求的enable-cdef=-1为10.689fps；快速组合仅加CDEF1降到4.877fps。AC0/DLF1/QM0/TF1/variance0及删DLF均约4.9–5.2fps，没有单独恢复。11组串行，速度按240/benchmark rtime，包含短片启动/排空，不称全片稳定值；画质/码率等价性和1.3.0历史差异仍未验证。新增release/tests/MeasureSvtParameters.ps1及[排查报告](../svt-parameter-ablation-20261006.md)，证据.work/verification/20261006-svt-ablation。版本仍1.3.12，本轮不改产品代码/安装/预设，不关闭已打开宿主，不commit/push/PR/Release；保留之前所有未提交修改。
+
+- 2026-10-06 09:34：用户授权仅将SVT preset6改10作持续对照，其余参数/模型/片段/运行环境保持，不写回预设。**能跟上约9fps，但请求p10被SVT4.2.0的4K Random Access限制为实际p9。**960帧渲染106.72秒（9.00fps），处理中约9.3–9.5fps，未降到4；GPU多约90%–97%、编码工作集约12GB、PPCS156（p6为300）。ffprobe完整确认AV1/3840×2160/yuv444p10le/960帧；配置SHA FDEAC061…保持，无代码/版本/安装/发布更改。日志fixed-janai-svt-p10-960.*及复验报告已追加；旧版p6能9fps的差异仍未定位，不能将快速preset测试当作旧版回归已修复。
+
+- 2026-10-06 09:27：**本地 TensorRT / LakeUI 修复已部署，保持 1.3.12，不发布远端。**已从 maxzrb 的 origin/main `f261e37` 建立 `fix/trt-native-lakeui-20261006`，旧 feature/backup 分支保留；origin=maxzrb/VideoEnhancer，fork=user-Wing/VideoEnhancer-fork，不能沿用下文旧会话远端命名。AVV3 显示 `realesr-animevideov3 2/3/4x`，用户确认保留官方 4x 权重、GPU 图内 2x/3x 输出；转换脚本内嵌随 CLI 同步，4x 与 >4x 策略保持。实时预览/四宫格兼容 LakeUI Image/Source，修正 FPS 首条进度帧偏移；没有调整 UI 布局或画质参数。
+- 持续降速已按用户 SVT-AV1 参数复现：OP.mkv 前 960 帧、AnimeJaNai 原生 2x、TRT FP16、无分块，NVENC p1/CQ30 为96.81秒（9.92fps），用户 libsvtav1 preset6/CRF12/yuv444p10le/完整 svtav1-params 为256.29秒（3.75fps）。143秒附近超分803帧但编码337帧，编码工作集约23–25GB，GPU多次1%–3%，无热降频标记，后期GPU完成后继续编码排空；瓶颈在SVT编码反压，不宣称TRT已将同参数整链恢复9fps。尚未做1.3.0同环境历史对照。证据见[复验记录](../trt-preview-performance-20261006.md)。
+- 验证：LakeUI5.110/5.112实际插件帧回调、38项Python、18项倍率UI、FPS偏移/暂停/ETA、host契约、安装/自更新/回滚通过；AVV3新建2/3/4x Engine输出160×128/240×192/320×256，6x复用4x输出480×384，均12帧。已用官方自更新入口部署，本机EXE/DLL/转换脚本与产物一致，配置SHA256 FDEAC061…保持；备份 `.work/backups/20261006-before-trt-preview-fix`。未启动3FUI，实际可视预览待用户复验。源码含本轮未提交修改，无提交/推送/PR/Release操作。
 
 - 2026-10-05 15:15：用户反馈 RTX 报 `The first backend release writes MP4 output.：rawvideo`，已通过源码历史定位为旧组件请求校验：ea16ce4 删除 MP4-only 限制，c83df0f 加入原始帧管道；当前2db5b02不含该错误，CLI明确传rawvideo/framePipePath。判断为新版CLI调用旧RTX组件；用户实际EXE/hash未取得，尚待核对更新及旧路径残留。优先加载bin/rtx-video/vsr_backend.exe，其次runtime/vsr_backend.exe，前者旧副本可能遮蔽后者。仅诊断与记录，无代码修改、部署或发布。
 
@@ -94,6 +108,11 @@ Updated by: Codex
 - [ ] 实时预览 LakeUI兼容修复待合并PR11；实际回调已在5.110/5.112通过，并以未修复插件复现反馈异常。完整宿主绘制未验收；四宫格入口仍未恢复。
 
 - [ ] 倍率术语复核：区分学习网络倍率与已编译图输出倍率；AVV3 NCNN2/3x实际为4x网络+图内缩小，之前“原生2/3x”表述不准确。现有图输出尺寸/缓存行为保持，尚未改产品元数据或界面。
+
+- [x] 用户本轮 AVV3 TensorRT 倍率选择、GPU 图内输出与新版 LakeUI 预览入口兼容修复、FPS 初始帧偏移：实现、回归和本机部署完成。
+- [ ] 本轮实际宿主可视预览复验；若继续追查相对1.3.0的差异或优化SVT吞吐，需同环境历史基线/单独资源配置对照，不擅自降低画质或改用户预设。
+
+- [ ] 倍率术语复核：区分学习网络倍率与已编译图输出倍率；AVV3 NCNN2/3x实际为4x网络+图内缩小，之前“原生2/3x”表述不准确。现有图输出尺寸/缓存行为保持；2026-10-06已明确本轮TRT文案，其他后端术语仍待复核。
 
 - [x] 用户确认RTX超分；已修复解码能力判断、硬解初始化/首帧失败回退、平面YUV转换及双显卡能力误判。RTX五输入及完整CLI FMP4通过；用户原片仍未取得，不扩大为所有老编码变体验收。
 
@@ -593,6 +612,33 @@ git diff --check
 - 验证：核对既有Artifacts/release-1.3.12/installed-odd-4x.log，正式安装CLI+RTX此前已完成4帧rawvideo管道→宿主FFmpeg输出。未重复GPU测试，未修改产品代码/版本/安装/远端。命令含rg/git log/git show及UTF-8读取；git diff --check核对记录。
 - 更新STATUS当前快照及中文工作进度。待用户更新反馈，必要时取实际加载路径/hash。收尾仅两记录未提交，工作树非干净，建议考虑Git提交后继续或切换工具。
 
+### 2026-10-06 09:27 Codex：上游同步、TRT倍率与LakeUI预览修复，本机部署与持续性能复验
+
+- 同工具新请求：用户要求拉maxzrb最新，修复AVV3倍率与PixelPictureBox.set_Image异常，调查原生2x持续降速。先查轻量历史索引及AGENTS/INDEX/STATUS/README，核对本机安装/远端；旧feature干净，git pull --ff-only已最新，git fetch origin取得f261e37，从origin/main建立fix/trt-native-lakeui-20261006。旧feat/trt-portable-aria2-20261001与backup分支保留，无reset、stash、合并旧PR8或恢复旧安装器。
+- 用户确认AVV3保留官方4x权重、优化GPU内2x/3x输出，不换权重。本机已为1.3.12，上游已有按目标倍率构建/调度路径；本轮将convert_tensorrt.py作为CLI资源同步，更新模型显示名与两页输出提示，不改模型ID/原生倍率、缓存schema、用户记录或权重。新转换器真实构建80×64的2/3/4x Engine，目标2/3x I/O shape已核实；6x复用4x Engine后缩放，四项各12帧输出正确。
+- 预览根因：新版LakeUI5.112取消PixelPictureBox.Image入口，旧引用在回调JIT时抛MissingMethodException。新增PixelPreviewImage兼容Image/Source；新版用缓存的回调工厂调用D3D DrawImage，图片由调用方管理。PreviewPage、PluginPanel释放与QuadGridForm全部替换该setter，换源后释放旧图，失败显示状态；没有改控件几何。
+- 性能：初次96帧NVENC短测为9–10fps，未复现4fps。用户补充增强模式与完整SVT参数后，将OP原片视频流复制前960帧进行持续复验，并记录GPU温度/频率/功耗/显存/限制标记、超分与实际编码计数、编码CPU与工作集。NVENC渲染96.81秒/9.92fps，用户SVT完整参数256.29秒/3.75fps，实测输出3840×2160/yuv444p10le/960帧。SVT缓冲填充后编码反压超分、GPU明显空闲；没有擅自改变画质参数，没有宣称恢复同参数9fps或排除所有1.3.0历史差异。详见docs/trt-preview-performance-20261006.md及本机verification日志/CSV。
+- 附带定向修复实际FPS统计错误：首条进度计时重置却包含先前帧，修正为首条之后帧数差，ETA同步；不是GPU或编码吞吐提升。FpsTracker Probe验证起点帧偏移、暂停与ETA；ModelMetadataUi18项覆盖原生/2/3x GPU提示/>4x/两页同步，PixelPreview Probe在5.110及5.112均实际调用插件回调并验证替换、清空与所有权；host契约与38项Python通过。
+- 构建：dotnet publish VideoEnhancer.slnx -c Release成功，CLI/插件版本仍1.3.12，未改版本迭代记录。test-updater与test-installer哈希/保留组件/回滚通过。第一次安装器测试与构建并行未找到正在重建文件，等待完成后通过；小样本NVENC因低于最小尺寸失败，复验改80×64+FFV1，第二次失败为先前空输出已存在，改独立路径并按CLI约定末尾-y，不修改产品绕过。
+- 本机：确认FFmpegFreeUI/VideoEnhancer任务退出后，备份EXE/DLL/转换脚本及配置至Plugin/videoenhancer/.work/backups/20261006-before-trt-preview-fix，再由新EXE --apply-update --wait-pid 0部署，不启动宿主。最后本机EXE SHA09B64D97…、DLL SHA A85C1D96…、转换器SHA D1E3CBA1…均与最终产物一致；配置SHA FDEAC061…备份前后保持。模型与其他运行组件未替换，新增Engine仅用于本轮验证。
+- 收尾：README、复验报告、STATUS快照/TODO与中文进度同步；git diff --check通过。工作树含本轮未提交源码/测试/文档；未commit/push/PR/Release操作。建议试用实际宿主预览后考虑提交，跨设备/工具前保留本机证据；后续SVT资源优化或历史对比须单独保留原参数基线。
+
+### 2026-10-06 09:34 Codex：SVT preset10持续对照（实际preset9）
+
+- 同工具续做，读取AGENTS/INDEX、STATUS快照/最近会话、README与已有复验报告；轻量历史索引仅作定位，实时状态以本机为准。git pull --ff-only已最新，保留上一轮所有未提交源码/测试/文档；确认无3FUI/VideoEnhancer/FFmpeg任务再测试，不改代码、版本、安装或用户预设。
+- 使用release/tests/MeasureTensorRt.ps1及同一op-960.mkv、AnimeJaNai原生2x、TRT FP16、不分块。由p6日志取得实际编码参数，仅将-preset:v:0 6改为10，保留CRF12/yuv444p10le/完整svtav1-params与映射相关选项；输出及日志使用独立fixed-janai-svt-p10-960命名，不覆盖p6证据。
+- SVT4.2.0日志明确4K以上Random Access最高M9，自动将请求M10改M9；屏幕内容工具按M9关闭、film grain快preset开销警告仍保留，未移除用户film-grain4。处理中约9.3–9.5fps，渲染106.72秒/960帧=9.00fps，最终FFmpeg计数960、9.05fps；103.04秒超分842/编码724，积压约118而不是p6约470帧。GPU多约90%–97%，工作集约12GB、PPCS156，无热降频标记；该片段能跟上模型，没有跌至4fps，不能代替整片长测。
+- ffprobe -count_frames完整确认AV1/3840×2160/yuv444p10le/960帧，文件约232.86MB；配置SHA FDEAC061…未变。只读git show v1.3.0确认旧FPS公式也未减首次计数；没有运行旧版、旧FFmpeg对照，不据此认定旧反馈只是虚高。用户强调旧版本p6可维持速度的差异保持待查，需后续同环境基线与真实格式/参数核对。
+- README、复验报告、STATUS与中文进度追加，git diff --check通过；工作树仍含之前未提交修改，未commit/push/PR/Release。建议后续版本对照前考虑提交现有修复和证据，不将本轮快速预设试验当作产品修复。
+
+### 2026-10-06 10:07 Codex：SVT参数逐项短片对照与CDEF自动模式
+
+- 同工具续做，已读AGENTS/INDEX、STATUS快照/最近会话及README；主目录无project/changelog。git pull --ff-only已最新，保留既有本地修复与所有dirty文件。轻量历史查询仅用于测速取证和保留用户参数的原则，实际参数/版本/格式重新核验；本机已打开3FUI但无其他编码任务，不关闭或覆盖宿主。
+- 用户确认preset6/CRF12不变，明确不压完整片；直接读取D:/RebellionHEVC444p10-700MBPS-SoftwareLast.mkv（HEVC/3840×2160/yuv444p10le/24000/1001），每组开头240帧、仅视频，不经过超分管道。新增MeasureSvtParameters.ps1，串行运行11组，记录真实FFmpeg benchmark rtime、frame/end、每五秒工作集、CSV与独立输出，不覆写已有证据。完整串没有旧参数complex-hvs1，快速对照也保留keyint1025/scd-min33。
+- 结果：完整50.778秒/4.726fps，快速20.326秒/11.808fps；关闭AC47.222秒/5.082、DLF1为47.922秒/5.008、QM0为48.598秒/4.938、TF1为49.344秒/4.864、variance0为46.574秒/5.153、删DLF48.904秒/4.908。仅删CDEF23.995秒/10.002fps；快速仅加CDEF1为49.208秒/4.877fps，双向验证主要影响项。用户追加enable-cdef=-1测试，只改这一项22.454秒/10.689fps，约2.26倍；删项与-1的小差异未重复统计，不宣称不同自动模式或普适速度。
+- 核对官方4.2.0参数解析到整数cdef_level、-1自动及默认初始化；官方tag仍有420限制，不能冒充与本机扩展构建完全一致。码流首帧两对照tile行列均log2=0，排除不同自动分块；CodecPrivate未初始化序列头与实际码流分别识别，不据首个CDEF0误判滤波关闭。
+- 收尾验证：五份关键输出逐个ffprobe -count_frames完整读取，均AV1/3840×2160/yuv444p10le/24000/1001/240帧；脚本语法检查及git diff --check通过，已无测试FFmpeg编码进程。本轮两次读取plugin.json哈希均F5380A5F…，不同于此前会话哈希但宿主已打开，未将历史值冒充本轮基线，也未主动写配置。
+- 报告docs/svt-parameter-ablation-20261006.md、README、STATUS与中文进度同步。只新增诊断脚本/文档；不改版本、用户预设、产品代码、模型或安装文件，不执行提交/推送/PR/发布。工作树仍非干净，建议继续或切换工具前考虑提交保存本地修复与证据。短片不代替全片或画质验收，旧版本历史差异保持待查。
 
 ### 2026-10-06 11:14 Codex：AVV3本地测速，按用户要求停止等PR
 
@@ -605,6 +651,27 @@ git diff --check
 - 用户“不必测了，等pr”到达时冷却2x复测进行中，taskkill /PID 26096 /T /F只终止本轮已核对root及4个子进程；该轮无有效结果，不计入数据。不再追加GPU/构建测试。命令及证据：Artifacts/avv3-speed-audit的prepare.py/run.py、identity.json/results.json、各CLI/progress日志、4-build-cpu-check.log、engine-results.json、gpu-limits-after.log；所有产物位于项目内忽略目录。
 - 当前结论：等待PR审核，不推断“集成效率回来了”具体实现或真实性；产品源码/版本/安装/发布不改，版本迭代记录不改。STATUS与中文进度收尾，工作树仅两份记录未提交、非干净，建议后续继续或切换工具前考虑Git提交。
 
+### 2026-10-06 13:44 Codex：MyGO AVV3 2x与用户新SVT参数约三分钟持续测试
+
+- 同工具续做，按AGENTS/INDEX和STATUS快照/最近记录定位，读取README（根目录无project/changelog）。git pull --ff-only已最新，保留全部既有未提交源码/测试/文档。用户明确实际运行约三分钟；p6保持，CRF沿前轮12，y410按既有yuv444p10le理解并提前说明，无音频，不改用户预设。
+- 实测输入D:/Animation Enhance/MyGO BDRemux/01.mkv为H264/1920×1080/yuv420p/24000/1001。安装版AVV3官方PTH、TensorRT FP16、tile0、output-scale2，命中1080p scale2 cfg-cdf1f5d880590924cc61缓存；实际后端Model Scale2和rawvideo写管道3840×2160。用户新svtav1-params逐字保留，编码日志p6/VQ/CRF12/YUV444/10-bit/lp4/PPCS102、grain5 adaptive False等核对通过；lp4是并行级别而非四线程，不强行改其设置。
+- MeasureTensorRt.ps1增加可选OutputScale/StopAfterSeconds、独立命名停止共享内存、从编码器出现起计时、RenderSeconds/StopRequested采样、正常停止退出130接受。首次完整模型路径缺引号导致ReadyToRun未知参数，在渲染前失败；修正仅该诊断脚本，保留失败日志，以-run前缀独立重试，不改产品代码。实际渲染181.69秒写停止字节，通过既有GracefulStop排空并封装。
+- 区间差分：23.32–58.01秒超分7.821/编码7.330fps；63.85–116.74秒8.196/8.499；122.68–175.72秒8.694/8.882。积压先约140帧后缩到约100帧；编码采样最大10396MiB，GPU大多高负载、温度最高84℃，软件/硬件热降频未激活，功耗限制激活不误报为热降频。开头约9fps后有波动，但后段回升，不称持续下降或全片恒速。
+- 核验：FFmpeg末frame1575/progress=end/8.26fps；ffprobe整文件1575视频包，唯一流AV1/3840×2160/yuv444p10le/24000/1001，65.691秒、139659317字节；首两帧解码通过，无音频/字幕，不冒称逐帧全解码。测试进程已退出。插件配置两次SHA均A071F867…保持，不沿用前会话哈希。本机日志/CSV/编码器日志与MKV保存在.work/verification/20261006-mygo-avv3-svt。
+- README、持续复验报告、STATUS、中文进度同步，脚本语法及git diff --check通过。版本仍1.3.12，产品/安装/模型/配置保持，未commit/push/PR/Release；工作树非干净，建议后续或切换工具前考虑提交保存。只验证这组参数/素材开头三分钟，不是旧参数同素材单变量对照，整集/场景变化及画质待用户进一步测试。
+
+### 2026-10-06 13:49 Codex：按授权准备上游修复PR
+
+- 同工具续做，读取AGENTS/INDEX/STATUS与README；根目录无project/changelog。git pull --ff-only已最新，确认origin=maxzrb、fork=user-Wing/VideoEnhancer-fork，登录user-Wing，fork父仓库maxzrb；当前fix/trt-native-lakeui-20261006跟踪origin/main f261e37，所有本轮未提交修改已逐文件审查。上游开放PR10属于他人第三方许可改动，不修改；当前分支无同名PR，计划新建main目标PR，历史PR8不作为本轮更新目标。
+- 提交前重新build Release通过（0警告0错误），38项Python含CUDA图内缩放、18项倍率UI、FPS起点/暂停/ETA、LakeUI5.110/5.112实际插件回调、宿主运行契约全部通过；git diff --check通过。没有重新运行长片编码或安装/发布，引用此前真实Engine/部署和MyGO三分钟记录，不扩大为全片性能保证。
+- 准备将AVV3转换器内嵌/显示、Image/Source预览兼容、FPS统计与测试/测速记录显式暂存。版本仍1.3.12，不包含视频、权重、Engine、缓存或二进制。PR说明采用直接中文条目和验证边界；写作风格技能未提供可用检索工具，依据用户当前表达撰写，不声称检索了历史写作样本。待完成提交/推送/创建后追加实际链接与同步检查。
+
+### 2026-10-06 13:51 Codex：上游PR11提交与交付核对
+
+- 显式暂存并审查21项源码/测试/文档，git diff --cached --check通过；无exe/dll/engine/mkv/pth/zip/7z纳入。源码提交4583bbd（fix: bundle TRT output scaling and support LakeUI preview APIs），非强制推送至fork/fix/trt-native-lakeui-20261006并设置该远端跟踪，不修改上游main或fork/main。
+- gh pr create指定repo=maxzrb/VideoEnhancer、base=main、head=user-Wing:fix/trt-native-lakeui-20261006成功，PR https://github.com/maxzrb/VideoEnhancer/pull/11；普通开放PR，已调用attach_artifact附当前聊天。回读head SHA等于4583bbd6d278b8605c214cb9ea3dcdb211d7e465，目标/源正确，21文件与提交一致，mergeStateStatus=CLEAN。gh pr checks报告没有检查，不能冒称CI通过；未执行合并、标签、Release或安装部署。
+- PR说明按中文直接条目列出低倍率图内输出、LakeUI兼容、FPS修正及38项Python/18项UI/双LakeUI回调/宿主验证，并明确官方4x权重不变、GPU缩放不是独立2x/3x网络、短测不保证整片性能/画质。本轮采用写作风格技能依据当前用户表达组织说明，没有可用的检索工具或历史样本检索声明。
+- 源码首次提交推送后git status为空；本条及中文进度作为收尾文档提交再次同步到同一PR分支，最终回读远端HEAD和干净状态。无需额外提交本轮已同步文件；版本仍1.3.12，后续合并/发布需要用户另行授权。
 
 ### 2026-10-06 18:00 Codex：审核 PR #10/#11
 

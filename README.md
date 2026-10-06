@@ -111,6 +111,8 @@ Plugin\
 
 TensorRT 不依赖远端预置 Engine。任务启动时会根据当前视频和设备配置生成或复用本地 Engine。没有 NVIDIA/TensorRT 环境时，应选择 NCNN 或其他可用后端。
 
+TensorRT 的 `realesr-animevideov3 2/3/4x` 沿用同一份官方 4x 权重，通过现有输出倍率设置选择 2x、3x 或 4x。2x/3x 的双三次缩放编入 GPU Engine，向 CPU 和编码管道交付目标尺寸，不回传完整 4x 帧；它不是独立训练的原生 2x/3x 网络。超过 4x 时先进行 4x 推理再缩放。转换脚本随 CLI 内嵌同步，重装后端后也会恢复该支持。
+
 BasicVSR++ 与运动补帧不能同时启用；切换到 BasicVSR++ 时，插件会关闭并禁用补帧开关，切回可组合后端后保持关闭但恢复可操作。
 
 “分段超分”默认使用按秒模式：页面先读取视频时长和关键帧，新增或修改断点时会自动吸附到附近关键帧，并始终自动覆盖完整时长；需要逐帧边界时可切换到精确帧模式。默认情况下，NCNN、CUDA/PyTorch、TensorRT、ONNX 单帧模型之间不得跨模型后端混用；这是为了降低环境依赖和后端切换失败概率。页面提供默认关闭的“测试功能：跨模型后端混用”布尔开关，只有手动开启后才允许跨这些模型后端。FFmpeg 的 Lanczos/Bicubic/Bilinear/Nearest/Area/Spline 等缩放方式和 Anime4K libplacebo 着色器不受该实验门禁影响，可与单一模型后端正常组合。**FFmpeg 硬拉与 Anime4K 由 CLI 直接启动 FFmpeg 处理，不再经 Python 逐帧 rawvideo pipe**：纯自定义任务直接从源视频滤镜到最终编码；混合任务中只有模型段生成无损中间块，自定义段直接从原视频进入最终 `filter_complex`，再与模型块一次 concat/编码。运行日志中的 `SEGMENTED_DIRECT_DONE` / `SEGMENTED_DIRECT_GRAPH` 可用于观察直连 FFmpeg 阶段。若存在 2x/4x 等固定倍率模型，所有固定倍率模型必须倍率一致，且该倍率优先决定整片输出分辨率，FFmpeg/Anime4K 段自动跟随；若全片只使用 FFmpeg/Anime4K，则所有段使用统一的自定义目标宽高。当前分段模式仍不与运动补帧、RTX HDR 或 PQ/HLG HDR 输入组合。
@@ -206,6 +208,18 @@ BasicVSR++ 不支持与补帧组合。切换到 TensorRT、CUDA、NCNN 或其他
 ### TensorRT Engine 为空或构建失败
 
 确认使用的是 PTH 源模型、当前输入尺寸和分块参数有效，并检查 Python/TensorRT/Torch-TensorRT 环境。Engine 会在首次任务启动时构建，本机没有 NVIDIA 时无法完成该流程。
+
+### 预览提示 PixelPictureBox.set_Image 不存在
+
+新版 LakeUI 使用 `Source` 替代旧的 `Image` 属性。实时预览和四宫格已兼容两个入口；更新插件 DLL 后重新启动 3FUI，不必降级宿主 LakeUI。
+
+### 视频开始很快，随后逐渐变慢
+
+超分帧会先进入编码缓冲。若 SVT-AV1 等编码器比模型慢，缓冲填满后会反压超分，开始时的处理帧速率不代表整条链路的最终吞吐；请同时观察实际编码帧数和 GPU 利用率。FPS 统计已修正首条进度之前的帧被错误计入的问题，但这不会提高编码器本身的速度。性能复验应保持相同模型、精度、尺寸及完整 FFmpeg 编码参数，不能将 NVENC 短测与高质量 CPU 编码直接对比。还需核对编码器日志的实际 preset：本机 SVT4.2.0 的4K Random Access 测试中，请求p10会被限制为p9。具体证据与p6/p10对照见[本机复验记录](docs/trt-preview-performance-20261006.md)。
+
+另一次本机2160p/4:4:4 10-bit短片排查中，preset6/CRF12的完整参数约4.73fps，仅将 `enable-cdef=1` 改为 `enable-cdef=-1` 后约10.69fps；反向添加该项也复现降速。显式CDEF级别不应视为等同preset自动策略。该结果仅针对本机素材和构建，不自动修改用户预设，不保证全片速度或画质不变。逐项对照和复现脚本见[SVT参数排查](docs/svt-parameter-ablation-20261006.md)。
+
+用户修订参数（tune0/CDEF自动/lp4等）的MyGO/AVV3 TensorRT 2x实测约三分钟：后段超分约8.69fps、编码约8.88fps，编码积压缩小，未持续跌到4fps；p6/CRF12/4:4:4 10-bit和无音频保持。仅代表该片段，不保证整集速度，详见[持续复验记录](docs/trt-preview-performance-20261006.md)。
 
 ### 自动更新失败
 

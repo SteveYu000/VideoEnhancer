@@ -550,7 +550,7 @@ Namespace videoenhancer
                 ConfigureModelMenu(submenu, reserveIconColumn:=True)
                 For Each entry In group.OrderBy(Function(item) item.DisplayName, StringComparer.CurrentCultureIgnoreCase)
                     Dim selectedEntry = entry
-                    Dim suffix = If(entry.Scale > 0 AndAlso Not interpolation, "  · " & entry.Scale.ToString() & "x", "")
+                    Dim suffix = If(entry.Scale > 0 AndAlso Not interpolation AndAlso Not entry.DisplayName.EndsWith("2/3/4x", StringComparison.Ordinal), "  · " & entry.Scale.ToString() & "x", "")
                     If String.Equals(entry.Source, "user", StringComparison.OrdinalIgnoreCase) Then suffix &= "  [用户]"
                     Dim child As New ModernContextMenu.ModernMenuItem(entry.DisplayName & suffix) With {
                         .Checked = String.Equals(entry.Id, If(interpolation, _config.InterpModel, _config.Model), StringComparison.OrdinalIgnoreCase),
@@ -1699,7 +1699,9 @@ Namespace videoenhancer
                 Dim nativeScale = If(selected Is Nothing, 0, selected.Scale)
                 Dim text = If(nativeScale > 0, "原生 " & nativeScale.ToString() & "x", "原生倍率以模型为准")
                 If _config.OutputScale > 0 AndAlso _config.OutputScale <> nativeScale Then
-                    If selected IsNot Nothing AndAlso selected.InferenceScales.Contains(_config.OutputScale) Then
+                    If _config.Backend = "tensorrt" AndAlso nativeScale > _config.OutputScale Then
+                        text &= "；GPU 引擎内输出 " & _config.OutputScale.ToString() & "x"
+                    ElseIf selected IsNot Nothing AndAlso selected.InferenceScales.Contains(_config.OutputScale) Then
                         text &= "；后端直接推理 " & _config.OutputScale.ToString() & "x"
                     Else
                         text &= "；原生推理后缩放至 " & _config.OutputScale.ToString() & "x"

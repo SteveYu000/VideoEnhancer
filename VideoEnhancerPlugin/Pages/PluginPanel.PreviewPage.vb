@@ -302,13 +302,14 @@ Namespace videoenhancer
             If image Is Nothing Then
                 Return
             End If
-            If _lastPreviewImage IsNot Nothing AndAlso Not ReferenceEquals(_lastPreviewImage, image) Then
-                _lastPreviewImage.Dispose()
-            End If
-            _lastPreviewImage = image
             Try
-                _picPreview.Image = image
-            Catch
+                PixelPreviewImage.SetImage(_picPreview, image)
+                Dim old = _lastPreviewImage
+                _lastPreviewImage = image
+                If old IsNot Nothing AndAlso Not ReferenceEquals(old, image) Then old.Dispose()
+            Catch ex As Exception
+                If Not ReferenceEquals(_lastPreviewImage, image) Then image.Dispose()
+                OnPreviewStatusChanged(sender, "预览显示失败：" & ex.Message, True)
             End Try
         End Sub
 

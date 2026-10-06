@@ -1042,7 +1042,7 @@ Namespace videoenhancer
                 End If
                 If _lastPreviewImage IsNot Nothing Then
                     Try
-                        _picPreview.Image = Nothing
+                        PixelPreviewImage.SetImage(_picPreview, Nothing)
                         _lastPreviewImage.Dispose()
                     Catch
                     End Try

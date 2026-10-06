@@ -116,6 +116,8 @@
                       LogicalName="VideoEnhancer.Embedded.inspect_upscale_models.py" />
     <EmbeddedResource Include="embedded-tools\prepare_rife_tensorrt.py"
                       LogicalName="VideoEnhancer.Embedded.prepare_rife_tensorrt.py" />
+    <EmbeddedResource Include="embedded-tools\convert_tensorrt.py"
+                      LogicalName="VideoEnhancer.Embedded.convert_tensorrt.py" />
     <EmbeddedResource Include="embedded-tools\rve-image-backend.py"
                       LogicalName="VideoEnhancer.Embedded.rve-image-backend.py" />
     <EmbeddedResource Include="embedded-tools\rve-segmented-backend.py"
